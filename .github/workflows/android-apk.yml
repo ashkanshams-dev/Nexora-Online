@@ -1,0 +1,108 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NODE_OPTIONS: --max-old-space-size=3072
+      EXPO_NO_TELEMETRY: 1
+      CI: 1
+    steps:
+      - name: Free disk space + add swap
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL /usr/local/lib/node_modules /usr/share/swift /usr/local/share/powershell /usr/local/share/chromium /usr/local/julia* /opt/az /opt/microsoft /opt/google || true
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          sudo swapoff -a || true
+          sudo fallocate -l 10G /swapfile2 && sudo chmod 600 /swapfile2 && sudo mkswap /swapfile2 && sudo swapon /swapfile2
+          df -h /; free -h; nproc
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Expo prebuild (android)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Gradle properties
+        run: |
+          f=android/gradle.properties
+          # prebuild leaves no trailing newline; make sure appended lines start on their own line
+          [ -n "$(tail -c1 "$f")" ] && echo >> "$f"
+          sed -i '/^expo.inlineModules.watchedDirectories=/d' "$f"
+          {
+            echo "expo.inlineModules.watchedDirectories=[]"
+            echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+            echo "kotlin.daemon.jvmargs=-Xmx1536m"
+            echo "org.gradle.workers.max=1"
+            echo "org.gradle.parallel=false"
+            echo "org.gradle.caching=false"
+            echo "reactNativeArchitectures=arm64-v8a"
+            echo "android.enableMinifyInReleaseBuilds=false"
+            echo "android.enableShrinkResourcesInReleaseBuilds=false"
+          } >> "$f"
+          # later keys win, but drop the template defaults to be explicit
+          sed -i '0,/^org.gradle.jvmargs=-Xmx2048m/{/^org.gradle.jvmargs=-Xmx2048m/d}; 0,/^reactNativeArchitectures=armeabi/{/^reactNativeArchitectures=armeabi/d}' "$f"
+          sed -i '0,/^org.gradle.parallel=true/{/^org.gradle.parallel=true/d}' "$f"
+          cat "$f"
+          # R8 safety rules for LiveKit / WebRTC (in case minify is on)
+          printf "\n-dontwarn livekit.org.jni_zero.**\n-keep class livekit.org.** { *; }\n-keep class io.livekit.** { *; }\n-keep class org.webrtc.** { *; }\n" >> android/app/proguard-rules.pro
+
+      - name: Build release APK (signed with the debug keystore — for testing)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace || { df -h /; free -h; exit 1; }
+
+      - name: Rename APK
+        run: |
+          mkdir -p dist-apk
+          cp android/app/build/outputs/apk/release/app-release.apk dist-apk/NEXORA.apk
+          ls -la dist-apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEXORA-apk
+          path: dist-apk/NEXORA.apk
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: NEXORA build ${{ github.run_number }}
+          body: |
+            Test build of NEXORA (release APK signed with the debug keystore).
+            Commit: ${{ github.sha }}
+            Install: download the APK on your Android phone and allow "install unknown apps".
+          files: dist-apk/NEXORA.apk
+          make_latest: true
