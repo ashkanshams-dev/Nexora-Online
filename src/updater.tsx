@@ -8,7 +8,7 @@ import Constants from 'expo-constants';
 import { C, G, faNum } from './ui/theme';
 import { Btn, T } from './ui/kit';
 
-const REPO = 'Ashkani25/nexora-universe';
+const REPO = 'ashkanshams-dev/nexora-universe';
 const MY_VC = Number((Constants.expoConfig as any)?.android?.versionCode || 0);
 const MY_VER = String(Constants.expoConfig?.version || '');
 
