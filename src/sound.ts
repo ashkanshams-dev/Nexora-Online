@@ -3,13 +3,15 @@ import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 import { SFX } from './game/assets';
 
-export type Key = 'ui' | 'hitb' | 'hitp' | 'goal' | 'post' | 'roar' | 'whistle' | 'final' | 'wall' | 'crowd' | 'music' | 'ready' | 'chat' | 'join' | 'leave' | 'win' | 'lose' | 'tick';
+export type Key = 'ui' | 'hitb' | 'hitp' | 'goal' | 'post' | 'roar' | 'whistle' | 'final' | 'wall' | 'crowd' | 'music' | 'ready' | 'chat' | 'join' | 'leave' | 'win' | 'lose' | 'tick' | 'caster0' | 'caster1' | 'caster2' | 'caster3';
 const MAP: Record<Key, [string, number, number]> = {
   // key: [file, volume, pool size]
   ui: ['select', .55, 2], hitb: ['hit_ball', .9, 3], hitp: ['hit_piece', .7, 3], goal: ['goal', .9, 1], post: ['ballHitsThePost', .8, 1],
   roar: ['goalHappened-01', .7, 1], whistle: ['startWistle', .8, 1], final: ['gameIsFinishedWistle', .8, 1], wall: ['BallHit-01', .55, 2],
   crowd: ['crowd-03', .25, 1], music: ['music', .35, 1],
   ready: ['nx_ready', .7, 1], chat: ['nx_chat', .55, 2], join: ['nx_join', .6, 1], leave: ['nx_leave', .5, 1], win: ['nx_win', .8, 1], lose: ['nx_lose', .75, 1], tick: ['nx_tick', .45, 2],
+  // v8: goal commentator (Persian), one of four lines at random
+  caster0: ['caster0', 1, 1], caster1: ['caster1', 1, 1], caster2: ['caster2', 1, 1], caster3: ['caster3', 1, 1],
 };
 
 const pools: Partial<Record<Key, { list: AudioPlayer[]; i: number }>> = {};
@@ -43,7 +45,7 @@ export function sfx(k: Key, vol = 1) {
 }
 
 // ---------- central music manager ----------
-// scene: 'menu' = full volume, 'room' = ducked (lobby / result inside an online room), 'match' = off.
+// scene: 'menu' = music on; 'room' (every online page: hub, rooms, lobby, result) and 'match' = music off (v8).
 // Any active voice session (LiveKit connected or mic on) stops music completely; it resumes afterwards.
 export type AudioScene = 'menu' | 'room' | 'match';
 let scene: AudioScene = 'menu';
@@ -51,7 +53,7 @@ const voices = new Set<string>();
 const DUCK = .22;
 function applyMusic() {
   const p = pools.music?.list[0]; if (!p) return;
-  const want = enabled.sound && enabled.music && enabled.volume > 0 && scene !== 'match' && voices.size === 0;
+  const want = enabled.sound && enabled.music && enabled.volume > 0 && scene === 'menu' && voices.size === 0;
   try {
     if (!want) { if (p.playing) p.pause(); return; }
     p.volume = MAP.music[1] * enabled.volume * (scene === 'room' ? DUCK : 1);
@@ -75,4 +77,11 @@ export function buzz(kind: 'light' | 'medium' | 'heavy' | 'success' = 'light') {
     if (kind === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     else Haptics.impactAsync(kind === 'heavy' ? Haptics.ImpactFeedbackStyle.Heavy : kind === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
   } catch { }
+}
+
+/** v8: excited Persian commentator call on a goal (random line, never the same twice in a row) */
+let lastCaster = -1;
+export function caster() {
+  let i = Math.floor(Math.random() * 4); if (i === lastCaster) i = (i + 1) % 4; lastCaster = i;
+  setTimeout(() => sfx(('caster' + i) as Key), 250);
 }

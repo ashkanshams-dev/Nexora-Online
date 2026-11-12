@@ -12,7 +12,7 @@ import { teamKey } from '../game/util';
 import { C, F } from '../ui/theme';
 import { Btn, Panel, Press, T } from '../ui/kit';
 import { G } from '../ui/theme';
-import { sfx, buzz, playLoop, stopLoop } from '../sound';
+import { sfx, buzz, caster, playLoop, stopLoop } from '../sound';
 import { useOracle } from '../oracle/Oracle';
 import { coachMiss } from '../oracle/coach';
 
@@ -73,7 +73,7 @@ export default function Match({ cfg, teams, names, onFinish, onQuit, fx = true }
           }
           else if (ev.t === 'goal') {
             if (ev.nogoal) showBanner('گل مردود', 'با ضربه‌ی اول نمی‌شه گل زد', C.dim);
-            else { co.current.touched = true; sfx('goal'); sfx('roar'); buzz('heavy'); showBanner('گل!', names[ev.team], ev.team === 0 ? C.cyan : C.red); if (human(ev.team)) oracleRef.current.react('goal'); }
+            else { co.current.touched = true; sfx('goal'); sfx('roar'); caster(); buzz('heavy'); showBanner('گل!', names[ev.team], ev.team === 0 ? C.cyan : C.red); if (human(ev.team)) oracleRef.current.react('goal'); }
           } else if (ev.t === 'clock') showBanner('گل طلایی', 'گل بعدی برنده‌ست', C.gold);
           else if (ev.t === 'end' && !ended.current) {
             ended.current = true; sfx('final'); stopLoop('crowd');

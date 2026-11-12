@@ -525,6 +525,10 @@ export const SFX:Record<string,any>={
   "nx_win": require("../../assets/g/sfx/nx_win.mp3"),
   "nx_lose": require("../../assets/g/sfx/nx_lose.mp3"),
   "nx_tick": require("../../assets/g/sfx/nx_tick.mp3"),
+  "caster0": require("../../assets/g/sfx/caster0.mp3"),
+  "caster1": require("../../assets/g/sfx/caster1.mp3"),
+  "caster2": require("../../assets/g/sfx/caster2.mp3"),
+  "caster3": require("../../assets/g/sfx/caster3.mp3"),
 };
 export const UI2:Record<string,any>={
   "btn_back": require("../../assets/g/ui2/btn_back.webp"),

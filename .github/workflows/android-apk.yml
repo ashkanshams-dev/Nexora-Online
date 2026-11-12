@@ -95,14 +95,24 @@ jobs:
           path: dist-apk/NEXORA.apk
           if-no-files-found: error
 
+      - name: Read version
+        id: ver
+        run: |
+          echo "vc=$(node -p "require('./app.json').expo.android.versionCode")" >> "$GITHUB_OUTPUT"
+          echo "ver=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
+          { echo 'notes<<EOF'; [ -f RELEASE_NOTES.md ] && cat RELEASE_NOTES.md; echo EOF; } >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: NEXORA build ${{ github.run_number }}
+          name: NEXORA ${{ steps.ver.outputs.ver }} (build ${{ github.run_number }})
           body: |
             Test build of NEXORA (release APK signed with the debug keystore).
             Commit: ${{ github.sha }}
             Install: download the APK on your Android phone and allow "install unknown apps".
+            vc=${{ steps.ver.outputs.vc }} ver=${{ steps.ver.outputs.ver }}
+            ---notes---
+            ${{ steps.ver.outputs.notes }}
           files: dist-apk/NEXORA.apk
           make_latest: true

@@ -17,11 +17,11 @@ const HV = 8, PF1 = 430, PF2 = 1.0, PV0 = 520, EPP = .62, PCAP = 190;
 // ---- motion feel (v6 retune) ----
 // Ball: smooth exponential damping (BK, 1/s) + a gentle rolling resistance (BF) that fades in only at low speed,
 // a hard speed cap, and a stop threshold so it settles in ~1.2–1.8 s instead of wandering/ping-ponging.
-const BK = 1.9, BF = 175, BFV = 140, BVMAX = 1750, BSTOP = 26;
+const BK = 1.72, BF = 165, BFV = 140, BVMAX = 1950, BSTOP = 26;   // v8: ~12% livelier
 // Discs: "floating" glide — exponential ease-out (PK) with a soft extra brake that blends in at low speed (PFL/PFV), gentle stop.
-const PK = 1.55, PFL = 300, PFV = 230, PSTOP = 20;
+const PK = 1.40, PFL = 285, PFV = 230, PSTOP = 20;
 // Wall / post energy caps (outgoing normal speed after a bounce, world units/s before K)
-const WALL_VOUT = 820, POST_VOUT = 900;
+const WALL_VOUT = 820, POST_VOUT = 900;   // v8: unchanged on purpose — faster shots, but walls still soak energy (no ping-pong)
 
 export type Body = {
   id: number; team: 0 | 1 | 2; x: number; y: number; px: number; py: number;
@@ -56,7 +56,7 @@ export const aimPreview = (a: number) => .45 + (Math.min(10, Math.max(1, a)) - 1
 
 // sqrt-based hypot: exact IEEE result on every platform (Math.hypot/exp/pow/sin may differ by an ulp across engines)
 const hyp = (x: number, y: number, z = 0) => Math.sqrt(x * x + y * y + z * z);
-const STEP_BK = 0.9921145876, STEP_PK = 0.9935624769, STEP_PK_BOOST = 0.9977421362; // exp(-PK*0.35/240)           // exp(-BK/240), exp(-PK/240) — literals so every device agrees
+const STEP_BK = 0.9928589527, STEP_PK = 0.9941836475, STEP_PK_BOOST = 0.9979604161; // exp(-PK*0.35/240)           // exp(-BK/240), exp(-PK/240) — literals so every device agrees
 const stepDecay = (k: number) => (k === BK ? STEP_BK : k === PK ? STEP_PK : 1 - k * STEP + k * k * STEP * STEP / 2);
 // deterministic PRNG (mulberry32) + seeded hash so every client derives the same aim deviation for the same shot
 export function rng32(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -184,7 +184,7 @@ export class Engine {
     dx = Math.round(dx * 16) / 16; dy = Math.round(dy * 16) / 16; l = hyp(dx, dy); if (l < 1e-6) return;
     const p = Math.min(l, LMAX) / LMAX, team = b.team as 0 | 1, sq = seq ?? this.shotNo;
     this.lastPower = p;
-    let v = (260 + 1085 * pow08(p)) * K * 1.32;
+    let v = (260 + 1085 * pow08(p)) * K * 1.45;
     if (this.cfg.stats) v *= powerMul(this.statsOf(team).power);
     else if (this.cfg.vip[team]) v *= 1.16;
     let ux = dx / l, uy = dy / l;
@@ -339,11 +339,11 @@ export class Engine {
   // ---------- main step (call once per frame) ----------
   /** advance the local replay (online follower). maxTick caps how far it may run ahead of what the host confirmed. */
   stepFollower(rdt: number, maxTick = Infinity) {
-    const dt = Math.min(rdt, .05); this.time += dt;
+    const dt = Math.min(rdt, .1); this.time += dt;
     let ts = 1; if (this.slow > 0) { this.slow -= dt; ts = .3 + .7 * (1 - Math.max(0, this.slow) / 1.1) * (1 - Math.max(0, this.slow) / 1.1); }
     if (this.phase === 'move' || this.phase === 'goal') {
       this.acc += dt * ts; let n = 0;
-      while (this.acc >= STEP && n < 24 && this.tick < maxTick) {
+      while (this.acc >= STEP && n < 32 && this.tick < maxTick) {
         n++; for (const b of this.bodies) { b.px = b.x; b.py = b.y; }
         this.sim(STEP); this.acc -= STEP;
       }
@@ -391,13 +391,13 @@ export class Engine {
   }
 
   update(rdt: number) {
-    const dt = Math.min(rdt, .05); this.time += dt;
+    const dt = Math.min(rdt, .1); this.time += dt;
     if (this.phase === 'over') { this.tickFx(dt); return; }
     if (this.cfg.matchTime > 0 && !this.sudden && this.mleft > 0) { this.mleft = Math.max(0, this.mleft - dt); }
     let ts = 1; if (this.slow > 0) { this.slow -= dt; const q = 1 - Math.max(0, this.slow) / 1.1; ts = .3 + .7 * q * q; }
     this.acc += dt * ts; let n = 0;
     // phase can change inside sim (goal): keep stepping the physics, the outer state machine reacts below
-    while (this.acc >= STEP && n < 16) {
+    while (this.acc >= STEP && n < 32) {
       n++; for (const b of this.bodies) { b.px = b.x; b.py = b.y; }
       this.sim(STEP); this.acc -= STEP;
     }
@@ -436,8 +436,8 @@ export class Engine {
     this.flash = Math.max(0, this.flash - dt * 2); this.cam = Math.max(0, this.cam - dt * 3.2);
     this.shake[0] = Math.max(0, this.shake[0] - dt); this.ripple[0] = Math.max(0, this.ripple[0] - dt * .8); this.ripple[1] = Math.max(0, this.ripple[1] - dt * .8); this.shake[1] = Math.max(0, this.shake[1] - dt);
     const ball = this.ball; const sp = ball ? hyp(ball.vx, ball.vy) : 0;
-    if (ball && sp > 60) this.trail.push({ x: ball.x, y: ball.y, a: Math.min(1, sp / 900) });
-    let k = 0; for (const p of this.trail) { p.a -= dt * 3.2; if (p.a > 0) this.trail[k++] = p; } this.trail.length = k; if (this.trail.length > 40) this.trail.splice(0, this.trail.length - 40);
+    if (ball && sp > 45) this.trail.push({ x: ball.x, y: ball.y, a: Math.min(1, sp / 900) });
+    let k = 0; for (const p of this.trail) { p.a -= dt * 1.9; if (p.a > 0) this.trail[k++] = p; } this.trail.length = k; if (this.trail.length > 64) this.trail.splice(0, this.trail.length - 64);
     for (const b of this.bodies) if (b !== ball) { const s = hyp(b.vx, b.vy); if (s > 140 * K) b.tr.push({ x: b.x, y: b.y }); else if (b.tr.length) b.tr.shift(); if (b.tr.length > 12) b.tr.shift(); }
     k = 0; for (const p of this.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .965; p.vy = p.vy * .965 + p.g * dt; p.l -= dt; if (p.l > 0) this.parts[k++] = p; } this.parts.length = k;
   }

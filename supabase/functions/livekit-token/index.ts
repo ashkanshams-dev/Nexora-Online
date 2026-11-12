@@ -32,7 +32,8 @@ Deno.serve(async (req) => {
     const { data: u } = await sb.auth.getUser();
     if (!u?.user) return json({ error: "unauthorized" }, 401);
 
-    const { room_id } = await req.json();
+    const { room_id, purpose } = await req.json();
+    const game = purpose === "game";   // v8: data-only room for low-latency match traffic
     if (!room_id) return json({ error: "room_id required" }, 400);
 
     const { data: rp } = await sb.from("room_players").select("role, team").eq("room_id", room_id).eq("user_id", u.user.id).maybeSingle();
@@ -46,14 +47,15 @@ Deno.serve(async (req) => {
       ttl: "2h",
       metadata: JSON.stringify({ team: rp.team, role: rp.role, avatar: prof?.avatar }),
     });
+    const lkRoom = game ? `nexora-${room_id}-g` : `nexora-${room_id}`;
     at.addGrant({
-      room: `nexora-${room_id}`,
+      room: lkRoom,
       roomJoin: true,
-      canPublish: isPlayer,
+      canPublish: game ? false : isPlayer,
       canSubscribe: true,
       canPublishData: true,
     });
-    return json({ url, token: await at.toJwt(), room: `nexora-${room_id}`, canPublish: isPlayer });
+    return json({ url, token: await at.toJwt(), room: lkRoom, canPublish: game ? false : isPlayer });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

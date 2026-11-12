@@ -28,6 +28,7 @@ import Setup, { Launch, Mode, buildLaunch } from './src/screens/Setup';
 import { AuthProvider, useAuth } from './src/net/auth';
 import { DiscProvider } from './src/net/discs';
 import { rpc } from './src/net/supabase';
+import { UpdateGate } from './src/updater';
 import { NavCtx, OnlineEntry } from './src/nav';
 import OnlineRoot from './src/online/OnlineRoot';
 import { RecoveryModal } from './src/screens/Account';
@@ -305,6 +306,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StoreProvider><Shell /></StoreProvider>
+        <UpdateGate />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

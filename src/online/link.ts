@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { Room, RoomPlayer, supabase } from '../net/supabase';
 import { Voice } from '../net/voice';
+import { FastLink } from '../net/fastlink';
 import { sfx } from '../sound';
 
 export type Chat = { id: string; uid: string; name: string; text: string; ts: number };
@@ -30,11 +31,14 @@ export class RoomLink {
   private pinger: ReturnType<typeof setInterval> | null = null;
   private dead = false; private seenOnline = new Set<string>();
   voice: Voice;
+  /** v8: WebRTC data path (LiveKit edge) for match traffic; Supabase broadcast stays as the fallback/duplicate */
+  private fast: FastLink | null = null; private mid = 0; private seen = new Map<string, number>();
   chatOpen = false;
 
   constructor(id: string, me: string, myName: string) {
     this.id = id; this.me = me; this.myName = myName; this.voice = new Voice(id);
     this.connect();
+    this.fast = new FastLink(id, m => this.gotGame(m));
     this.refresh();
     this.poll = setInterval(() => this.refresh(), 12000);
     // server sweeps players without a heartbeat for 45 s
@@ -49,6 +53,7 @@ export class RoomLink {
     const host = this.state.room?.host;
     const to = host && host !== this.me && this.state.online[host] ? host : Object.keys(this.state.online).find(k => k !== this.me);
     if (!to) { if (this.state.rtt !== null) this.set({ rtt: null }); return; }
+    if (this.fast?.ready) { this.fast.send({ k: '_pi', t: Date.now(), from: this.me, to }, false); return; }   // v8: measure the path the game actually uses
     this.ch.send({ type: 'broadcast', event: 'pi', payload: { t: Date.now(), f: this.me, to } }).catch(() => {});
   }
 
@@ -68,7 +73,7 @@ export class RoomLink {
         const r = Math.max(1, Date.now() - m.t); if (r > 10000) return;
         const prev = this.state.rtt; this.set({ rtt: Math.round(prev === null ? r : prev * .6 + r * .4) });
       })
-      .on('broadcast', { event: 'g' }, ({ payload }) => { const m = payload as any; this.gl.forEach(f => f(m, m?.from)); })
+      .on('broadcast', { event: 'g' }, ({ payload }) => this.gotGame(payload as any))
       .on('presence', { event: 'sync' }, () => {
         const ps = ch.presenceState<{ name: string }>(); const online: LinkState['online'] = {};
         for (const k in ps) online[k] = { name: ps[k][0]?.name || '' };
@@ -115,12 +120,29 @@ export class RoomLink {
   markRead() { if (this.state.unread) this.set({ unread: 0 }); }
 
   onGame(f: (m: any, from?: string) => void) { this.gl.add(f); return () => { this.gl.delete(f); }; }
-  sendGame(m: any) { this.ch?.send({ type: 'broadcast', event: 'g', payload: { ...m, from: this.me } }).catch(() => {}); }
+  /** every game packet goes out on BOTH paths with a per-sender id; whichever arrives first wins, the copy is dropped */
+  sendGame(m: any) {
+    const p = { ...m, from: this.me, mid: ++this.mid };
+    this.fast?.send(p, true);
+    this.ch?.send({ type: 'broadcast', event: 'g', payload: p }).catch(() => {});
+  }
+  get fastReady() { return !!this.fast?.ready; }
+  private gotGame(m: any) {
+    if (!m || typeof m !== 'object' || m.from === this.me) return;
+    if (m.k === '_pi') { if (m.to === this.me) this.fast?.send({ k: '_po', t: m.t, from: this.me, to: m.from }, false); return; }
+    if (m.k === '_po') { if (m.to === this.me && typeof m.t === 'number') { const r = Math.max(1, Date.now() - m.t); if (r < 10000) { const prev = this.state.rtt; this.set({ rtt: Math.round(prev === null ? r : prev * .6 + r * .4) }); } } return; }
+    if (typeof m.mid === 'number') {
+      const k = m.from + ':' + m.mid; if (this.seen.has(k)) return;
+      this.seen.set(k, Date.now());
+      if (this.seen.size > 600) { const cut = Date.now() - 20000; for (const [kk, t] of this.seen) { if (t < cut) this.seen.delete(kk); } if (this.seen.size > 600) this.seen.clear(); }
+    }
+    this.gl.forEach(f => f(m, m.from));
+  }
 
   destroy() {
     this.dead = true;
     if (this.t) clearTimeout(this.t); if (this.poll) clearInterval(this.poll); if (this.beat) clearInterval(this.beat); if (this.pinger) clearInterval(this.pinger);
-    this.voice.destroy();
+    this.voice.destroy(); this.fast?.destroy(); this.fast = null;
     if (this.ch) { const c = this.ch; this.ch = null; c.untrack().catch(() => {}).finally(() => supabase.removeChannel(c)); }
     this.ls.clear(); this.gl.clear();
   }

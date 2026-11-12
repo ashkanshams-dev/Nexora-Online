@@ -39,7 +39,7 @@ export default function OnlineRoot({ entry, quick, onExit, toast, fx }: Props) {
   const before = useRef<OnlineProfile | null>(null);
   const top = stack[stack.length - 1];
   // audio: lobby/result inside a room = ducked music, match = no music, other online pages = menu
-  useEffect(() => { setAudioScene(top.k === 'match' ? 'match' : top.k === 'lobby' || top.k === 'result' ? 'room' : 'menu'); }, [top.k]);
+  useEffect(() => { setAudioScene(top.k === 'match' ? 'match' : 'room'); }, [top.k]);   // v8: no menu music anywhere online
   useEffect(() => () => setAudioScene('menu'), []);
 
   // guests are signed in anonymously on first visit
