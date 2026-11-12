@@ -32,3 +32,14 @@ Online multiplayer/backend from the web build is not part of this version (offli
 - Profile: editable name, level, league, win-rate ring, stats, 8 achievements with claimable rewards.
 - 7-day daily reward calendar, match setup bottom sheet, settings sheet (sound, music, haptics, graphics quality, default AI).
 - Performance: expo-image (memory+disk cache), FlatList grids, all animation on the UI thread (Reanimated), "Smooth" graphics mode for weak phones.
+
+## v7 (pro physics + lockstep netcode + final disc roster)
+- Physics: deterministic engine (sqrt-only maths, precomputed damping, seeded aim RNG, quantised shot input), 3 solver
+  iterations, allocation-free hot loop (no GC hitches), full ball-rotation re-orthonormalisation.
+- Online: lockstep replay + client-side prediction. The host broadcasts each shot once ('go' = flick + pre-shot state);
+  every phone replays it with the bit-identical engine, so motion starts instantly with no interpolation delay. The
+  shooter predicts locally (zero input lag). Keyframes every 24 ticks auto-correct any drift; snapshots dropped from
+  30 Hz to 10 Hz (less Supabase Realtime load = lower, steadier ping). Spectators joining mid-shot fall back to interpolation.
+- Visuals: new ball shader (studio lighting, Fresnel, seamless back hemisphere, mipmapped texture = no shimmer), 3D puck
+  discs (side wall, bevelled rim, inner shadow, 256 px sprites), contact shadows, cached goal nets/frames (less per-frame work).
+- Discs: final roster of 308 discs in 10 collections (assets/g/teams). Supabase catalogue synced by supabase/discs_v7.sql.

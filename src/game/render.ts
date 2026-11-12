@@ -16,14 +16,22 @@ half4 main(float2 p){
   float z=sqrt(max(0.0,1.0-d*d));
   float3 n=float3(p.x,p.y,z);
   float3 q=float3(dot(c0,n),dot(c1,n),dot(c2,n));
-  float2 uv=q.xy; if(q.z<0.0) uv.x=-uv.x;
-  half4 c=img.eval((uv*0.93*0.5+0.5)*isz);
+  // front hemisphere maps the art directly; the back one mirrors it, blended across the seam so rolling never "pops"
+  float2 uv=q.xy; float seam=smoothstep(-0.12,0.12,q.z);
+  half4 cf=img.eval((uv*0.93*0.5+0.5)*isz);
+  half4 cb=img.eval((float2(-uv.x,uv.y)*0.93*0.5+0.5)*isz);
+  float3 base=mix(float3(cb.rgb),float3(cf.rgb),seam);
+  // studio lighting: key light top-left, soft fill, sky ambient from above, ground bounce from below
   float3 L=normalize(float3(-0.42,-0.55,0.72));
-  float dif=0.62+0.5*max(dot(n,L),0.0);
+  float3 F=normalize(float3(0.6,0.35,0.7));
+  float key=max(dot(n,L),0.0), fill=max(dot(n,F),0.0);
+  float amb=0.42+0.18*(-n.y)*0.5+0.12*z;
+  float occ=mix(0.72,1.0,smoothstep(-0.2,0.85,-n.y*0.55+z*0.6));   // contact darkening toward the bottom-right
+  float3 lit=base*(amb+0.62*key+0.16*fill)*occ;
   float3 H=normalize(L+float3(0,0,1));
-  float sp=pow(max(dot(n,H),0.0),36.0)*0.55;
-  float rim=pow(1.0-z,2.5);
-  float3 col=c.rgb*dif*(1.0-0.45*rim)+float3(sp)+float3(0.35,0.6,1.0)*rim*0.18;
+  float sp=pow(max(dot(n,H),0.0),64.0)*0.65+pow(max(dot(n,H),0.0),12.0)*0.10;   // sharp glint + soft sheen
+  float fres=pow(1.0-z,3.0);
+  float3 col=lit*(1.0-0.35*fres)+float3(sp)+float3(0.55,0.75,1.0)*fres*0.22;
   float a=smoothstep(1.0,1.0-aa,d);
   return half4(half3(col)*a,a);
 }`;
@@ -82,7 +90,19 @@ export function staticLayer(e: Engine, v: View, im: Images): SkPicture {
 }
 
 // ---- pre-rendered sprites (built once per team logo; per-frame cost = 2-3 drawImage calls) ----
-const SPR = 192, sprCache = new Map<any, { disc: SkImage; gloss: SkImage }>();
+const SPR = 256, sprCache = new Map<any, { disc: SkImage; gloss: SkImage }>();
+let edgeSpr: SkImage | null = null;
+// the puck's side wall: a darker disc peeking out below/right of the face → reads as a real 3D puck, not a sticker
+function edgeSprite() {
+  if (edgeSpr) return edgeSpr;
+  const R = SPR / 2, r = R - 2;
+  edgeSpr = makeImg(SPR, SPR, c => {
+    const p = P(); p.setShader(Skia.Shader.MakeLinearGradient({ x: R - r, y: R - r }, { x: R + r, y: R + r }, [col('#3a4256'), col('#141823'), col('#05070c')], [0, .55, 1], TileMode.Clamp));
+    c.drawCircle(R, R, r, p);
+    const hl = P(); hl.setStyle(PaintStyle.Stroke); hl.setStrokeWidth(3); hl.setColor(col('#ffffff', .16)); c.drawCircle(R, R, r - 1.5, hl);
+  });
+  return edgeSpr;
+}
 let shadowSpr: SkImage | null = null;
 function makeImg(w: number, h: number, draw: (c: SkCanvas) => void): SkImage | null {
   // CPU raster surface: built once, no extra GPU/WebGL context, safe to draw from any thread
@@ -109,6 +129,13 @@ function sprites(team: 0 | 1, logo: SkImage | null) {
     c.drawCircle(R, R, r * .97, gl);
     const sp = P(); sp.setStyle(PaintStyle.Stroke); sp.setStrokeCap(StrokeCap.Round); sp.setStrokeWidth(3); sp.setColor(col('#ffffff', .38));
     c.drawArc(Skia.XYWHRect(R - r * .93, R - r * .93, r * 1.86, r * 1.86), 205, 60, false, sp);
+    // bevelled rim: lit top-left, shaded bottom-right
+    const bv = P(); bv.setStyle(PaintStyle.Stroke); bv.setStrokeWidth(r * .07);
+    bv.setShader(Skia.Shader.MakeLinearGradient({ x: R - r, y: R - r }, { x: R + r, y: R + r }, [col('#ffffff', .42), col('#ffffff', .06), col('#000000', .38)], [0, .5, 1], TileMode.Clamp));
+    c.drawCircle(R, R, r * .965, bv);
+    // soft inner shadow at the bottom edge = the face sits slightly recessed in the rim
+    const is = P(); is.setShader(Skia.Shader.MakeRadialGradient({ x: R - r * .12, y: R - r * .16 }, r * 1.05, [col('#000000', 0), col('#000000', 0), col('#000000', .28)], [0, .82, 1], TileMode.Clamp));
+    c.drawCircle(R, R, r * .99, is);
   })!;
   const v = { disc, gloss }; sprCache.set(key, v); return v;
 }
@@ -125,7 +152,8 @@ function drawShadowFast(c: SkCanvas, x: number, y: number, r: number, a: number)
 
 function drawPiece(c: SkCanvas, e: Engine, b: Body, x: number, y: number, img: SkImage | null, t: number, active: boolean, dark: boolean) {
   const team = b.team as 0 | 1, sc = 1 + b.sq * .07, r = b.r * sc;
-  drawShadowFast(c, x, y, r, .5);
+  drawShadowFast(c, x, y, r, .55);
+  const ed = edgeSprite(); if (ed) c.drawImageRectOptions(ed, Skia.XYWHRect(0, 0, SPR, SPR), Skia.XYWHRect(x - r + r * .035, y - r + r * .085, 2 * r, 2 * r), FilterMode.Linear, MipmapMode.Linear, sprPaint);
   if (active) {
     // only the selectable pieces of the player on turn: one thin, soft breathing glow hugging the disc
     const pulse = .5 + .5 * Math.sin(t * 4), g = paints.glow;
@@ -133,20 +161,20 @@ function drawPiece(c: SkCanvas, e: Engine, b: Body, x: number, y: number, img: S
   }
   const s = sprites(team, img);
   c.save(); c.translate(x, y); c.rotate(b.ang * 57.2958, 0, 0);
-  c.drawImageRectOptions(s.disc, Skia.XYWHRect(0, 0, SPR, SPR), Skia.XYWHRect(-r, -r, 2 * r, 2 * r), FilterMode.Linear, MipmapMode.None, sprPaint);
+  c.drawImageRectOptions(s.disc, Skia.XYWHRect(0, 0, SPR, SPR), Skia.XYWHRect(-r, -r, 2 * r, 2 * r), FilterMode.Linear, MipmapMode.Linear, sprPaint);
   c.restore();
   if (dark) { const dk = paints.dark; dk.setColor(col('#060818', .22)); c.drawCircle(x, y, r * .99, dk); }
-  c.drawImageRectOptions(s.gloss, Skia.XYWHRect(0, 0, SPR, SPR), Skia.XYWHRect(x - r, y - r, 2 * r, 2 * r), FilterMode.Linear, MipmapMode.None, sprPaint);
+  c.drawImageRectOptions(s.gloss, Skia.XYWHRect(0, 0, SPR, SPR), Skia.XYWHRect(x - r, y - r, 2 * r, 2 * r), FilterMode.Linear, MipmapMode.Linear, sprPaint);
   void e;
 }
 
 function drawBall(c: SkCanvas, b: Body, x: number, y: number, img: SkImage | null, s: number) {
   const r = b.r * (1 + b.sq * .08);
-  drawShadowFast(c, x, y, r, .6);
+  drawShadowFast(c, x, y, r, .55); drawShadowFast(c, x - r * .06, y - r * .12, r * .78, .5);   // soft + contact shadow
   if (!img) { const p = paints.fill; p.setColor(col('#ffffff')); c.drawCircle(x, y, r, p); return; }
   const R = b.R, isz = img.width();
   const sh = ballFx.makeShaderWithChildren([R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8], isz, Math.min(.2, 1.6 / (r * s))],
-    [img.makeShaderOptions(TileMode.Clamp, TileMode.Clamp, FilterMode.Linear, MipmapMode.None)]);
+    [img.makeShaderOptions(TileMode.Clamp, TileMode.Clamp, FilterMode.Linear, MipmapMode.Linear)]);   // mipmaps: no shimmer while rolling
   const p = paints.img; p.setShader(sh);
   c.save(); c.translate(x, y); c.scale(r, r); c.drawCircle(0, 0, 1, p); c.restore(); p.setShader(null);
 }
@@ -270,7 +298,20 @@ const netFill = P(); const barP = P(); barP.setStyle(PaintStyle.Stroke); barP.se
 const barSh = P(); barSh.setStyle(PaintStyle.Stroke); barSh.setStrokeCap(StrokeCap.Round); barSh.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 4, true));
 const postP = P();
 
-function drawGoalNets(c: SkCanvas, e: Engine, t: number) {
+// the nets + frames are static unless a goal ripple/shake is playing: cache them as pictures (≈60 Skia paths and
+// several gradient shaders per frame saved → far less JS↔native traffic and GC churn on the match thread)
+const goalCache = { nets: null as SkPicture | null, frames: null as SkPicture | null, key: null as any };
+function goalsStatic(e: Engine) { return e.ripple[0] <= 0 && e.ripple[1] <= 0 && e.shake[0] <= 0 && e.shake[1] <= 0; }
+function cachedGoals(c: SkCanvas, e: Engine, t: number, which: 'nets' | 'frames') {
+  if (!goalsStatic(e)) { which === 'nets' ? drawGoalNetsLive(c, e, t) : drawGoalFramesLive(c, e, t); return; }
+  if (goalCache.key !== e) { goalCache.key = e; goalCache.nets = goalCache.frames = null; }
+  let pic = goalCache[which];
+  if (!pic) { pic = createPicture((pc: SkCanvas) => { which === 'nets' ? drawGoalNetsLive(pc, e, 0) : drawGoalFramesLive(pc, e, 0); }); goalCache[which] = pic; }
+  c.drawPicture(pic);
+}
+function drawGoalNets(c: SkCanvas, e: Engine, t: number) { cachedGoals(c, e, t, 'nets'); }
+function drawGoalFrames(c: SkCanvas, e: Engine, t: number) { cachedGoals(c, e, t, 'frames'); }
+function drawGoalNetsLive(c: SkCanvas, e: Engine, t: number) {
   e.goals.forEach((g, i) => {
     const d = g.d, x1 = g.x1 - POST_R, x2 = g.x2 + POST_R, D = e.DEPTH + 6, y0 = g.y, yb = g.y + d * D;
     const inset = (x2 - x1) * .045, bx1 = x1 + inset, bx2 = x2 - inset;   // back of the net appears slightly narrower
@@ -306,7 +347,7 @@ function drawGoalNets(c: SkCanvas, e: Engine, t: number) {
   });
 }
 
-function drawGoalFrames(c: SkCanvas, e: Engine, t: number) {
+function drawGoalFramesLive(c: SkCanvas, e: Engine, t: number) {
   e.goals.forEach((g, i) => {
     const sx = Math.sin(t * 40) * 6 * e.shake[i], y = g.y, x1 = g.x1 + sx, x2 = g.x2 + sx, W = POST_R * 1.6;
     // soft cast shadow (light from top-left → shadow down-right)

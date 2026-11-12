@@ -11,7 +11,7 @@ export const ACHS: Ach[] = [
   { id: 'goals25', name: 'گلزن', desc: '۲۵ گل بزن', icon: 'x_statue', max: 25, cur: p => p.goalsFor, coins: 300, gems: 0 },
   { id: 'streak3', name: 'شکست‌ناپذیر', desc: '۳ برد پشت سر هم', icon: 'x_star', max: 3, cur: p => p.bestStreak, coins: 350, gems: 0 },
   { id: 'cup1', name: 'قهرمان', desc: 'جام نکسورا را ببر', icon: 'x_trophy', max: 1, cur: p => p.cupsWon, coins: 500, gems: 0 },
-  { id: 'collect', name: 'کلکسیونر', desc: '۱۵ دیسک ویژه باز کن', icon: 'x_team', max: 15, cur: p => p.ownedTeams.filter(id => !id.startsWith('club') && !id.startsWith('nat')).length, coins: 400, gems: 0 },
+  { id: 'collect', name: 'کلکسیونر', desc: '۱۵ دیسک ویژه باز کن', icon: 'x_team', max: 15, cur: p => p.ownedTeams.filter(id => !id.startsWith('club') && !id.startsWith('nat') && !id.startsWith('iran')).length, coins: 400, gems: 0 },
   { id: 'win25', name: 'اسطوره', desc: '۲۵ بازی ببر', icon: 'x_crown', max: 25, cur: p => p.wins, coins: 800, gems: 0 },
   { id: 'gold', name: 'لیگ طلا', desc: 'به ۸۰۰ جام برس', icon: 'x_shield', max: 800, cur: p => p.trophies, coins: 600, gems: 0 },
 ];

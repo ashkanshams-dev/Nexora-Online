@@ -1,6 +1,9 @@
-// NEXORA physics engine — TypeScript rewrite of the original game.js simulation.
-// Fixed 240 Hz sub-stepping, impulse-based circle collisions with positional correction,
-// rolling 3D ball rotation, render interpolation (prev -> current) for buttery motion.
+// NEXORA physics engine v7 — deterministic, allocation-free fixed-step simulation.
+// Fixed 240 Hz sub-steps, impulse-based circle collisions with positional correction, rolling 3D ball rotation,
+// render interpolation (prev -> current).
+// v7: the physics path uses only + - * / and sqrt (IEEE-exact on every device), damping factors are precomputed
+// literals and aim deviation comes from a seeded RNG, so the same start state + the same flick gives the
+// bit-identical result on every phone. Online play uses this for lockstep replay with zero snapshot lag.
 import { FIELDS, GS, slots, Field } from './data';
 
 export const K = 1.27;
@@ -51,22 +54,42 @@ export const powerMul = (p: number) => .75 + (Math.min(10, Math.max(1, p)) - 1) 
 export const aimDevDeg = (a: number) => (10 - Math.min(10, Math.max(1, a))) / 9 * 4;          // 10 → 0° … 1 → ±4°
 export const aimPreview = (a: number) => .45 + (Math.min(10, Math.max(1, a)) - 1) / 9 * .75;   // 1 → short … 10 → long
 
-const hyp = Math.hypot;
+// sqrt-based hypot: exact IEEE result on every platform (Math.hypot/exp/pow/sin may differ by an ulp across engines)
+const hyp = (x: number, y: number, z = 0) => Math.sqrt(x * x + y * y + z * z);
+const STEP_BK = 0.9921145876, STEP_PK = 0.9935624769, STEP_PK_BOOST = 0.9977421362; // exp(-PK*0.35/240)           // exp(-BK/240), exp(-PK/240) — literals so every device agrees
+const stepDecay = (k: number) => (k === BK ? STEP_BK : k === PK ? STEP_PK : 1 - k * STEP + k * k * STEP * STEP / 2);
+// deterministic PRNG (mulberry32) + seeded hash so every client derives the same aim deviation for the same shot
+export function rng32(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// sin/cos for small angles (|a| < 0.2 rad) by series: exact arithmetic, identical everywhere
+const sinS = (a: number) => { const a2 = a * a; return a * (1 - a2 / 6 * (1 - a2 / 20 * (1 - a2 / 42))); };
+const cosS = (a: number) => { const a2 = a * a; return 1 - a2 / 2 * (1 - a2 / 12 * (1 - a2 / 30)); };
+// p^0.8 replacement built from sqrt only: p^(1/2+1/4+1/16) = p^0.8125 (within 1.6% of p^0.8), deterministic
+const pow08 = (p: number) => { if (p <= 0) return 0; const a = Math.sqrt(p), b = Math.sqrt(a), c = Math.sqrt(Math.sqrt(b)); return a * b * c; };
+export const PACK = 7;   // ints per body in a packed state: x, y (1/64), vx, vy (1/16), angle (1/1000), boost, spin
+export const qz = (v: number) => Math.round(v * 64) / 64;   // state quantisation grid (1/64 world unit, exact in binary)
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 
+const ROT_TMP = new Float64Array(9);
 function rotate(R: Float64Array, wx: number, wy: number, wz: number, dt: number) {
   const w = hyp(wx, wy, wz), th = w * dt; if (th < 1e-7) return;
   const ax = wx / w, ay = wy / w, az = wz / w, c = Math.cos(th), s = Math.sin(th), t = 1 - c;
   const m0 = t * ax * ax + c, m1 = t * ax * ay - s * az, m2 = t * ax * az + s * ay;
   const m3 = t * ax * ay + s * az, m4 = t * ay * ay + c, m5 = t * ay * az - s * ax;
   const m6 = t * ax * az - s * ay, m7 = t * ay * az + s * ax, m8 = t * az * az + c;
-  const r = R.slice();
+  const r = ROT_TMP; for (let i = 0; i < 9; i++) r[i] = R[i];
   R[0] = m0 * r[0] + m1 * r[3] + m2 * r[6]; R[1] = m0 * r[1] + m1 * r[4] + m2 * r[7]; R[2] = m0 * r[2] + m1 * r[5] + m2 * r[8];
   R[3] = m3 * r[0] + m4 * r[3] + m5 * r[6]; R[4] = m3 * r[1] + m4 * r[4] + m5 * r[7]; R[5] = m3 * r[2] + m4 * r[5] + m5 * r[8];
   R[6] = m6 * r[0] + m7 * r[3] + m8 * r[6]; R[7] = m6 * r[1] + m7 * r[4] + m8 * r[7]; R[8] = m6 * r[2] + m7 * r[5] + m8 * r[8];
   // re-orthonormalise occasionally to stop drift
-  const l0 = hyp(R[0], R[1], R[2]); R[0] /= l0; R[1] /= l0; R[2] /= l0;
+  let l = hyp(R[0], R[1], R[2]); R[0] /= l; R[1] /= l; R[2] /= l;
+  const d = R[0] * R[3] + R[1] * R[4] + R[2] * R[5]; R[3] -= d * R[0]; R[4] -= d * R[1]; R[5] -= d * R[2];
+  l = hyp(R[3], R[4], R[5]); R[3] /= l; R[4] /= l; R[5] /= l;
+  R[6] = R[1] * R[5] - R[2] * R[4]; R[7] = R[2] * R[3] - R[0] * R[5]; R[8] = R[0] * R[4] - R[1] * R[3];
 }
+
+// wall restitution: ball loses more energy on hard hits (no ping-pong), discs a flat 0.72; outgoing speed capped
+const eBall = (vn: number) => Math.min(.64 - .24 * clamp((vn - 270 * K) / (730 * K), 0, 1), WALL_VOUT * K / Math.max(1, vn));
+const eDisc = (vn: number) => Math.min(.72, WALL_VOUT * 1.4 * K / Math.max(1, vn));
 
 export class Engine {
   f: Field; F = { l: 0, r: 0, t: 0, b: 0 }; CX = 0; CY = 0; KY = 0;
@@ -79,6 +102,17 @@ export class Engine {
   events: EngineEvent[] = []; cfg: MatchCfg; time = 0; lastWho: 0 | 1 = 0;
   // online: per-team AI takeover (a team with no connected human is played by the bot)
   aiTeams: [boolean, boolean] = [false, false];
+  /** follower = online client: runs the identical physics (lockstep replay) but never decides score/turns/resets — the host does */
+  follower = false;
+  /** physics ticks since the last shot (lockstep sync key) and a counter of shots fired this match */
+  tick = 0; shotNo = 0; seed = 0x5eed;
+  /** epoch: +1 on every shot and every kick-off reset — (epoch, tick) orders the whole match timeline online */
+  epoch = 0; epochKind: 0 | 1 = 0;
+  /** online host hook: called with the exact (quantised) shot before it is applied, plus the pre-shot state */
+  onFire: null | ((b: Body, dx: number, dy: number, human: boolean, seq: number, pre: number[]) => void) = null;
+  /** keyframes: full state every KEY_EVERY ticks of the current epoch (lockstep verification) */
+  keys = new Map<number, number[]>(); keyEvery = 0;
+  private corners: [number, number, number, number][] = [];
 
   constructor(cfg: MatchCfg) {
     this.cfg = cfg; this.f = FIELDS[cfg.field] || FIELDS[0];
@@ -90,6 +124,7 @@ export class Engine {
     this.DEPTH = Math.max(120, Math.round(this.GG.h * .98));
     this.goals = [{ team: 0, y: this.F.t, x1: this.CX - f.g, x2: this.CX + f.g, d: -1 }, { team: 1, y: this.F.b, x1: this.CX - f.g, x2: this.CX + f.g, d: 1 }];
     this.mleft = cfg.matchTime; this.tleft = cfg.turnTime;
+    const F = this.F; this.corners = [[F.l + RC, F.t + RC, 1, 1], [F.r - RC, F.t + RC, -1, 1], [F.l + RC, F.b - RC, 1, -1], [F.r - RC, F.b - RC, -1, -1]];
     this.reset(cfg.first);
   }
 
@@ -107,6 +142,8 @@ export class Engine {
       });
     }
     this.ball = this.mk(this.CX, this.KY, 2, BR, 1.5, 99); this.bodies.push(this.ball);
+    for (const b of this.bodies) { b.x = b.px = qz(b.x); b.y = b.py = qz(b.y); }
+    this.tick = 0; this.epoch++; this.epochKind = 0; this.keys.clear(); this.localGoal = null;
     this.turn = kickTeam; this.phase = 'aim'; this.drag = null; this.pause = 0; this.idle = 0; this.shots = 0;
     this.tleft = this.cfg.turnTime; this.aiT = 0; this.aiPlan = null;
     this.events.push({ t: 'turn', team: this.turn });
@@ -137,23 +174,32 @@ export class Engine {
   }
 
   lastPower = 0;
+  /** follower only: the goal its own replay detected (lets the UI react instantly instead of waiting for the host) */
+  localGoal: null | { team: 0 | 1; nogoal: boolean; tick: number; shot: number } = null;
   statsOf(team: 0 | 1): DiscStats { return this.cfg.stats?.[team] || { power: 5, accuracy: 5 }; }
 
   // human = a player's flick: disc accuracy adds a small random deviation (the bot has its own error model)
-  fire(b: Body, dx: number, dy: number, l: number, human = false) {
-    const p = Math.min(l, LMAX) / LMAX, team = b.team as 0 | 1;
+  // dx/dy are quantised to 1/16 unit first, so a shot sent over the network replays bit-identically everywhere
+  fire(b: Body, dx: number, dy: number, l: number, human = false, seq?: number) {
+    dx = Math.round(dx * 16) / 16; dy = Math.round(dy * 16) / 16; l = hyp(dx, dy); if (l < 1e-6) return;
+    const p = Math.min(l, LMAX) / LMAX, team = b.team as 0 | 1, sq = seq ?? this.shotNo;
     this.lastPower = p;
-    let v = (260 + 1085 * Math.pow(p, .8)) * K * 1.32;
+    let v = (260 + 1085 * pow08(p)) * K * 1.32;
     if (this.cfg.stats) v *= powerMul(this.statsOf(team).power);
     else if (this.cfg.vip[team]) v *= 1.16;
     let ux = dx / l, uy = dy / l;
     if (human && this.cfg.stats) {
       const dev = aimDevDeg(this.statsOf(team).accuracy) * Math.PI / 180;
-      if (dev > 0) { const a = Math.atan2(uy, ux) + (Math.random() + Math.random() - 1) * dev; ux = Math.cos(a); uy = Math.sin(a); }
+      if (dev > 0) {
+        const rnd = rng32((this.seed ^ Math.imul(sq + 1, 0x9E3779B1)) >>> 0);
+        const a = (rnd() + rnd() - 1) * dev, c = cosS(a), s = sinS(a), nx = ux * c - uy * s, ny = ux * s + uy * c; ux = nx; uy = ny;
+      }
     }
     const vx = ux * v, vy = uy * v;
     b.tvx = vx * 1.02; b.tvy = vy * 1.02; b.ramp = .06; b.vx = vx * .5; b.vy = vy * .5; b.boost = .22;
-    this.phase = 'move'; this.idle = 0; this.shots++; this.drag = null; this.cam = Math.max(this.cam, .18);
+    for (const o of this.bodies) { o.x = o.px = qz(o.x); o.y = o.py = qz(o.y); }   // shots always start from the quantised grid
+    if (this.onFire) this.onFire(b, dx, dy, human, sq, this.packState());
+    this.phase = 'move'; this.idle = 0; this.shots++; this.shotNo++; this.tick = 0; this.epoch++; this.epochKind = 1; this.keys.clear(); this.localGoal = null; this.drag = null; this.cam = Math.max(this.cam, .18);
     this.lastWho = b.team as 0 | 1;
     this.events.push({ t: 'shot', team: b.team as 0 | 1 });
   }
@@ -163,7 +209,7 @@ export class Engine {
     const { F, ball } = this;
     if (b !== ball && b.gout) { const g = b.gout, dq = g.d * (b.y - g.y); if (dq > -b.r * 1.05) { b.vy = -g.d * 270 * K; b.vx *= .6; } else { b.vy = 0; b.vx *= .2; b.gout = null; } }
     const bl = b === ball, r = b.r, vs = hyp(b.vx, b.vy);
-    const eN = (vn: number) => bl ? Math.min(.64 - .24 * clamp((vn - 270 * K) / (730 * K), 0, 1), WALL_VOUT * K / Math.max(1, vn)) : Math.min(.72, WALL_VOUT * 1.4 * K / Math.max(1, vn));
+    const eN = bl ? eBall : eDisc;
     if (b.x - r < F.l) { b.x = F.l + r; if (b.vx < 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(-b.vx); b.spin += b.vy / r * .05; } }
     if (b.x + r > F.r) { b.x = F.r - r; if (b.vx > 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(b.vx); b.spin -= b.vy / r * .05; } }
     for (const g of this.goals) {
@@ -184,8 +230,8 @@ export class Engine {
         b.y = g.y - g.d * r; if (g.d * b.vy > 0) b.vy = -g.d * Math.abs(b.vy) * eN(Math.abs(b.vy)); b.spin += g.d * b.vx / r * .05;
       }
     }
-    const corners: [number, number, number, number][] = [[F.l + RC, F.t + RC, 1, 1], [F.r - RC, F.t + RC, -1, 1], [F.l + RC, F.b - RC, 1, -1], [F.r - RC, F.b - RC, -1, -1]];
-    for (const [cx, cy, sx, sy] of corners) {
+    for (let ci = 0; ci < 4; ci++) {
+      const cr = this.corners[ci], cx = cr[0], cy = cr[1], sx = cr[2], sy = cr[3];
       if ((b.x - cx) * sx < 0 && (b.y - cy) * sy < 0) {
         const dx = b.x - cx, dy = b.y - cy, d = hyp(dx, dy), lim = RC - r;
         if (d > lim && d > 0) { const nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny; b.x = cx + nx * lim; b.y = cy + ny * lim; if (vn > 0) { const ec = eN(vn); b.vx -= (1 + ec) * vn * nx; b.vy -= (1 + ec) * vn * ny; } }
@@ -227,7 +273,7 @@ export class Engine {
   }
 
   private sim(dt: number) {
-    const ball = this.ball;
+    const ball = this.ball; this.tick++;
     for (const b of this.bodies) {
       if (b.ramp > 0) { const k = Math.min(1, dt / b.ramp); b.vx += (b.tvx - b.vx) * k; b.vy += (b.tvy - b.vy) * k; b.ramp -= dt; if (b.ramp <= 0) b.ramp = 0; }
       if (b.vox || b.voy) { const q = 1 - Math.min(1, dt * 15); b.vox *= q; b.voy *= q; if (Math.abs(b.vox) < .04) b.vox = 0; if (Math.abs(b.voy) < .04) b.voy = 0; }
@@ -236,11 +282,11 @@ export class Engine {
       if (sp > 0) {
         if (bl) {
           // exponential damping (frame-rate independent) + low-speed rolling resistance; straight roll, no side drift
-          let ns = sp * Math.exp(-BK * dt) - BF * K * Math.min(1, sp / (BFV * K)) * dt;
+          let ns = sp * stepDecay(BK) - BF * K * Math.min(1, sp / (BFV * K)) * dt;
           if (ns < BSTOP * K) { b.vx = b.vy = 0; b.vox = b.voy = 0; } else { ns = Math.min(ns, BVMAX * K); const k = ns / sp; b.vx *= k; b.vy *= k; }
         } else {
           const fb = b.boost > 0 ? .35 : 1; if (b.boost > 0) b.boost -= dt;
-          let ns = sp * Math.exp(-PK * fb * dt) - PFL * K * Math.min(1, sp / (PFV * K)) * fb * dt;
+          let ns = sp * (fb === 1 ? stepDecay(PK) : STEP_PK_BOOST) - PFL * K * Math.min(1, sp / (PFV * K)) * fb * dt;
           if (ns < PSTOP * K && b.ramp <= 0) { b.vx = b.vy = 0; } else { ns = Math.max(0, Math.min(ns, 2800 * K)); const k = ns / sp; b.vx *= k; b.vy *= k; }
         }
       }
@@ -252,15 +298,22 @@ export class Engine {
       this.walls(b);
     }
     const B = this.bodies;
-    for (let it = 0; it < 2; it++) for (let a = 0; a < B.length; a++) for (let c = a + 1; c < B.length; c++) this.hit(B[a], B[c]);
+    for (let it = 0; it < 3; it++) for (let a = 0; a < B.length; a++) for (let c = a + 1; c < B.length; c++) this.hit(B[a], B[c]);
     for (const g of this.goals) for (const b of B) { this.post(b, g.x1, g.y); this.post(b, g.x2, g.y); }
     for (const b of B) this.walls(b);
     if (this.phase === 'move') for (const g of this.goals)
       if (ball.x > g.x1 && ball.x < g.x2 && (g.d < 0 ? ball.y < g.y - ball.r * .8 : ball.y > g.y + ball.r * .8)) this.scored(g.team);
+    if (this.keyEvery && this.tick % this.keyEvery === 0) { this.keys.set(this.tick, this.packState()); if (this.keys.size > 64) this.keys.delete(this.keys.keys().next().value as number); }
   }
 
   private scored(t: 0 | 1) {
     const nogoal = this.shots <= 1;
+    if (this.follower) {
+      // replay client: same phase change at the same tick (it changes the net physics), visuals only — the host owns the score
+      this.phase = 'goal'; this.localGoal = { team: t, nogoal, tick: this.tick, shot: this.shotNo };
+      if (!nogoal) { this.slow = 1.1; this.fxGoal(t); }
+      return;
+    }
     this.events.push({ t: 'goal', team: t, nogoal });
     if (nogoal) { this.phase = 'goal'; this.pause = 1.4; this.kick = this.turn; return; }
     this.ripple[t] = 1; this.rippleX[t] = this.ball.x; this.score[t]++; this.pause = 2.0; this.flash = 1; this.shake[t] = .6; this.phase = 'goal'; this.kick = (1 - t) as 0 | 1;
@@ -275,6 +328,7 @@ export class Engine {
   }
 
   private finishTurn() {
+    for (const b of this.bodies) { b.vx = b.vy = 0; b.x = b.px = qz(b.x); b.y = b.py = qz(b.y); }
     this.turn = (1 - this.turn) as 0 | 1; this.phase = 'aim'; this.tleft = this.cfg.turnTime; this.aiT = 0; this.aiPlan = null;
     this.events.push({ t: 'turn', team: this.turn });
   }
@@ -283,17 +337,71 @@ export class Engine {
   private timeUp() { return this.cfg.matchTime > 0 && !this.sudden && this.mleft <= 0; }
 
   // ---------- main step (call once per frame) ----------
+  /** advance the local replay (online follower). maxTick caps how far it may run ahead of what the host confirmed. */
+  stepFollower(rdt: number, maxTick = Infinity) {
+    const dt = Math.min(rdt, .05); this.time += dt;
+    let ts = 1; if (this.slow > 0) { this.slow -= dt; ts = .3 + .7 * (1 - Math.max(0, this.slow) / 1.1) * (1 - Math.max(0, this.slow) / 1.1); }
+    if (this.phase === 'move' || this.phase === 'goal') {
+      this.acc += dt * ts; let n = 0;
+      while (this.acc >= STEP && n < 24 && this.tick < maxTick) {
+        n++; for (const b of this.bodies) { b.px = b.x; b.py = b.y; }
+        this.sim(STEP); this.acc -= STEP;
+      }
+      if (this.acc > STEP * 4) this.acc = STEP * 4;
+    } else {
+      this.acc = 0;
+      // at rest the physics does not run, so fade any re-sync blend offset here
+      const q = 1 - Math.min(1, dt * 12); for (const b of this.bodies) if (b.vox || b.voy) { b.vox *= q; b.voy *= q; if (Math.abs(b.vox) < .05) b.vox = 0; if (Math.abs(b.voy) < .05) b.voy = 0; }
+    }
+    this.tickFx(dt);
+  }
+  /** true when nothing moves (used by the follower to know its replay has settled) */
+  atRest() { for (const b of this.bodies) if (b.vx || b.vy || b.ramp > 0) return false; return true; }
+
+  // ---------- compact state (online): positions on the 1/64 grid + angle + velocity for every body ----------
+  packState(): number[] {
+    const o: number[] = [];
+    for (const b of this.bodies) o.push(Math.round(b.x * 64), Math.round(b.y * 64), Math.round(b.vx * 16), Math.round(b.vy * 16), Math.round((((b.ang % 6.283185307179586) + 6.283185307179586) % 6.283185307179586) * 1000), Math.round(b.boost * 4800), Math.round(b.spin * 100));
+    return o;
+  }
+  unpackState(a: number[], keepVel = false) {
+    const n = this.bodies.length, S = PACK; if (!a || a.length < n * S) return false;
+    for (let i = 0; i < n; i++) {
+      const b = this.bodies[i]; b.x = b.px = a[i * S] / 64; b.y = b.py = a[i * S + 1] / 64;
+      if (!keepVel) { b.vx = a[i * S + 2] / 16; b.vy = a[i * S + 3] / 16; b.ramp = 0; b.boost = a[i * S + 5] / 4800; b.tvx = b.tvy = 0; b.spin = a[i * S + 6] / 100; }
+      b.ang = a[i * S + 4] / 1000; b.vox = b.voy = 0; b.gout = null;
+    }
+    return true;
+  }
+  /** max position error (world units) between this engine and a packed state */
+  stateError(a: number[]) {
+    let m = 0; const n = this.bodies.length, S = PACK; if (!a || a.length < n * S) return 1e9;
+    for (let i = 0; i < n; i++) { const b = this.bodies[i], e = Math.abs(b.x - a[i * S] / 64) + Math.abs(b.y - a[i * S + 1] / 64); if (e > m) m = e; }
+    return m;
+  }
+  /** error between two packed states */
+  static packError(a: number[], b: number[]) {
+    let m = 0; for (let i = 0; i + 1 < a.length && i + 1 < b.length; i += PACK) { const e = Math.abs(a[i] - b[i]) / 64 + Math.abs(a[i + 1] - b[i + 1]) / 64; if (e > m) m = e; }
+    return m;
+  }
+  /** run the physics forward without rendering (follower re-sync after a correction) */
+  fastForward(toTick: number) {
+    let n = 0; while (this.tick < toTick && n++ < 2400) { for (const b of this.bodies) { b.px = b.x; b.py = b.y; } this.sim(STEP); }
+    this.events.length = 0;
+  }
+
   update(rdt: number) {
     const dt = Math.min(rdt, .05); this.time += dt;
     if (this.phase === 'over') { this.tickFx(dt); return; }
     if (this.cfg.matchTime > 0 && !this.sudden && this.mleft > 0) { this.mleft = Math.max(0, this.mleft - dt); }
-    let ts = 1; if (this.slow > 0) { this.slow -= dt; ts = .3 + .7 * Math.pow(1 - Math.max(0, this.slow) / 1.1, 2); }
+    let ts = 1; if (this.slow > 0) { this.slow -= dt; const q = 1 - Math.max(0, this.slow) / 1.1; ts = .3 + .7 * q * q; }
     this.acc += dt * ts; let n = 0;
-    while (this.acc >= STEP && n++ < 16) {
-      for (const b of this.bodies) { b.px = b.x; b.py = b.y; }
+    // phase can change inside sim (goal): keep stepping the physics, the outer state machine reacts below
+    while (this.acc >= STEP && n < 16) {
+      n++; for (const b of this.bodies) { b.px = b.x; b.py = b.y; }
       this.sim(STEP); this.acc -= STEP;
     }
-    if (n > 16) this.acc = 0;
+    if (this.acc > STEP * 4) this.acc = STEP * 4;      // after a long hitch: drop the backlog instead of fast-forwarding
     if (this.phase === 'move') {
       // at rest = every body stopped (speeds are snapped to 0 under the stop thresholds) and no shot ramp pending
       this.idle = this.bodies.some(b => b.vx || b.vy || b.ramp > 0) ? 0 : this.idle + dt;

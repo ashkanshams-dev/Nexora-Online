@@ -15,8 +15,8 @@ import { StatBars } from '../online/ui';
 
 type Toast = (m: string, k?: string) => void;
 type Sub = 'disc' | 'ball' | 'field' | 'form';
-const CAT_FA: Record<string, string> = { club: 'باشگاه', nat: 'ملی', elite: 'الیت', emb: 'نشان', leg: 'افسانه', vip: 'VIP', chrome: 'کروم', car: 'خودرو', lux: 'لوکس', spt: 'ورزشی' };
-const CAT_ORDER = ['club', 'nat', 'elite', 'emb', 'leg', 'vip', 'chrome', 'car', 'lux', 'spt'];
+const CAT_FA: Record<string, string> = { club: 'باشگاه', iran: 'لیگ ایران', nat: 'ملی', elite: 'الیت', emb: 'ملی ویژه', leg: 'افسانه NX', vip: 'ملی NX', car: 'خودرو', lux: 'لوکس', spt: 'ورزشی' };
+const CAT_ORDER = ['club', 'iran', 'nat', 'elite', 'emb', 'leg', 'vip', 'car', 'lux', 'spt'];
 
 function TeamScreen({ top, bottom, toast }: { top: number; bottom: number; toast: Toast }) {
   const [sub, setSub] = useState<Sub>('disc');

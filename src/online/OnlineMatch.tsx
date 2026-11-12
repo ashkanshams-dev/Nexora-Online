@@ -1,11 +1,13 @@
 // Online match — host-authoritative netcode on top of the existing Engine + Skia renderer.
 //
-//  HOST   runs the real simulation (Engine.update) at display rate, applies remote shot inputs,
-//         and broadcasts compact snapshots: 10–15 Hz while anything moves, 2 Hz at rest, and
-//         immediately on events (shot, goal, turn, clock, end). Events ride inside snapshots.
-//  OTHERS (players + spectators) never simulate: they buffer snapshots, estimate the host clock
-//         offset and render ~1.7 snapshot intervals in the past, interpolating every disc + ball,
-//         so motion stays smooth regardless of network jitter. Events fire when playback reaches them.
+//  v7 NETCODE — deterministic lockstep replay + client-side prediction (no snapshot-interpolation lag):
+//  HOST   runs the real simulation and owns score/turns. Every shot (human, remote or bot) is broadcast once as a
+//         'go' message = the quantised flick + the exact pre-shot state. Snapshots drop to 10 Hz (2 Hz at rest) and
+//         carry the authoritative state, a keyframe for verification and the match scalars.
+//  OTHERS replay the shot locally with the bit-identical engine (sqrt-only maths, seeded aim RNG), so the ball moves
+//         the moment 'go' arrives: no interpolation buffer, no jitter. The shooter does not even wait for 'go' — the
+//         flick is predicted instantly and only re-synced if the host disagrees. Keyframes every 24 ticks catch any
+//         drift (hard re-sync + visual blend). Spectators who joined mid-shot fall back to snapshot interpolation.
 //
 //  CONTROL RULE (2v2 / 3v3): turns alternate between teams exactly like offline. Within a team the
 //  humans rotate: the k-th turn of team T belongs to slot (k-1) mod teamSize. A disconnected player
@@ -38,7 +40,13 @@ export type OnlineOutcome = {
   teams: [Team, Team]; names: [string, string]; reported: boolean; ranked: boolean;
 };
 
-type Snap = { q: number; ts: number; hz: number; ph: Phase; tu: 0 | 1; sc: [number, number]; ml: number; tl: number; su: 0 | 1; c: string | null; n: number; p: number[]; R: number[]; ev: number[][] };
+type Snap = {
+  q: number; ts: number; hz: number; ph: Phase; tu: 0 | 1; sc: [number, number]; ml: number; tl: number; su: 0 | 1; c: string | null; n: number; p: number[]; R: number[]; ev: number[][];
+  // v7 lockstep fields: timeline position, epoch kind (1 = shot, 0 = kick-off), shot counters, authoritative state, keyframe
+  ep: number; tk: number; mv: 0 | 1; sh: number; sno: number; ps: number[]; kf?: [number, number[]];
+};
+type Go = { k: 'go'; ep: number; n: number; b: number; dx: number; dy: number; hu: 0 | 1; sq: number; st: number[]; sh: number; sno: number; tu: 0 | 1; pw: number; ac: number };
+const KEY_EVERY = 24;   // keyframe every 24 physics ticks = 10 per second
 
 // ---------- wire format ----------
 const encEv = (e: EngineEvent): number[] =>
@@ -75,7 +83,11 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
     c.stats = [discStats(discOf(cap(0))), discStats(discOf(cap(1)))];
     return c;
   }, []);
-  const eng = useMemo(() => new Engine(cfg), []);
+  const eng = useMemo(() => {
+    const e = new Engine(cfg); e.keyEvery = KEY_EVERY;
+    let h = 2166136261; for (let i = 0; i < matchId.length; i++) { h ^= matchId.charCodeAt(i); h = Math.imul(h, 16777619); }
+    e.seed = h >>> 0; e.follower = room0.host !== link.me; return e;
+  }, []);
   const start = useMemo(() => {
     const t0 = teamOf(ls.players, 0), t1 = teamOf(ls.players, 1);
     const meP = ls.players.find(p => p.user_id === link.me);
@@ -111,8 +123,19 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
   };
 
   // shared mutable state for the loop (never triggers renders)
-  const hs = useRef({ turnCount: [0, 0] as [number, number], seq: 0, ctrl: null as string | null, lastSend: 0, q: 0, evs: [] as number[][], t0: Date.now(), lastAim: 0 }).current;
-  const cs = useRef({ buf: [] as Snap[], offs: [] as [number, number][], applied: -1, lastRecv: Date.now(), pendingShot: 0, lastAim: 0, res: null as null | { winner: -1 | 0 | 1; rd: number; score: [number, number]; ok: boolean }, endAt: 0, prev: null as Float64Array | null, ctrl: null as string | null, seq: 0, got: false }).current;
+  const hs = useRef({ turnCount: [0, 0] as [number, number], seq: 0, ctrl: null as string | null, lastSend: 0, q: 0, evs: [] as number[][], t0: Date.now(), lastAim: 0, lastKf: 0 }).current;
+  // host: broadcast every shot the moment it is fired, with the exact pre-shot state (lockstep replay on every client)
+  if (isHost && !eng.onFire) eng.onFire = (b, dx, dy, hu, sq, pre) => {
+    hs.lastKf = 0; const st = cfg.stats?.[b.team as 0 | 1] || { power: 5, accuracy: 5 };
+    const g: Go = { k: 'go', ep: eng.epoch + 1, n: hs.seq, b: b.id, dx: Math.round(dx * 16), dy: Math.round(dy * 16), hu: hu ? 1 : 0, sq, st: pre, sh: eng.shots, sno: eng.shotNo, tu: eng.turn, pw: st.power, ac: st.accuracy };
+    link.sendGame(g);
+  };
+  const cs = useRef({
+    buf: [] as Snap[], offs: [] as [number, number][], applied: -1, lastRecv: Date.now(), pendingShot: 0, lastAim: 0, res: null as null | { winner: -1 | 0 | 1; rd: number; score: [number, number]; ok: boolean }, endAt: 0, prev: null as Float64Array | null, ctrl: null as string | null, seq: 0, got: false,
+    // lockstep replay of the current shot (null = at rest or interpolation fallback)
+    replay: null as null | { ep: number; endTk: number | null; pred: null | { n: number; b: number; dx: number; dy: number; pw: number; ac: number }; at: number },
+    pend: [] as Snap[], kfs: [] as [number, number, number[]][], goalEp: -1, lastQ: -1, waitGo: 0, interp: false,
+  }).current;
   const done = useRef<'no' | 'ended' | 'finished' | 'aborted'>('no');
   const finishRef = useRef(onFinish); finishRef.current = onFinish; const exitRef = useRef(onExit); exitRef.current = onExit; const toastRef = useRef(toast); toastRef.current = toast;
 
@@ -144,7 +167,7 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
     else if (ev.t === 'shot') buzz('light');
     else if (ev.t === 'goal') {
       if (ev.nogoal) showBanner('گل مردود', 'با ضربه‌ی اول نمی‌شه گل زد', C.dim);
-      else { co.current.touched = true; sfx('goal'); sfx('roar'); buzz('heavy'); showBanner('گل!', start.names[ev.team], ev.team === 0 ? C.cyan : C.red); if (!isHost) eng.fxGoal(ev.team); if (ev.team === start.myTeam) oracleRef.current.react('goal'); }
+      else { co.current.touched = true; sfx('goal'); sfx('roar'); buzz('heavy'); showBanner('گل!', start.names[ev.team], ev.team === 0 ? C.cyan : C.red); if (!isHost && cs.goalEp !== eng.epoch) eng.fxGoal(ev.team); if (ev.team === start.myTeam) oracleRef.current.react('goal'); }
     } else if (ev.t === 'clock') showBanner('گل طلایی', 'گل بعدی برنده‌ست', C.gold);
     else if (ev.t === 'end' && done.current === 'no') { done.current = 'ended'; sfx('final'); stopLoop('crowd'); if (isHost) hostReport(ev.score); else cs.endAt = Date.now(); }
   };
@@ -166,16 +189,22 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
 
   // ---------- host: snapshots ----------
   const sendSnap = (force = false) => {
-    const now = Date.now(); const rec = Math.max(1, Object.keys(onlineRef.current).length - 1);
-    // 20–30 Hz while moving (was 10–15): halves interpolation delay; payload stays compact (ints, short keys)
-    const hz = rec <= 1 ? 30 : rec <= 3 ? 25 : 20;
+    const now = Date.now();
+    // lockstep clients do not need a dense stream any more: 10 Hz while moving keeps keyframe checks + spectators
+    // smooth, and cuts Supabase Realtime traffic ~3x (fewer throttled/queued messages = lower, steadier ping)
+    const hz = 10;
     const moving = eng.phase === 'move' || eng.phase === 'goal';
     if (!force && now - hs.lastSend < (moving ? 1000 / hz : 500)) return;
     hs.lastSend = now;
     const p: number[] = [];
     for (const b of eng.bodies) { p.push(Math.round(b.x * 10), Math.round(b.y * 10), Math.round((((b.ang % TAU) + TAU) % TAU) * 100)); }
     const R = Array.from(eng.ball.R, v => Math.round(v * 1000));
-    const s: Snap = { q: ++hs.q, ts: now, hz, ph: eng.phase, tu: eng.turn, sc: [eng.score[0], eng.score[1]], ml: Math.round(eng.mleft * 10) / 10, tl: Math.round(eng.tleft * 10) / 10, su: eng.sudden ? 1 : 0, c: hs.ctrl, n: hs.seq, p, R, ev: hs.evs };
+    let kf: [number, number[]] | undefined;
+    if (moving) { let best = -1; eng.keys.forEach((_, t) => { if (t > hs.lastKf && t > best) best = t; }); if (best > 0) { kf = [best, eng.keys.get(best)!]; hs.lastKf = best; } }
+    const s: Snap = {
+      q: ++hs.q, ts: now, hz, ph: eng.phase, tu: eng.turn, sc: [eng.score[0], eng.score[1]], ml: Math.round(eng.mleft * 10) / 10, tl: Math.round(eng.tleft * 10) / 10, su: eng.sudden ? 1 : 0, c: hs.ctrl, n: hs.seq, p, R, ev: hs.evs,
+      ep: eng.epoch, tk: eng.tick, mv: eng.epochKind, sh: eng.shots, sno: eng.shotNo, ps: eng.packState(), kf,
+    };
     hs.evs = [];
     link.sendGame({ k: 's', s });
   };
@@ -188,11 +217,53 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
   };
 
   // ---------- client: apply snapshots ----------
-  const applyScalars = (s: Snap) => {
-    eng.phase = s.ph; eng.turn = s.tu; eng.score = [s.sc[0], s.sc[1]]; eng.mleft = s.ml; eng.tleft = s.tl; eng.sudden = !!s.su;
+  const applyScalars = (s: Snap, lockstep = false) => {
+    if (!lockstep) eng.phase = s.ph;
+    eng.turn = s.tu; eng.score = [s.sc[0], s.sc[1]]; eng.mleft = s.ml; eng.tleft = s.tl; eng.sudden = !!s.su;
     cs.ctrl = s.c; cs.seq = s.n; eng.aiTeams = [false, false]; if (s.c === null) eng.aiTeams[s.tu] = true;
-    if (s.ph !== 'aim' && eng.drag) eng.drag = null;
-    for (const e of s.ev) onEvent(decEv(e));
+    if (typeof s.ep === 'number') { eng.shots = s.sh; eng.shotNo = s.sno; }
+    if (s.ph !== 'aim' && eng.drag && !lockstep) eng.drag = null;
+    for (const e of s.ev) {
+      const ev = decEv(e);
+      // in lockstep the local replay already produced the hit/wall/post/shot feedback in sync with the picture
+      if (lockstep && (ev.t === 'hit' || ev.t === 'wall' || ev.t === 'post' || ev.t === 'shot')) continue;
+      if (ev.t === 'goal' && cs.goalEp === s.ep) continue;   // banner already shown by the local replay
+      onEvent(ev);
+    }
+  };
+  // jump the local engine onto an authoritative state (rest / kick-off / rollback)
+  const adopt = (s: Snap) => {
+    if (!Array.isArray(s.ps)) return;
+    const old = eng.bodies.map(b => [b.x, b.y]);
+    eng.unpackState(s.ps); eng.epoch = s.ep; eng.epochKind = s.mv; eng.tick = s.tk; eng.acc = 0; eng.keys.clear();
+    // tiny residual (quantisation) → blend visually instead of popping; big jump (kick-off) → snap
+    eng.bodies.forEach((b, i) => { const dx = old[i][0] - b.x, dy = old[i][1] - b.y; if (dx * dx + dy * dy < 40 * 40) { b.vox = dx; b.voy = dy; } });
+    cs.got = true;
+  };
+  // start (or restart) the lockstep replay of a shot from the host's 'go'
+  const startReplay = (g: Go) => {
+    eng.unpackState(g.st); eng.shots = g.sh; eng.shotNo = g.sno; eng.epoch = g.ep - 1; eng.turn = g.tu; eng.phase = 'aim'; eng.acc = 0;
+    if (cfg.stats) cfg.stats[g.tu] = { power: g.pw, accuracy: g.ac };
+    const b = eng.bodies.find(x => x.id === g.b); if (!b) return false;
+    eng.drag = null; const dx = g.dx / 16, dy = g.dy / 16;
+    eng.fire(b, dx, dy, Math.hypot(dx, dy), !!g.hu, g.sq);
+    cs.replay = { ep: eng.epoch, endTk: null, pred: null, at: Date.now() }; cs.kfs = []; cs.got = true; cs.waitGo = 0;
+    return true;
+  };
+  // keyframe check: same tick, compare; on drift re-sync to the host and fast-forward back to "now"
+  const checkKeys = () => {
+    const r = cs.replay; if (!r) return;
+    for (let i = cs.kfs.length - 1; i >= 0; i--) {
+      const [ep, tk, st] = cs.kfs[i];
+      if (ep !== r.ep) { cs.kfs.splice(i, 1); continue; }
+      const mine = eng.keys.get(tk); if (!mine) { if (eng.tick > tk + KEY_EVERY * 3) cs.kfs.splice(i, 1); continue; }
+      cs.kfs.splice(i, 1);
+      if (Engine.packError(mine, st) > 2.5) {
+        const now = eng.tick, old = eng.bodies.map(b => [b.x, b.y]);
+        eng.unpackState(st); eng.tick = tk; eng.fastForward(now);
+        eng.bodies.forEach((b, j) => { const dx = old[j][0] - b.x, dy = old[j][1] - b.y; if (dx * dx + dy * dy < 120 * 120) { b.vox = dx; b.voy = dy; } });
+      }
+    }
   };
   const placeBodies = (a: Snap, b: Snap | null, k: number, dt: number) => {
     const n = eng.bodies.length; if (a.p.length < n * 3) return;
@@ -218,9 +289,24 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
   useEffect(() => {
     return link.onGame((m, from) => {
       if (!m || typeof m !== 'object') return;
+      if (!isHost) cs.lastRecv = Date.now();
+      if (m.k === 'go' && !isHost) {
+        const g = m as Go; if (!Array.isArray(g.st)) return;
+        const r = cs.replay, pr = r?.pred;
+        // my own predicted shot confirmed by the host → nothing to do, the replay is already running
+        if (r && pr && r.ep === g.ep && pr.b === g.b && pr.dx === g.dx && pr.dy === g.dy && pr.pw === g.pw && pr.ac === g.ac) { r.pred = null; return; }
+        if (r && !pr && r.ep === g.ep) return;   // duplicate
+        startReplay(g);
+        return;
+      }
       if (m.k === 's' && !isHost) {
         const s = m.s as Snap; if (!s || !Array.isArray(s.p)) return;
-        const now = Date.now(); cs.lastRecv = now;
+        const now = Date.now();
+        if (s.q <= cs.lastQ) return; cs.lastQ = s.q;
+        if (typeof s.ep === 'number') {
+          if (s.kf) cs.kfs.push([s.ep, s.kf[0], s.kf[1]]);
+          cs.pend.push(s); if (cs.pend.length > 40) cs.pend.splice(0, cs.pend.length - 40);
+        }
         cs.offs.push([now, now - s.ts]); while (cs.offs.length && now - cs.offs[0][0] > 4000) cs.offs.shift();
         if (s.q > (cs.buf.length ? cs.buf[cs.buf.length - 1].q : -1)) cs.buf.push(s);
         else { cs.buf.push(s); cs.buf.sort((a, b) => a.q - b.q); }
@@ -228,7 +314,9 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
       } else if (m.k === 'shot' && isHost) {
         if (from !== hs.ctrl || eng.phase !== 'aim' || m.n !== hs.seq) return;
         const b = eng.bodies.find(x => x.id === m.b && x.team === eng.turn); if (!b) return;
-        const dx = Number(m.dx) || 0, dy = Number(m.dy) || 0, l = Math.hypot(dx, dy); if (l > 18 && l < 5000) eng.fire(b, dx, dy, l, true);
+        // v7: dx/dy arrive as integers on the 1/16 grid (exactly what the shooter predicted with)
+        const dx = (Number(m.dx) || 0) / (m.q16 ? 16 : 1), dy = (Number(m.dy) || 0) / (m.q16 ? 16 : 1), l = Math.hypot(dx, dy);
+        if (l > 18 && l < 5000) eng.fire(b, dx, dy, l, true);
       } else if (m.k === 'aim') {
         const ctrl = isHost ? hs.ctrl : cs.ctrl; if (from !== ctrl || from === link.me) return;
         if (m.b < 0) { if (eng.drag?.ai && !eng.isAiTurn()) eng.drag = null; return; }
@@ -271,12 +359,60 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
         if (eng.aiTeams[eng.turn] !== ai || eng.aiTeams[1 - eng.turn]) { eng.aiTeams = [false, false]; eng.aiTeams[eng.turn] = ai; if (!ai) { eng.aiPlan = null; if (eng.drag?.ai) eng.drag = null; } }
         if (done.current !== 'finished') sendSnap(urgent);
       } else {
-        // pick the render time ~1.7 snapshot intervals behind the host clock
+        const r = cs.replay;
+        try {
+        if (r) {
+          // ---- lockstep: run the identical physics locally; never ahead of the host's confirmed end tick ----
+          eng.stepFollower(dt, r.endTk ?? Infinity);
+          if (eng.events.length) { const evs = eng.events.slice(); eng.events.length = 0; for (const ev of evs) if (ev.t === 'hit' || ev.t === 'wall' || ev.t === 'post' || ev.t === 'shot') onEvent(ev); }
+          const lg = eng.localGoal;
+          if (lg && cs.goalEp !== r.ep) { cs.goalEp = r.ep; onEvent({ t: 'goal', team: lg.team, nogoal: lg.nogoal }); }
+          checkKeys();
+          while (cs.pend.length && cs.replay) {
+            const s = cs.pend[0];
+            if (s.ep < r.ep) {
+              // the host is still behind my predicted shot; roll back only if it clearly moved on without it
+              if (r.pred && s.ph === 'aim' && (s.n !== r.pred.n || now - r.at > 2500)) { applyScalars(s); adopt(s); cs.replay = null; }
+              cs.pend.shift(); continue;
+            }
+            if (s.ep === r.ep) {
+              if (s.ph === 'aim' || s.ph === 'over') { r.endTk = s.tk; if (eng.tick >= s.tk || now - r.at > 15000) { applyScalars(s, true); adopt(s); eng.phase = s.ph; cs.replay = null; cs.pend.shift(); continue; } break; }
+              if (s.tk <= eng.tick) { applyScalars(s, true); cs.pend.shift(); continue; }
+              break;
+            }
+            if (s.mv === 0) { applyScalars(s); adopt(s); cs.replay = null; cs.pend.shift(); continue; }   // kick-off after a goal
+            if (!cs.waitGo) cs.waitGo = now;
+            if (now - cs.waitGo > 700) { cs.replay = null; cs.interp = true; cs.pend.length = 0; }        // 'go' lost → interpolate
+            break;
+          }
+        } else if (!cs.interp) {
+          // ---- at rest: authoritative state straight from the newest snapshots (no buffering delay for turn changes) ----
+          while (cs.pend.length) {
+            const s = cs.pend[0];
+            if (s.mv === 1 && s.ep > eng.epoch && (s.ph === 'move' || s.ph === 'goal')) {
+              if (!cs.waitGo) cs.waitGo = now;
+              if (now - cs.waitGo > 700 || !cs.got) { cs.interp = true; cs.pend.length = 0; cs.applied = s.q - 1; }
+              break;
+            }
+            cs.waitGo = 0; applyScalars(s); if (s.ep >= eng.epoch || s.ph === 'aim' || s.ph === 'over') adopt(s); cs.pend.shift();
+          }
+          eng.stepFollower(dt, eng.tick);
+        }
+        } catch (err) { cs.replay = null; cs.interp = true; cs.pend.length = 0; }   // never let a netcode edge case freeze the match
+        // smooth local clocks between snapshots (the host re-anchors them several times a second)
+        if (eng.phase !== 'over') {
+          if (cfg.matchTime > 0 && !eng.sudden && eng.mleft > 0) eng.mleft = Math.max(0, eng.mleft - dt);
+          if (cfg.turnTime > 0 && eng.phase === 'aim') eng.tleft = Math.max(0, eng.tleft - dt);
+        }
+        // ---- fallback (spectator joined mid-shot / lost 'go'): classic snapshot interpolation ----
         const off = cs.offs.length ? Math.min(...cs.offs.map(o => o[1])) : 0;
         const buf = cs.buf; const hz = buf.length ? buf[buf.length - 1].hz || 12 : 12;
         const rt = now - off - 1700 / hz;
-        for (const s of buf) if (s.q > cs.applied && s.ts <= rt) { cs.applied = s.q; applyScalars(s); }
-        if (buf.length) {
+        if (cs.interp) for (const s of buf) if (s.q > cs.applied && s.ts <= rt) {
+          cs.applied = s.q; applyScalars(s);
+          if (s.ph === 'aim' || s.ph === 'over' || (s.mv === 0 && s.ep > eng.epoch)) { adopt(s); cs.interp = false; cs.pend = cs.pend.filter(x => x.q > s.q); cs.waitGo = 0; break; }
+        }
+        if (cs.interp && buf.length) {
           let i = 0; while (i + 1 < buf.length && buf[i + 1].ts <= rt) i++;
           const a = buf[i], b = buf[i + 1] || null;
           const k = b ? Math.max(0, Math.min(1, (rt - a.ts) / Math.max(1, b.ts - a.ts))) : 0;
@@ -289,7 +425,8 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
           }
           if (i > 3) buf.splice(0, i - 3);
         }
-        eng.tickFx(dt);
+        if (cs.interp) eng.tickFx(dt);
+        if (buf.length > 30) buf.splice(0, buf.length - 30);
         if (done.current === 'no' && now - cs.lastRecv > 8000) {
           done.current = 'aborted'; toastRef.current('ارتباط با میزبان قطع شد', 'err'); exitRef.current('hostLost'); return;
         }
@@ -363,7 +500,18 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
       eng.drag = null; link.sendGame({ k: 'aim', b: -1 });
       if (!d || d.ai) return;
       const dx = d.sx - d.cx, dy = d.sy - d.cy, l = Math.hypot(dx, dy);
-      if (l > 18 && canAct()) { co.current.power = Math.min(l, LMAX) / LMAX; cs.pendingShot = Date.now(); link.sendGame({ k: 'shot', b: l0.b.id, dx: Math.round(dx * 10) / 10, dy: Math.round(dy * 10) / 10, n: cs.seq }); }
+      if (l > 18 && canAct()) {
+        co.current.power = Math.min(l, LMAX) / LMAX; cs.pendingShot = Date.now();
+        const qx = Math.round(dx * 16), qy = Math.round(dy * 16);
+        link.sendGame({ k: 'shot', b: l0.b.id, dx: qx, dy: qy, q16: 1, n: cs.seq });
+        // client-side prediction: fire locally right now with the exact same quantised input the host will use
+        const b = eng.bodies.find(x => x.id === l0.b.id);
+        if (b && !cs.interp) {
+          const st = cfg.stats?.[b.team as 0 | 1] || { power: 5, accuracy: 5 };
+          eng.fire(b, qx / 16, qy / 16, Math.hypot(qx / 16, qy / 16), true);
+          cs.replay = { ep: eng.epoch, endTk: null, pred: { n: cs.seq, b: b.id, dx: qx, dy: qy, pw: st.power, ac: st.accuracy }, at: Date.now() }; cs.kfs = []; cs.waitGo = 0;
+        }
+      }
     },
     onResponderTerminate: () => { local.current = null; if (eng.drag && !eng.drag.ai) eng.drag = null; link.sendGame({ k: 'aim', b: -1 }); },
   };

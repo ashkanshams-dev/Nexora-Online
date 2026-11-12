@@ -10,10 +10,10 @@ import { TEAMS } from '../game/data';
 const KEY = 'nexora.discs.v1';
 let catalog: Record<string, Disc> = {};
 // fallback stats (deterministic) until the catalog has loaded once
-const fallback = (id: string): DiscStats => { const t = TEAMS.find(x => x.id === id); const base = t?.cat === 'leg' || t?.cat === 'vip' ? 8 : t?.cat === 'club' || t?.cat === 'nat' ? 5 : 6; return { power: base, accuracy: base }; };
+const fallback = (id: string): DiscStats => { const t = TEAMS.find(x => x.id === id); const base = t?.cat === 'leg' || t?.cat === 'vip' ? 8 : t?.cat === 'club' || t?.cat === 'nat' || t?.cat === 'iran' ? 5 : 6; return { power: base, accuracy: base }; };
 export const discStats = (id?: string | null): DiscStats => { const d = id ? catalog[id] : null; return d ? { power: d.power, accuracy: d.accuracy } : fallback(id || 'club0'); };
 export const discPrice = (id: string) => catalog[id]?.price_gems ?? 0;
-export const isFreeDisc = (id: string) => (catalog[id] ? catalog[id].price_gems === 0 : /^(club|nat)\d+$/.test(id) || id === 'elite0');
+export const isFreeDisc = (id: string) => (catalog[id] ? catalog[id].price_gems === 0 : /^(club|nat|iran)\d+$/.test(id) || id === 'elite0');
 
 type Ctx = {
   catalog: Record<string, Disc>; loaded: boolean; owned: Set<string>; equipped: string | null;
