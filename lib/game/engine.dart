@@ -657,8 +657,15 @@ class Engine {
   }
 
   void _sim(double dt) {
-    final bl = ball;
     tick++;
+    physicsStep(dt);
+    _postStep();
+  }
+
+  /// integration + collisions for one fixed sub-step. Overridden by [ForgeEngine] (Box2D, offline only);
+  /// the default is the bit-exact port of the TS engine used for every online match.
+  void physicsStep(double dt) {
+    final bl = ball;
     for (final b in bodies) {
       if (b.ramp > 0) {
         final k = math.min(1.0, dt / b.ramp);
@@ -734,6 +741,10 @@ class Engine {
     for (final b in B) {
       _walls(b);
     }
+  }
+
+  void _postStep() {
+    final bl = ball;
     if (phase == Phase.move) {
       for (final g in goals) {
         if (bl.x > g.x1 && bl.x < g.x2 && (g.d < 0 ? bl.y < g.y - bl.r * .8 : bl.y > g.y + bl.r * .8)) _scored(g.team);
@@ -780,6 +791,16 @@ class Engine {
   }
 
   /// visual particles only (Math.random is fine: never part of the replayed state)
+  /// ball rotation helper for alternative physics backends
+  void rollBall(double dt) {
+    final b = ball, sp2 = hyp(b.vx, b.vy);
+    b.spin *= 1 - (sp2 > 0 ? 1.05 : 3.2) * dt;
+    if (b.spin.abs() < .02) b.spin = 0;
+    final roll = .95 / b.r;
+    if (sp2 > 0 || b.spin != 0) _rotate(b.R, -b.vy * roll, b.vx * roll, b.spin * .55, dt);
+    b.ang += b.spin * dt;
+  }
+
   void burst(double x, double y, int n, double sp, List<String> cols, double life, [int k = 0]) {
     if (parts.length > 420) return;
     for (var i = 0; i < n; i++) {

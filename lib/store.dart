@@ -25,6 +25,8 @@ class Profile {
   String quality = 'high';
   double volume = 1;
   bool oracle = true, oracleTour = false;
+  /// offline physics backend: 'classic' (bit-exact engine.ts port) | 'forge2d' (Box2D v3). Online is always classic.
+  String physics = 'classic';
   int fieldsV = FIELDS_VERSION;
 
   Profile();
@@ -37,7 +39,7 @@ class Profile {
         'lastDaily': lastDaily, 'streak': streak, 'sound': sound, 'music': music, 'haptics': haptics,
         'aiLvl': aiLvl, 'limit': limit, 'turnTime': turnTime, 'cupsWon': cupsWon, 'winStreak': winStreak,
         'bestStreak': bestStreak, 'chests': chests, 'lastChest': lastChest, 'claimedAch': claimedAch,
-        'quality': quality, 'volume': volume, 'oracle': oracle, 'oracleTour': oracleTour, 'fieldsV': fieldsV,
+        'quality': quality, 'volume': volume, 'oracle': oracle, 'oracleTour': oracleTour, 'fieldsV': fieldsV, 'physics': physics,
       };
 
   static Profile fromJson(Map<String, dynamic> j) {
@@ -63,6 +65,7 @@ class Profile {
     p.lastChest = g('lastChest', 0); p.claimedAch = (j['claimedAch'] as List?)?.cast<String>() ?? [];
     p.quality = g('quality', 'high'); p.volume = g('volume', 1.0); p.oracle = g('oracle', true); p.oracleTour = g('oracleTour', false);
     p.fieldsV = g('fieldsV', 1);
+    p.physics = g('physics', 'classic');
     return p;
   }
 }
