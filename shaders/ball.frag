@@ -17,7 +17,8 @@ out vec4 fragColor;
 void main() {
   vec2 p = (FlutterFragCoord().xy - uCenter) / uRadius;
   float d = length(p);
-  if (d > 1.0) { fragColor = vec4(0.0); return; }
+  float inside = step(d, 1.0);
+  d = min(d, 1.0);
   float z = sqrt(max(0.0, 1.0 - d * d));
   vec3 n = vec3(p.x, p.y, z);
   vec3 q = vec3(dot(c0, n), dot(c1, n), dot(c2, n));
@@ -43,6 +44,6 @@ void main() {
     col += vec3(0.30, 0.85, 1.0) * rim * 0.35;
     col += vec3(pow(nh, 220.0) * 0.9);
   }
-  float a = smoothstep(1.0, 1.0 - aa, d);
+  float a = smoothstep(1.0, 1.0 - aa, d) * inside;
   fragColor = vec4(col * a, a);
 }
