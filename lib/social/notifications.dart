@@ -1,5 +1,4 @@
 // Notifications inbox + live feed: unread count, pending friend requests, realtime inserts → oracle + local alert.
-import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgresChangeEvent, PostgresChangeFilter, PostgresChangeFilterType, RealtimeChannel;
@@ -122,7 +121,7 @@ class NotifFeed extends ChangeNotifier {
 
 /// what tapping a notification does (shared with push / local notification taps)
 Future<void> openNotification(Nav nav, Map data, String? kind, Toast toast) async {
-  final s = (String k) => data[k] is String ? data[k] as String : null;
+  String? s(String k) => data[k] is String ? data[k] as String : null;
   switch (kind) {
     case 'dm':
       if (s('conversation') != null) return nav.openChat(s('conversation')!);

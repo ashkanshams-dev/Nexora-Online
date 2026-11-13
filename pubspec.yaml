@@ -55,6 +55,7 @@ dependencies:
   path_provider: ^2.1.6
   connectivity_plus: ^7.3.2
   timezone: ^0.11.2
+  app_links: ^7.2.2
 
 dev_dependencies:
   flutter_test:

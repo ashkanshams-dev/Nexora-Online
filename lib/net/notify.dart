@@ -88,7 +88,7 @@ class LocalNotify with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) => foreground = s == AppLifecycleState.resumed;
+  void didChangeAppLifecycleState(AppLifecycleState state) => foreground = state == AppLifecycleState.resumed;
 
   static String _guessZone() {
     final off = DateTime.now().timeZoneOffset.inMinutes;
@@ -206,7 +206,9 @@ class LocalNotify with WidgetsBindingObserver {
       FirebaseMessaging.onMessageOpenedApp.listen((rm) => _taps.add(NotifTap(rm.data['kind'] as String?, Map<String, dynamic>.from(rm.data))));
       final init = await m.getInitialMessage();
       if (init != null) launchTap = NotifTap(init.data['kind'] as String?, Map<String, dynamic>.from(init.data));
+      // ignore: deprecated_member_use
       m.onTokenRefresh.listen(_register);
+      // ignore: deprecated_member_use
       final t = await m.getToken();
       if (t != null) await _register(t);
       pushReady = true;
