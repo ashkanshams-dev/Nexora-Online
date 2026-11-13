@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:material_ui/material_ui.dart' hide Tab;
 
 import 'game/assets.dart';
 import 'game/data.dart';
