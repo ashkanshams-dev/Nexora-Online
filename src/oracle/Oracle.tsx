@@ -6,6 +6,7 @@
 //  • Onboarding tour with spotlight ring over each tab
 //  • Panel: chat-like Q&A over a local knowledge base + smart actions (quick match, claim rewards, …)
 import React, { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { tr } from '../i18n';
 import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions , Image as RNImage } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, runOnJS, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
@@ -441,7 +442,7 @@ function OraclePanel({ onClose, runAction }: { onClose: () => void; runAction: (
         </ScrollView>
         <View style={[st.inRow, { paddingBottom: Math.max(ins.bottom, 8) }]}>
           <Press onPress={() => ask(txt)} disabled={!txt.trim() || busy} style={st.send}><T s={busy ? '…' : '➤'} style={{ fontSize: 18, color: C.cyan, transform: [{ scaleX: -1 }] }} /></Press>
-          <TextInput value={txt} onChangeText={setTxt} onSubmitEditing={() => ask(txt)} returnKeyType="send" placeholder="از اوراکل بپرس…" placeholderTextColor={C.dim2}
+          <TextInput value={txt} onChangeText={setTxt} onSubmitEditing={() => ask(txt)} returnKeyType="send" placeholder={tr("از اوراکل بپرس…")} placeholderTextColor={C.dim2}
             style={st.in} selectionColor={C.cyan} allowFontScaling={false} maxLength={200} />
         </View>
       </View>

@@ -5,6 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { C, F, G, ICON_ART, IC, SP, TOUCH, TY } from './theme';
 import { sfx, buzz } from '../sound';
+import { tr } from '../i18n';
+import { isLight } from './theme';
+import { lightText } from './lightify';
+const LIGHT = isLight();
 
 const FA = /[\u0600-\u06FF]/;
 const HEAVY = new Set([F.title, F.head, F.bold]);
@@ -12,7 +16,9 @@ const HEAVY = new Set([F.title, F.head, F.bold]);
 // Text: Persian strings switch to Vazirmatn automatically (Orbitron/Exo have no Persian glyphs)
 // and drop letter-spacing, which would break Persian letter joining.
 export const T = memo(function T({ s, style, n }: { s: string | number; style?: any; n?: number }) {
+  if (typeof s === 'string') s = tr(s);
   const base: any = StyleSheet.flatten([{ color: C.text, fontFamily: F.body, fontSize: 14 }, style]);
+  if (LIGHT) base.color = lightText(base.color);
   if (typeof s === 'string' && FA.test(s)) {
     const heavy = HEAVY.has(base.fontFamily);
     base.fontFamily = heavy ? F.faB : F.fa; base.letterSpacing = 0; base.writingDirection = 'rtl';

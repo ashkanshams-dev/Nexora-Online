@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Engine, MatchCfg } from '../game/engine';
 import { computeView, frame, staticLayer, toWorld, View as GView } from '../game/render';
 import { FIELDS, Team } from '../game/data';
+import ScoreBug from '../ui/ScoreBug';
 import { ARROW_IMG, BALL_IMG, FIELD_IMG, GOAL_IMG, TEAM_IMG } from '../game/assets';
 import { teamKey } from '../game/util';
 import { C, F } from '../ui/theme';
@@ -116,25 +117,14 @@ export default function Match({ cfg, teams, names, onFinish, onQuit, fx = true }
       <View style={StyleSheet.absoluteFill} {...touch}>
         <Stage w={W} h={H} bind={f => (picSet.current = f)} />
       </View>
-      {/* HUD */}
-      <View style={[s.hud, { top: ins.top + 8 }]} pointerEvents="box-none">
-        <Press onPress={() => setPaused(true)} style={s.pause}><T s="II" style={{ fontFamily: F.title, fontSize: 14, color: C.text }} /></Press>
-        <Panel style={s.board} accent={hud.turn === 0 ? C.cyan : C.red}>
-          <Side team={teams[0]} name={names[0]} on={hud.turn === 0} color={C.cyan} />
-          <View style={{ alignItems: 'center', paddingHorizontal: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <T s={hud.s0} style={s.score} /><T s=":" style={[s.score, { color: C.dim, marginHorizontal: 6 }]} /><T s={hud.s1} style={s.score} />
-            </View>
-            <T s={hud.clock} style={{ fontFamily: F.head, fontSize: 9, letterSpacing: 2, color: hud.sudden ? C.gold : C.dim }} />
-          </View>
-          <Side team={teams[1]} name={names[1]} on={hud.turn === 1} color={C.red} right />
-        </Panel>
-      </View>
-      {cfg.turnTime > 0 ? (
-        <View style={[s.turnBar, { top: ins.top + 76 }]} pointerEvents="none">
-          <LinearGradient colors={hud.turn === 0 ? [C.cyan, C.blue] : [C.red, C.orange]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ width: `${hud.tl * 100}%`, height: '100%', borderRadius: 3, alignSelf: hud.turn === 0 ? 'flex-start' : 'flex-end' }} />
+      {/* HUD: broadcast score bug */}
+      <View style={[s.hud, { top: ins.top + 6 }]} pointerEvents="box-none">
+        <Press onPress={() => setPaused(true)} style={s.pause}><T s="II" style={{ fontFamily: F.title, fontSize: 13, color: '#fff' }} /></Press>
+        <View style={{ flex: 1 }} pointerEvents="none">
+          <ScoreBug left={{ team: teams[0], name: names[0], score: hud.s0, color: C.cyan, on: hud.turn === 0 }} right={{ team: teams[1], name: names[1], score: hud.s1, color: C.red, on: hud.turn === 1 }}
+            clock={hud.clock} sudden={hud.sudden} tl={hud.tl} timed={cfg.turnTime > 0} status={hud.turn === 0 ? 'نوبت توئه' : 'نوبت حریف'} />
         </View>
-      ) : null}
+      </View>
       {/* goal banner */}
       <Animated.View pointerEvents="none" style={[s.banner, { opacity: bOp, transform: [{ scale: bScale }] }]}>
         <T s={bText.t} style={{ fontFamily: F.title, fontSize: 54, letterSpacing: 4, color: '#fff', textShadowColor: bText.c, textShadowRadius: 24 }} />
@@ -182,7 +172,7 @@ function Side({ team, name, on, color, right }: { team: Team; name: string; on: 
 
 const s = StyleSheet.create({
   hud: { position: 'absolute', left: 10, right: 10, flexDirection: 'row', alignItems: 'center' },
-  pause: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(8,12,34,.85)', borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+  pause: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(5,8,22,.9)', borderWidth: 1, borderColor: 'rgba(255,255,255,.16)', alignSelf: 'flex-start', marginTop: 7, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   board: { flex: 1, height: 60, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
   score: { fontFamily: F.title, fontSize: 26, color: '#fff' },
   logo: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#050816' },

@@ -1,5 +1,6 @@
 // Online hub: profile strip, quick match, create / join by code, live room list.
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useNav } from '../nav';
 import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -169,13 +170,13 @@ export default function Hub({ onBack, onRoom, onNav, toast }: Props) {
 }
 
 const RoomRow = memo(function RoomRow({ r, busy, onJoin }: { r: RoomListRow; busy: string | null; onJoin: (id: string, spectate: boolean) => void }) {
-  const full = r.players >= r.capacity, playing = r.status === 'playing';
+  const full = r.players >= r.capacity, playing = r.status === 'playing'; const nav = useNav();
   const [kl, kc] = KIND_FA[r.kind] || KIND_FA.casual;
   return (
     <View style={{ paddingHorizontal: S.l, marginBottom: S.s }}>
       <Panel style={{ padding: S.m }} accent="transparent">
         <View style={{ flexDirection: 'row-reverse', alignItems: 'center' }}>
-          <Avatar avatar={r.host_avatar} url={r.host_avatar_url} size={44} ring={playing ? C.red : C.cyan} />
+          <Press onPress={() => nav.openProfile(r.host)}><Avatar avatar={r.host_avatar} url={r.host_avatar_url} size={44} ring={playing ? C.red : C.cyan} /></Press>
           <View style={{ flex: 1, marginRight: S.s, alignItems: 'flex-end' }}>
             <T s={r.name} n={1} style={{ fontFamily: F.bold, fontSize: TS.body }} />
             <T s={`${r.host_name} · سطح ${fa(r.host_level)} · ${ruleLabel(r.settings)}`} n={1} style={{ fontSize: TS.cap, color: C.dim, marginTop: 2 }} />

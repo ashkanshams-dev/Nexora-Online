@@ -1,6 +1,7 @@
 // Shared building blocks for the online screens (same space/neon kit as the rest of the app).
 // Spacing follows an 8pt grid, touch targets are ≥ 44pt, Persian text is right-aligned / RTL.
 import React, { memo, useEffect, useState } from 'react';
+import { tr } from '../i18n';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -98,7 +99,7 @@ export function Field(props: TextInputProps & { label?: string; error?: string |
   return (
     <View style={{ marginBottom: S.m }}>
       {label ? <T s={label} style={{ fontFamily: F.bold, fontSize: TS.small, color: C.dim, textAlign: 'right', marginBottom: S.xs }} /> : null}
-      <TextInput placeholderTextColor={C.dim2} selectionColor={C.cyan} allowFontScaling={false} {...rest}
+      <TextInput placeholderTextColor={C.dim2} selectionColor={C.cyan} allowFontScaling={false} {...rest} placeholder={rest.placeholder ? tr(rest.placeholder) : undefined}
         style={[st.input, error ? { borderColor: C.red } : null, style]} />
       {error ? <T s={error} style={{ fontSize: TS.cap, color: C.red, textAlign: 'right', marginTop: S.xs }} /> : null}
     </View>
@@ -133,7 +134,7 @@ export function ChatPanel({ link, compact, height }: { link: RoomLink; compact?:
         ListEmptyComponent={<View style={{ transform: [{ scaleY: -1 }] }}><T s="هنوز پیامی نیست؛ سلام کن!" style={{ color: C.dim2, fontSize: TS.small, textAlign: 'center', paddingVertical: S.l }} /></View>} />
       <View style={st.chatIn}>
         <Press onPress={send} style={st.send} disabled={!txt.trim()}><Img src={UI2.c_mega} style={{ width: 26, height: 26 }} /></Press>
-        <TextInput value={txt} onChangeText={setTxt} onSubmitEditing={send} returnKeyType="send" maxLength={200} placeholder="پیام…" placeholderTextColor={C.dim2}
+        <TextInput value={txt} onChangeText={setTxt} onSubmitEditing={send} returnKeyType="send" maxLength={200} placeholder={tr("پیام…")} placeholderTextColor={C.dim2}
           selectionColor={C.cyan} allowFontScaling={false} style={st.chatTxt} blurOnSubmit={false} />
       </View>
     </KeyboardAvoidingView>

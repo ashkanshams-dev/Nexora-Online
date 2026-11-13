@@ -22,7 +22,7 @@ function Shop({ top, bottom, toast, onChest }: { top: number; bottom: number; to
   const [kind, setKind] = useState<'team' | 'ball' | 'field'>('team');
   const items = useMemo(() => allItems(p), [p.ownedTeams, p.ownedBalls, p.ownedFields]);
   const deals = useMemo(() => dailyDeals(p), [p.ownedTeams, p.ownedBalls, p.ownedFields]);
-  const legends = TEAMS.filter(t => t.cat === 'leg');
+  const legends = TEAMS.filter(t => t.cat === 'lux' || t.cat === 'car');
   const now = Date.now(), freeIn = Math.max(0, p.lastChest + CHEST_EVERY - now);
   const buy = (it: Item) => {
     if (p.coins < it.price) { toast('سکه کافی نداری', 'err'); buzz('medium'); return; }

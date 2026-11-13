@@ -1,5 +1,6 @@
 // Room lobby: seats per team, spectators, ready / start, host settings + kick, chat, voice, share code.
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useNav } from '../nav';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,7 +26,7 @@ export default function Lobby(props: Props) {
 }
 
 function LobbyBody({ link, onLeave, onWatch, toast }: Props) {
-  const ins = useSafeAreaInsets();
+  const ins = useSafeAreaInsets(); const nav = useNav();
   const st = useLink(link); const v = useVoice(link);
   const room = st.room!; const me = link.me;
   const [busy, setBusy] = useState<string | null>(null);
@@ -132,7 +133,7 @@ function LobbyBody({ link, onLeave, onWatch, toast }: Props) {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: S.s }} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
               {specs.map(p => (
                 <View key={p.user_id} style={{ alignItems: 'center', width: 64, marginLeft: S.s }}>
-                  <Avatar avatar={p.profiles?.equipped_disc || p.profiles?.avatar} url={p.profiles?.avatar_url} size={40} ring={speaking.has(p.user_id) ? C.green : C.dim2} dim={!st.online[p.user_id]} />
+                  <Press onPress={() => nav.openProfile(p.user_id)}><Avatar avatar={p.profiles?.equipped_disc || p.profiles?.avatar} url={p.profiles?.avatar_url} size={40} ring={speaking.has(p.user_id) ? C.green : C.dim2} dim={!st.online[p.user_id]} /></Press>
                   <T s={p.profiles?.username || '…'} n={1} style={{ fontSize: TS.tiny, color: C.dim, marginTop: 2, maxWidth: 62 }} />
                 </View>
               ))}
@@ -199,11 +200,11 @@ function LobbyBody({ link, onLeave, onWatch, toast }: Props) {
 }
 
 const Seat = memo(function Seat({ p, me, host, online, talking, color, canKick, onKick, busy }: { p: RoomPlayer; me: string; host: string; online: boolean; talking: boolean; color: string; canKick: boolean; onKick: () => void; busy: boolean }) {
-  const isHost = p.user_id === host;
+  const isHost = p.user_id === host; const nav = useNav();
   return (
     <View style={[s.seat, { borderColor: talking ? C.green : p.user_id === me ? color : C.line }]}>
       <View>
-        <Avatar avatar={p.profiles?.equipped_disc || p.profiles?.avatar} url={p.profiles?.avatar_url} size={40} ring={talking ? C.green : color} dim={!online} />
+        <Press onPress={() => p.user_id !== me && nav.openProfile(p.user_id)}><Avatar avatar={p.profiles?.equipped_disc || p.profiles?.avatar} url={p.profiles?.avatar_url} size={40} ring={talking ? C.green : color} dim={!online} /></Press>
         <View style={[s.dotOn, { backgroundColor: online ? C.green : C.dim2 }]} />
       </View>
       <View style={{ flex: 1, marginRight: S.s, alignItems: 'flex-end' }}>

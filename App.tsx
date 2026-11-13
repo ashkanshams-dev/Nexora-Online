@@ -7,7 +7,7 @@ import { useFonts, Orbitron_700Bold, Orbitron_900Black } from '@expo-google-font
 import { Exo2_600SemiBold, Exo2_800ExtraBold } from '@expo-google-fonts/exo-2';
 import { Vazirmatn_500Medium, Vazirmatn_800ExtraBold } from '@expo-google-fonts/vazirmatn';
 import { StoreProvider, level, useStore } from './src/store';
-import { C, F, G, fa } from './src/ui/theme';
+import { C, F, G, fa, isLight } from './src/ui/theme';
 import { Btn, Img, T } from './src/ui/kit';
 import { UI2 } from './src/game/assets';
 import { TEAMS } from './src/game/data';
@@ -32,9 +32,11 @@ import { UpdateGate } from './src/updater';
 import { NavCtx, OnlineEntry } from './src/nav';
 import OnlineRoot from './src/online/OnlineRoot';
 import { RecoveryModal } from './src/screens/Account';
+import Welcome from './src/screens/Welcome';
 import Social from './src/social/Social';
 import Chat from './src/social/Chat';
 import PublicProfile from './src/social/PublicProfile';
+import QuickProfile from './src/social/QuickProfile';
 import ClubPage from './src/social/ClubPage';
 import { Header } from './src/online/ui';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -92,7 +94,7 @@ function ShellInner({ toast: rawToast }: { toast: (m: string, k?: string) => voi
   const [tab, setTab] = useState<Tab>('home');
   const [intro, setIntro] = useState(true);
   const [sheet, setSheet] = useState<null | { k: 'setup'; mode: Mode } | { k: 'settings' }>(null);
-  const [modal, setModal] = useState<null | { k: 'daily' } | { k: 'chest'; prize: ChestPrize; premium: boolean }>(null);
+  const [modal, setModal] = useState<null | { k: 'daily' } | { k: 'chest'; prize: ChestPrize; premium: boolean } | { k: 'qp'; id: string }>(null);
   const [launch, setLaunch] = useState<Launch | null>(null);
   const [result, setResult] = useState<{ r: MatchResult; reward: Reward | null; cup?: { stage: number; won: boolean; champion: boolean }; levelUp?: number } | null>(null);
   const [matchKey, setMatchKey] = useState(0);
@@ -185,7 +187,7 @@ function ShellInner({ toast: rawToast }: { toast: (m: string, k?: string) => voi
   }), [openOnline, pushOverlay]);
   const nav = React.useMemo(() => ({
     toast, openOnline,
-    openProfile: (id: string) => pushOverlay({ k: 'profile', id }),
+    openProfile: (id: string) => setModal({ k: 'qp', id }),
     openChat: (id: string) => pushOverlay({ k: 'chat', id }),
     openClub: (id: string) => pushOverlay({ k: 'club', id }),
     openTeam: () => pushOverlay({ k: 'team' }),
@@ -203,7 +205,7 @@ function ShellInner({ toast: rawToast }: { toast: (m: string, k?: string) => voi
     <OracleProvider actions={oracleActions} tabsVisible={route === 'tabs' && !sheet && !modal && !overlays.length && !intro && ready}>
     <OracleBridge r={oracleRef} />
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <StatusBar style="light" hidden={route === 'match'} />
+      <StatusBar style={isLight() ? 'dark' : 'light'} hidden={route === 'match'} />
       {route === 'tabs' ? (
         <View style={{ flex: 1 }}>
           <Space theme={tab === 'home' ? 'stadium' : tab === 'play' ? 'holo' : 'base'} dim={tab === 'home' || tab === 'play' ? 0 : .15} stars={hq} />
@@ -258,11 +260,16 @@ function ShellInner({ toast: rawToast }: { toast: (m: string, k?: string) => voi
         <Modal onClose={() => setModal(null)} accent={modal.premium ? C.gold : C.cyan}>
           <ChestOpen prize={modal.prize} premium={modal.premium} onDone={() => setModal(null)} />
         </Modal>
+      ) : modal?.k === 'qp' ? (
+        <Modal onClose={() => setModal(null)} accent={C.cyan}>
+          <QuickProfile id={modal.id} toast={toast} onClose={() => setModal(null)} onFull={() => pushOverlay({ k: 'profile', id: modal.id })} onChat={id => pushOverlay({ k: 'chat', id })} />
+        </Modal>
       ) : null}
 
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: '#02030b', zIndex: 90 }, veilSt]} />
 
       {auth.recovery ? <RecoveryModal toast={toast} /> : null}
+      {!intro && auth.ready && auth.configured && !auth.uid ? <Welcome toast={toast} /> : null}
       {intro ? <Intro onDone={() => setIntro(false)} /> : null}
     </View>
     </OracleProvider>

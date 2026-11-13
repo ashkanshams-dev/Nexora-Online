@@ -29,6 +29,7 @@ import { C, F, G, fa } from '../ui/theme';
 import { buzz, caster, playLoop, sfx, stopLoop } from '../sound';
 import { Room, RoomPlayer, rpc, supabase } from '../net/supabase';
 import { RoomLink, useLink } from './link';
+import ScoreBug from '../ui/ScoreBug';
 import { Badge, ChatPanel, PingBadge, S, VoiceBar, teamOfAvatar } from './ui';
 import { discStats } from '../net/discs';
 import { useOracle } from '../oracle/Oracle';
@@ -537,33 +538,21 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
         </View>
       </View>
 
-      {/* score board */}
-      <View style={[s.hud, { top: ins.top + S.s }]} pointerEvents="box-none">
-        <Press onPress={() => setQuit(true)} style={s.iconBtn}><T s="✕" style={{ fontSize: 16, color: C.text }} /></Press>
-        <Panel style={s.board} accent={tc}>
-          <Side team={start.teams[flipped ? 1 : 0]} name={start.names[flipped ? 1 : 0]} on={hud.turn === (flipped ? 1 : 0)} color={flipped ? C.red : C.cyan} />
-          <View style={{ alignItems: 'center', paddingHorizontal: 6 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <T s={flipped ? hud.s1 : hud.s0} style={s.score} /><T s=":" style={[s.score, { color: C.dim, marginHorizontal: 6 }]} /><T s={flipped ? hud.s0 : hud.s1} style={s.score} />
-            </View>
-            <T s={hud.clock} style={{ fontFamily: F.head, fontSize: 9, letterSpacing: 1, color: hud.sudden ? C.gold : C.dim }} />
-          </View>
-          <Side team={start.teams[flipped ? 0 : 1]} name={start.names[flipped ? 0 : 1]} on={hud.turn === (flipped ? 0 : 1)} color={flipped ? C.cyan : C.red} right />
-        </Panel>
-      </View>
-      {/* whose turn + timer */}
-      <View style={[s.turnRow, { top: ins.top + 72 }]} pointerEvents="none">
-        <View style={[s.turnPill, { borderColor: tc + 'aa', backgroundColor: myTurn ? tc + '33' : 'rgba(6,10,30,.85)' }]}>
-          <T s={hud.phase === 'aim' ? turnName : hud.phase === 'goal' ? 'گل!' : hud.phase === 'over' ? 'پایان بازی' : 'در حال حرکت…'} n={1} style={{ fontFamily: F.bold, fontSize: 12, color: myTurn ? '#fff' : C.text }} />
+      {/* score board: broadcast score bug */}
+      <View style={[s.hud, { top: ins.top + 6 }]} pointerEvents="box-none">
+        <Press onPress={() => setQuit(true)} style={s.iconBtn}><T s="✕" style={{ fontSize: 15, color: '#fff' }} /></Press>
+        <View style={{ flex: 1 }} pointerEvents="none">
+          <ScoreBug
+            left={{ team: start.teams[flipped ? 1 : 0], name: start.names[flipped ? 1 : 0], score: flipped ? hud.s1 : hud.s0, color: flipped ? C.red : C.cyan, on: hud.turn === (flipped ? 1 : 0) }}
+            right={{ team: start.teams[flipped ? 0 : 1], name: start.names[flipped ? 0 : 1], score: flipped ? hud.s0 : hud.s1, color: flipped ? C.cyan : C.red, on: hud.turn === (flipped ? 0 : 1) }}
+            clock={hud.clock} sudden={hud.sudden} tl={hud.tl} timed={cfg.turnTime > 0}
+            status={hud.phase === 'aim' ? turnName : hud.phase === 'goal' ? 'گل!' : hud.phase === 'over' ? 'پایان بازی' : 'در حال حرکت…'} />
         </View>
+      </View>
+      <View style={[s.turnRow, { top: ins.top + 112 }]} pointerEvents="none">
         {start.myTeam === null ? <Badge label={`زنده · ${fa(viewers)} تماشاگر`} color={C.red} live /> : null}
         {!isHost ? <View style={{ marginLeft: S.s }}><PingBadge link={link} /></View> : null}
       </View>
-      {cfg.turnTime > 0 ? (
-        <View style={[s.turnBar, { top: ins.top + 66 }]} pointerEvents="none">
-          <LinearGradient colors={hud.turn === 0 ? [C.cyan, C.blue] : [C.red, C.orange]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ width: `${hud.tl * 100}%`, height: '100%', borderRadius: 3 }} />
-        </View>
-      ) : null}
 
       <Animated.View pointerEvents="none" style={[s.banner, { opacity: bOp, transform: [{ scale: bScale }] }]}>
         <T s={bText.t} style={{ fontFamily: F.title, fontSize: 54, color: '#fff', textShadowColor: bText.c, textShadowRadius: 24 }} />
@@ -627,7 +616,7 @@ function Side({ team, name, on, color, right }: { team: Team; name: string; on: 
 
 const s = StyleSheet.create({
   hud: { position: 'absolute', left: S.s, right: S.s, flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(8,12,34,.88)', borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center', marginRight: S.s },
+  iconBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(5,8,22,.9)', borderWidth: 1, borderColor: 'rgba(255,255,255,.16)', alignSelf: 'flex-start', marginTop: 6, alignItems: 'center', justifyContent: 'center', marginRight: S.s },
   board: { flex: 1, height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: S.s },
   score: { fontFamily: F.title, fontSize: 24, color: '#fff' },
   logo: { width: 38, height: 38, borderRadius: 19, borderWidth: 2, alignItems: 'center', justifyContent: 'center', backgroundColor: '#050816' },

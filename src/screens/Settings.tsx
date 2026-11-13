@@ -6,6 +6,7 @@ import { Btn, Enter, Img, Panel, Segment, T, Toggle } from '../ui/kit';
 import { C, F, G } from '../ui/theme';
 import Account from './Account';
 import { ORACLE } from '../game/assets';
+import { UI_PREFS, setUiPref } from '../prefs';
 
 export default function Settings({ toast, replayIntro }: { toast: (m: string, k?: string) => void; replayIntro: () => void }) {
   const { p, set, reset } = useStore(); const [sure, setSure] = useState(false);
@@ -14,6 +15,15 @@ export default function Settings({ toast, replayIntro }: { toast: (m: string, k?
   ];
   return (
     <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <Enter i={0}>
+        <Panel style={{ padding: 12, marginBottom: 10 }} accent="transparent">
+          <T s="ظاهر و زبان" style={{ fontFamily: F.bold, fontSize: 15, textAlign: 'right', marginBottom: 8 }} />
+          <Segment value={UI_PREFS.theme} onChange={v => setUiPref('theme', v)} items={[['dark', 'تم تیره'], ['light', 'تم روشن']]} accent={C.violet} />
+          <View style={{ height: 8 }} />
+          <Segment value={UI_PREFS.lang} onChange={v => setUiPref('lang', v)} items={[['fa', 'فارسی'], ['en', 'English']]} accent={C.cyan} />
+          <T s="با تغییر، برنامه یک لحظه دوباره بارگذاری می‌شود" style={{ color: C.dim, fontSize: 11, textAlign: 'right', marginTop: 6 }} />
+        </Panel>
+      </Enter>
       <Enter i={0}><Account toast={toast} /></Enter>
       {rows.map(([img, n, d, k], i) => (
         <Enter key={k} i={i}>
@@ -47,7 +57,7 @@ export default function Settings({ toast, replayIntro }: { toast: (m: string, k?
       <View style={{ marginTop: 10 }}>
         <Btn label={sure ? 'مطمئنی؟ دوباره بزن' : 'پاک کردن پیشرفت'} small colors={G.red} onPress={() => { if (!sure) { setSure(true); return; } reset(); setSure(false); toast('پیشرفت پاک شد', 'ok'); }} />
       </View>
-      <T s="NEXORA · Finger Soccer · v5.0" style={{ fontFamily: F.head, textAlign: 'center', color: C.dim2, fontSize: 10, letterSpacing: 2, marginTop: 24 }} />
+      <T s="NEXORA · Finger Soccer · v1.10.0" style={{ fontFamily: F.head, textAlign: 'center', color: C.dim2, fontSize: 10, letterSpacing: 2, marginTop: 24 }} />
     </ScrollView>
   );
 }

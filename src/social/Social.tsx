@@ -242,7 +242,7 @@ function Clubs({ bottom, toast }: { bottom: number; toast: (m: string, k?: strin
 function CreateClub({ toast, onDone }: { toast: (m: string, k?: string) => void; onDone: (id: string) => void }) {
   const { profile } = useAuth();
   const [name, setName] = useState(''); const [tag, setTag] = useState(''); const [desc, setDesc] = useState('');
-  const [emblem, setEmblem] = useState('leg0'); const [policy, setPolicy] = useState<'open' | 'request' | 'invite'>('open'); const [busy, setBusy] = useState(false);
+  const [emblem, setEmblem] = useState('club0'); const [policy, setPolicy] = useState<'open' | 'request' | 'invite'>('open'); const [busy, setBusy] = useState(false);
   const go = async () => {
     if (name.trim().length < 3 || name.trim().length > 24) { toast('نام باشگاه ۳ تا ۲۴ کاراکتر', 'err'); return; }
     if (!/^[A-Z0-9]{2,5}$/.test(tag)) { toast('تگ: ۲ تا ۵ حرف/عدد انگلیسی بزرگ', 'err'); return; }

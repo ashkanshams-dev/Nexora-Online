@@ -1,3 +1,4 @@
+import { LANG } from '../i18n';
 export const C = {
   bg: '#030614',
   bg2: '#060b22',
@@ -40,8 +41,26 @@ export const G = {
   violet: ['#3a1d8a', '#6d3bff', '#c08bff'] as const,
 };
 
-export const fa = (n: number) => n.toLocaleString('fa-IR');
-export const faNum = (s: string | number) => String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+export const fa = (n: number) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'fa-IR');
+export const faNum = (s: string | number) => LANG === 'en' ? String(s) : String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+
+// ---------- theme switch (applied once at boot, before screens load) ----------
+export type ThemeName = 'dark' | 'light';
+export let THEME: ThemeName = 'dark';
+export const isLight = () => THEME === 'light';
+export function applyTheme(t: ThemeName) {
+  THEME = t;
+  if (t !== 'light') return;
+  Object.assign(C, {
+    bg: '#eef3fc', bg2: '#e2eaf8',
+    panel: 'rgba(255,255,255,0.86)', panel2: 'rgba(246,249,255,0.95)', glass: 'rgba(255,255,255,0.72)',
+    line: 'rgba(40,70,140,0.18)', lineHi: 'rgba(30,120,220,0.6)',
+    cyan: '#0796c9', sky: '#2b74d6', blue: '#2f6bff', indigo: '#5546e8', violet: '#7c3bea', pink: '#d92c80',
+    gold: '#b07800', orange: '#d9601a', red: '#dc2f44', green: '#0a9a62',
+    text: '#0e1a3a', dim: '#4a5a84', dim2: '#7b88aa',
+  });
+  require('./lightify').installLight();
+}
 
 // ---------- design tokens (menu rebuild) ----------
 /** logo backdrop colour */

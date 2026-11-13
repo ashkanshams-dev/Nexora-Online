@@ -1,6 +1,7 @@
 // Conversation screen (DM / group / channel / club): realtime messages, images, reply, delete own,
 // typing indicator over broadcast, read receipts (last_read_at), and an info panel for groups.
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { tr } from '../i18n';
 import { FlatList, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -141,7 +142,7 @@ export default function Chat({ id, onBack, toast }: { id: string; onBack: () => 
         {canPost ? (
           <View style={[st.input, { paddingBottom: Math.max(ins.bottom, S.s) }]}>
             <Press onPress={() => send()} disabled={!txt.trim() || sending} style={st.send}>{sending ? <Spinner /> : <Img src={UI2.c_mega} style={{ width: 24, height: 24 }} />}</Press>
-            <TextInput value={txt} onChangeText={onType} placeholder="پیام…" placeholderTextColor={C.dim2} multiline maxLength={2000} allowFontScaling={false}
+            <TextInput value={txt} onChangeText={onType} placeholder={tr("پیام…")} placeholderTextColor={C.dim2} multiline maxLength={2000} allowFontScaling={false}
               style={st.txt} selectionColor={C.cyan} />
             <Press onPress={sendImage} disabled={sending} style={st.attach}><T s="🖼" style={{ fontSize: 20 }} /></Press>
           </View>
