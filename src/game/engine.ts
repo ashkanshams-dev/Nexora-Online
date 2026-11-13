@@ -294,7 +294,8 @@ export class Engine {
       }
       if (bl) {
         const sp2 = hyp(b.vx, b.vy); b.spin *= 1 - (sp2 > 0 ? 1.05 : 3.2) * dt; if (Math.abs(b.spin) < .02) b.spin = 0;
-        const roll = 1 / b.r;   // true rolling: surface speed = ground speed if (sp2 > 0 || b.spin) rotate(b.R, -b.vy * roll, b.vx * roll, b.spin * .55, dt); b.ang += b.spin * dt;
+        // true rolling (surface speed = ground speed), visual rate capped at 38 rad/s so a very fast ball never strobes backwards at 60 fps
+        const roll = Math.min(1 / b.r, 38 / Math.max(1, sp2)); if (sp2 > 0 || b.spin) rotate(b.R, -b.vy * roll, b.vx * roll, b.spin * .55, dt); b.ang += b.spin * dt;
       } else { b.spin *= 1 - 2.6 * dt; b.ang += b.spin * dt; }
       b.sq *= 1 - 9 * dt;
       this.walls(b);
@@ -483,7 +484,16 @@ export class Engine {
     cands.sort((a, b) => b.sc - a.sc); const pool = cands.slice(0, [4, 2, 1][lvl]), c = pool[Math.floor(Math.random() * pool.length)];
     const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
     const ang = Math.atan2(c.dy, c.dx) + gauss() * sg;
-    let pw = lvl === 2 ? Math.min(1, .66 + c.dist / 1000) : Math.min(1, .5 + c.dist / 1100); if (lvl === 0) pw *= .7 + Math.random() * .3; if (c.atk && lvl > 0) pw = Math.max(pw, .78);
-    return { b: c.p, dx: Math.cos(ang), dy: Math.sin(ang), l: Math.max(.3, pw) * LMAX };
+    // physics-aware power: invert the measured model instead of guessing a drag length
+    // ball: v(s) = v0 - BK*s  ->  reach the goal line still rolling; disc: v(s) ~ v0 - PKD*s on the way to the ball
+    const G = c.atk ? hyp(this.CX - ball.x, target.y - ball.y) : 0;
+    const vBall = c.atk ? 520 + BK * G : 1500, xfer = (1 + E_BD) * M_DISC / (M_DISC + M_BALL);
+    let vLaunch = vBall / xfer + PKD * c.dist * .9;
+    const mul = this.cfg.stats ? powerMul(this.statsOf(me).power) : (this.cfg.vip[me] ? 1.16 : 1);
+    let f = clamp((vLaunch / (VFULL * mul) - VMIN_F) / (1 - VMIN_F), .05, 1);
+    let pw = Math.pow(f, 1 / .8125);
+    if (lvl === 0) pw *= .75 + Math.random() * .4; else if (lvl === 1) pw *= .9 + Math.random() * .2;
+    pw = clamp(pw, .25, 1);
+    return { b: c.p, dx: Math.cos(ang), dy: Math.sin(ang), l: pw * LMAX };
   }
 }
