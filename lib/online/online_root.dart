@@ -166,6 +166,11 @@ class _OnlineRootState extends State<OnlineRoot> {
 
   // Oracle "find me a quick match": once connected, queue straight away
   void _quick() {
+    final pr = Matchmaker.I.pendingRoom;
+    if (pr != null && Auth.I.uid != null) {
+      Matchmaker.I.pendingRoom = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) => enterRoom(pr));
+    }
     final q = widget.quick;
     if (q == null || Auth.I.uid == null || quickDone) return;
     quickDone = true;

@@ -62,7 +62,7 @@ class _LeaderboardState extends State<_Leaderboard> {
   Future<void> load() async {
     try {
       final uid = Auth.I.uid;
-      final res = await Future.wait([
+      final res = await Future.wait<dynamic>([
         supabase.from('leaderboard').select().order('rank').limit(100),
         uid != null ? supabase.from('leaderboard').select().eq('id', uid).maybeSingle() : Future.value(null),
       ]);

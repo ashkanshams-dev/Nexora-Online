@@ -40,6 +40,8 @@ class Matchmaker extends ValueNotifier<MMState> {
   int _rtt = 0;
   bool _busy = false;
   void Function(JRow room)? onMatched;
+  /// a room joined from outside the online area (invite / notification) → OnlineRoot enters it on open
+  JRow? pendingRoom;
 
   static int _now() => DateTime.now().millisecondsSinceEpoch;
 

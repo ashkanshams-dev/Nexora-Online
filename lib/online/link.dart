@@ -153,7 +153,7 @@ class RoomLink extends ValueNotifier<LinkState> {
   Future<void> refresh() async {
     if (_dead) return;
     try {
-      final res = await Future.wait([
+      final res = await Future.wait<dynamic>([
         supabase.from('rooms').select().eq('id', id).maybeSingle(),
         supabase.from('room_players').select('*, profiles(username, avatar, avatar_url, level, rating, league, equipped_disc)').eq('room_id', id).order('joined_at'),
       ]);

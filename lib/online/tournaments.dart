@@ -300,7 +300,7 @@ class _TournamentDetailState extends State<TournamentDetail> {
 
   Future<void> load() async {
     try {
-      final r = await Future.wait([
+      final r = await Future.wait<dynamic>([
         supabase.from('tournaments').select().eq('id', widget.id).maybeSingle(),
         supabase.from('standings').select().eq('tournament_id', widget.id).order('pos'),
         supabase.from('tournament_matches').select().eq('tournament_id', widget.id).order('round').order('idx'),
