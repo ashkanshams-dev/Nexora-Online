@@ -45,6 +45,16 @@ dependencies:
   url_launcher: ^6.3.3
   forge2d: ^0.15.3
   vector_math: ^2.4.4
+  share_plus: ^13.3.1
+  image_picker: ^1.2.4
+  flutter_local_notifications: ^23.0.2
+  firebase_core: ^5.1.0
+  firebase_messaging: ^17.0.1
+  package_info_plus: ^10.2.2
+  open_filex: ^5.0.0
+  path_provider: ^2.1.6
+  connectivity_plus: ^7.3.2
+  timezone: ^0.11.2
 
 dev_dependencies:
   flutter_test:
