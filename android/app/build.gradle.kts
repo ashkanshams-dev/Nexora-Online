@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "online.nexora.nexora"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37 // permission_handler_android needs 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
