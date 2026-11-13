@@ -1,4 +1,4 @@
-// NEXORA physics engine v9 (reference-matched) — deterministic, allocation-free fixed-step simulation.
+// NEXORA physics engine (original gameplay feel restored in 1.11.0) v7 — deterministic, allocation-free fixed-step simulation.
 // Fixed 240 Hz sub-steps, impulse-based circle collisions with positional correction, rolling 3D ball rotation,
 // render interpolation (prev -> current).
 // v7: the physics path uses only + - * / and sqrt (IEEE-exact on every device), damping factors are precomputed
@@ -13,18 +13,15 @@ export const RC = 70;      // rounded corner radius
 export const LMAX = 210;   // max drag length (world units) for full power
 export const STEP = 1 / 240;
 export const POST_R = 8;   // goal-post radius (world units): solid round collider, matches the drawn post
-// ---- v9 physics: measured frame-by-frame from the reference game's screen recordings ----
-// (24 fps capture, 558 px field width = 775 world units -> 1 px = 1.389 u). All values below are world units / s.
-// Ball: pure exponential rolling damping, k = 2.0 /s (fit over 19 free-roll segments, rms < 5 px). No speed cap.
-const BK = 2.0, BSTOP = 11, BVMAX = 7000;
-// Discs: decel(v) = PD * tanh(PKD * v / PD): exponential (4 /s) at normal speeds, saturating at ~4170 u/s^2 when very fast.
-const PKD = 4.0, PD = 4170, PSTOP = 18;
-// Masses (disc = 1): ball 0.6 -> a disc hit sends the ball ~1.19x the disc speed, the disc keeps ~0.29x (as measured).
-const M_DISC = 1, M_BALL = .6, E_BD = .9, E_DD = .85;
-// Walls soak energy: ball normal restitution ~0.49 slow -> 0.33 at ~2900 u/s (measured), discs ~0.45. Tangential kept 92% / 85%.
-const BT_WALL = .92, DT_WALL = .85;
-// Full-power launch speed (power stat 5); powerMul scales it 0.75x..1.25x. Reference strong discs reach ~4600 u/s.
-const VFULL = 4000, VMIN_F = .1;
+const HV = 8, PF1 = 430, PF2 = 1.0, PV0 = 520, EPP = .62, PCAP = 190;
+// ---- motion feel (v6 retune) ----
+// Ball: smooth exponential damping (BK, 1/s) + a gentle rolling resistance (BF) that fades in only at low speed,
+// a hard speed cap, and a stop threshold so it settles in ~1.2–1.8 s instead of wandering/ping-ponging.
+const BK = 1.9, BF = 175, BFV = 140, BVMAX = 1750, BSTOP = 26;
+// Discs: "floating" glide — exponential ease-out (PK) with a soft extra brake that blends in at low speed (PFL/PFV), gentle stop.
+const PK = 1.55, PFL = 300, PFV = 230, PSTOP = 20;
+// Wall / post energy caps (outgoing normal speed after a bounce, world units/s before K)
+const WALL_VOUT = 820, POST_VOUT = 900;   // v8: unchanged on purpose — faster shots, but walls still soak energy (no ping-pong)
 
 export type Body = {
   id: number; team: 0 | 1 | 2; x: number; y: number; px: number; py: number;
@@ -59,9 +56,8 @@ export const aimPreview = (a: number) => .45 + (Math.min(10, Math.max(1, a)) - 1
 
 // sqrt-based hypot: exact IEEE result on every platform (Math.hypot/exp/pow/sin may differ by an ulp across engines)
 const hyp = (x: number, y: number, z = 0) => Math.sqrt(x * x + y * y + z * z);
-const STEP_BK = 0.991701292638876;   // exp(-BK/240) as a literal so every device agrees
-// tanh by a rational (Pade) form: + - * / only, so it is bit-identical everywhere; |err| < 2.5%, exact 1 beyond x = 3
-const tanhR = (x: number) => (x >= 3 ? 1 : x * (27 + x * x) / (27 + 9 * x * x));
+const STEP_BK = 0.9921145876, STEP_PK = 0.9935624769, STEP_PK_BOOST = 0.9977421362; // exp(-BK/240), exp(-PK/240), exp(-PK*0.35/240) as literals so every device agrees
+const stepDecay = (k: number) => (k === BK ? STEP_BK : k === PK ? STEP_PK : 1 - k * STEP + k * k * STEP * STEP / 2);
 // deterministic PRNG (mulberry32) + seeded hash so every client derives the same aim deviation for the same shot
 export function rng32(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 // sin/cos for small angles (|a| < 0.2 rad) by series: exact arithmetic, identical everywhere
@@ -92,8 +88,8 @@ function rotate(R: Float64Array, wx: number, wy: number, wz: number, dt: number)
 }
 
 // wall restitution: ball loses more energy on hard hits (no ping-pong), discs a flat 0.72; outgoing speed capped
-const eBall = (vn: number) => clamp(.43 - (vn - 1430) * (.10 / 1490), .30, .52);
-const eDisc = (vn: number) => clamp(.52 - vn * (.12 / 3000), .38, .52);
+const eBall = (vn: number) => Math.min(.64 - .24 * clamp((vn - 270 * K) / (730 * K), 0, 1), WALL_VOUT * K / Math.max(1, vn));
+const eDisc = (vn: number) => Math.min(.72, WALL_VOUT * 1.4 * K / Math.max(1, vn));
 
 export class Engine {
   f: Field; F = { l: 0, r: 0, t: 0, b: 0 }; CX = 0; CY = 0; KY = 0;
@@ -142,10 +138,10 @@ export class Engine {
     for (let cm = 0 as 0 | 1; cm < 2; cm = (cm + 1) as 0 | 1) {
       slots(this.cfg.forms[cm]).forEach(([nx, ny], i) => {
         const x = F.l + PR + 10 + nx * (Fw - 2 * (PR + 10)), y = cm ? F.t + ny * Fh : F.b - ny * Fh;
-        this.bodies.push(this.mk(x, y, cm, PR, M_DISC, cm * 20 + i));
+        this.bodies.push(this.mk(x, y, cm, PR, 5, cm * 20 + i));
       });
     }
-    this.ball = this.mk(this.CX, this.KY, 2, BR, M_BALL, 99); this.bodies.push(this.ball);
+    this.ball = this.mk(this.CX, this.KY, 2, BR, 1.5, 99); this.bodies.push(this.ball);
     for (const b of this.bodies) { b.x = b.px = qz(b.x); b.y = b.py = qz(b.y); }
     this.tick = 0; this.epoch++; this.epochKind = 0; this.keys.clear(); this.localGoal = null;
     this.turn = kickTeam; this.phase = 'aim'; this.drag = null; this.pause = 0; this.idle = 0; this.shots = 0;
@@ -188,7 +184,7 @@ export class Engine {
     dx = Math.round(dx * 16) / 16; dy = Math.round(dy * 16) / 16; l = hyp(dx, dy); if (l < 1e-6) return;
     const p = Math.min(l, LMAX) / LMAX, team = b.team as 0 | 1, sq = seq ?? this.shotNo;
     this.lastPower = p;
-    let v = (VMIN_F + (1 - VMIN_F) * pow08(p)) * VFULL;
+    let v = (260 + 1085 * pow08(p)) * K * 1.32;
     if (this.cfg.stats) v *= powerMul(this.statsOf(team).power);
     else if (this.cfg.vip[team]) v *= 1.16;
     let ux = dx / l, uy = dy / l;
@@ -200,7 +196,7 @@ export class Engine {
       }
     }
     const vx = ux * v, vy = uy * v;
-    b.tvx = 0; b.tvy = 0; b.ramp = 0; b.vx = vx; b.vy = vy; b.boost = 0;   // instant launch, like the reference
+    b.tvx = vx * 1.02; b.tvy = vy * 1.02; b.ramp = .06; b.vx = vx * .5; b.vy = vy * .5; b.boost = .22;
     for (const o of this.bodies) { o.x = o.px = qz(o.x); o.y = o.py = qz(o.y); }   // shots always start from the quantised grid
     if (this.onFire) this.onFire(b, dx, dy, human, sq, this.packState());
     this.phase = 'move'; this.idle = 0; this.shots++; this.shotNo++; this.tick = 0; this.epoch++; this.epochKind = 1; this.keys.clear(); this.localGoal = null; this.drag = null; this.cam = Math.max(this.cam, .18);
@@ -214,8 +210,8 @@ export class Engine {
     if (b !== ball && b.gout) { const g = b.gout, dq = g.d * (b.y - g.y); if (dq > -b.r * 1.05) { b.vy = -g.d * 270 * K; b.vx *= .6; } else { b.vy = 0; b.vx *= .2; b.gout = null; } }
     const bl = b === ball, r = b.r, vs = hyp(b.vx, b.vy);
     const eN = bl ? eBall : eDisc;
-    if (b.x - r < F.l) { b.x = F.l + r; if (b.vx < 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(-b.vx); b.vy *= bl ? BT_WALL : DT_WALL; b.spin += b.vy / r * .05; } }
-    if (b.x + r > F.r) { b.x = F.r - r; if (b.vx > 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(b.vx); b.vy *= bl ? BT_WALL : DT_WALL; b.spin -= b.vy / r * .05; } }
+    if (b.x - r < F.l) { b.x = F.l + r; if (b.vx < 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(-b.vx); b.spin += b.vy / r * .05; } }
+    if (b.x + r > F.r) { b.x = F.r - r; if (b.vx > 0) { if (bl && vs > 200) this.events.push({ t: 'wall', power: vs / 1800 }); b.vx *= -eN(b.vx); b.spin -= b.vy / r * .05; } }
     for (const g of this.goals) {
       const dp = g.d * (b.y - g.y); if (dp <= -r) continue;
       const lo = g.x1 + (bl ? 0 : r), hi = g.x2 - (bl ? 0 : r);
@@ -231,7 +227,7 @@ export class Engine {
         }
       } else {
         if (bl && vs > 200 && g.d * b.vy > 0) this.events.push({ t: 'wall', power: vs / 1800 });
-        b.y = g.y - g.d * r; if (g.d * b.vy > 0) { b.vy = -g.d * Math.abs(b.vy) * eN(Math.abs(b.vy)); b.vx *= bl ? BT_WALL : DT_WALL; } b.spin += g.d * b.vx / r * .05;
+        b.y = g.y - g.d * r; if (g.d * b.vy > 0) b.vy = -g.d * Math.abs(b.vy) * eN(Math.abs(b.vy)); b.spin += g.d * b.vx / r * .05;
       }
     }
     for (let ci = 0; ci < 4; ci++) {
@@ -246,21 +242,24 @@ export class Engine {
   private post(b: Body, px: number, py: number) {
     const dx = b.x - px, dy = b.y - py, d = hyp(dx, dy), m = b.r + POST_R; if (d >= m || !d) return;
     const nx = dx / d, ny = dy / d, vn = b.vx * nx + b.vy * ny; b.x = px + nx * m; b.y = py + ny * m;
-    if (vn < 0) { const kp = 1 + (b === this.ball ? Math.min(.55, eBall(-vn) * 1.1) : eDisc(-vn)); b.vx -= kp * vn * nx; b.vy -= kp * vn * ny; if (b === this.ball) this.events.push({ t: 'post', power: -vn / 1800 }); if (b === this.ball && -vn > 900 * K) this.cam = Math.max(this.cam, .25); }
+    if (vn < 0) { const kp = 1 + Math.min(.62 - .14 * Math.min(1, -vn / (2000 * K)), POST_VOUT * K / Math.max(1, -vn)); b.vx -= kp * vn * nx; b.vy -= kp * vn * ny; if (b === this.ball) this.events.push({ t: 'post', power: -vn / 1800 }); if (b === this.ball && -vn > 900 * K) this.cam = Math.max(this.cam, .25); }
   }
 
   private hit(a: Body, b: Body) {
     let dx = b.x - a.x, dy = b.y - a.y, d = hyp(dx, dy); const m = a.r + b.r; if (d >= m) return; if (d < 1e-4) { dx = 1; dy = 0; d = 1; }
     const ball = this.ball, nx = dx / d, ny = dy / d, sm = a.im + b.im, isB = a === ball || b === ball;
-    const ka = 1, kb = 1, wa = a.im / sm, wb = b.im / sm;   // plain momentum exchange, measured masses
+    let ka = isB && a !== ball ? 1 / HV : 1, kb = isB && b !== ball ? 1 / HV : 1;
+    if (!isB) { const sa = hyp(a.vx, a.vy), sb = hyp(b.vx, b.vy); if (sa > sb) kb = .85; else ka = .85; }
+    let wa = a.im / sm * ka, wb = b.im / sm * kb; if (isB) { if (a === ball) wa = 1 - wb; else wb = 1 - wa; }
     const pen = Math.max(m - d - .3, 0) * .9;
     a.x -= nx * pen * wa; a.y -= ny * pen * wa; b.x += nx * pen * wb; b.y += ny * pen * wb;
     a.vox = clamp(a.vox + nx * pen * wa, -9, 9); a.voy = clamp(a.voy + ny * pen * wa, -9, 9);
     b.vox = clamp(b.vox - nx * pen * wb, -9, 9); b.voy = clamp(b.voy - ny * pen * wb, -9, 9);
     const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny; if (vn >= 0) return;
-    const e = vn < -40 ? (isB ? E_BD : E_DD) : 0;
-    const j = -(1 + e) * vn / sm;
+    const e = vn < -40 * K ? (isB ? .68 - .12 * clamp((-vn - 500 * K) / (1200 * K), 0, 1) : EPP) : 0;
+    const j = -(1 + e) * vn / sm, pa = isB ? (a === ball ? b : a) : null, pre = pa ? hyp(pa.vx, pa.vy) : 0;
     a.vx -= j * nx * a.im * ka; a.vy -= j * ny * a.im * ka; b.vx += j * nx * b.im * kb; b.vy += j * ny * b.im * kb;
+    if (pa && pre < 260 * K) { const ps = hyp(pa.vx, pa.vy), cp = PCAP * K; if (ps > cp) { pa.vx *= cp / ps; pa.vy *= cp / ps; } }
     if (vn < -120 * K) {
       this.events.push({ t: 'hit', ball: isB, power: -vn / 1900 });
       if (!isB && vn < -420 * K) { const q = Math.min(1, -vn / (1500 * K)); a.sq = Math.max(a.sq, q); b.sq = Math.max(b.sq, q); }
@@ -276,32 +275,30 @@ export class Engine {
   private sim(dt: number) {
     const ball = this.ball; this.tick++;
     for (const b of this.bodies) {
-      if (b.ramp > 0) b.ramp = 0;
+      if (b.ramp > 0) { const k = Math.min(1, dt / b.ramp); b.vx += (b.tvx - b.vx) * k; b.vy += (b.tvy - b.vy) * k; b.ramp -= dt; if (b.ramp <= 0) b.ramp = 0; }
       if (b.vox || b.voy) { const q = 1 - Math.min(1, dt * 15); b.vox *= q; b.voy *= q; if (Math.abs(b.vox) < .04) b.vox = 0; if (Math.abs(b.voy) < .04) b.voy = 0; }
       b.x += b.vx * dt; b.y += b.vy * dt;
       const sp = hyp(b.vx, b.vy), bl = b === ball;
       if (sp > 0) {
         if (bl) {
-          // measured: pure exponential rolling damping, straight roll, no side drift
-          let ns = sp * STEP_BK;
-          if (ns < BSTOP) { b.vx = b.vy = 0; b.vox = b.voy = 0; } else { ns = Math.min(ns, BVMAX); const k = ns / sp; b.vx *= k; b.vy *= k; }
+          // exponential damping (frame-rate independent) + low-speed rolling resistance; straight roll, no side drift
+          let ns = sp * stepDecay(BK) - BF * K * Math.min(1, sp / (BFV * K)) * dt;
+          if (ns < BSTOP * K) { b.vx = b.vy = 0; b.vox = b.voy = 0; } else { ns = Math.min(ns, BVMAX * K); const k = ns / sp; b.vx *= k; b.vy *= k; }
         } else {
-          if (b.boost > 0) b.boost = 0;
-          // measured: decel = PD * tanh(PKD * v / PD)
-          let ns = sp - PD * tanhR(PKD * sp / PD) * dt;
-          if (ns < PSTOP) { b.vx = b.vy = 0; } else { ns = Math.min(ns, 7000); const k = ns / sp; b.vx *= k; b.vy *= k; }
+          const fb = b.boost > 0 ? .35 : 1; if (b.boost > 0) b.boost -= dt;
+          let ns = sp * (fb === 1 ? stepDecay(PK) : STEP_PK_BOOST) - PFL * K * Math.min(1, sp / (PFV * K)) * fb * dt;
+          if (ns < PSTOP * K && b.ramp <= 0) { b.vx = b.vy = 0; } else { ns = Math.max(0, Math.min(ns, 2800 * K)); const k = ns / sp; b.vx *= k; b.vy *= k; }
         }
       }
       if (bl) {
         const sp2 = hyp(b.vx, b.vy); b.spin *= 1 - (sp2 > 0 ? 1.05 : 3.2) * dt; if (Math.abs(b.spin) < .02) b.spin = 0;
-        // true rolling (surface speed = ground speed), visual rate capped at 38 rad/s so a very fast ball never strobes backwards at 60 fps
-        const roll = Math.min(1 / b.r, 38 / Math.max(1, sp2)); if (sp2 > 0 || b.spin) rotate(b.R, -b.vy * roll, b.vx * roll, b.spin * .55, dt); b.ang += b.spin * dt;
+        const roll = .95 / b.r; if (sp2 > 0 || b.spin) rotate(b.R, -b.vy * roll, b.vx * roll, b.spin * .55, dt); b.ang += b.spin * dt;
       } else { b.spin *= 1 - 2.6 * dt; b.ang += b.spin * dt; }
       b.sq *= 1 - 9 * dt;
       this.walls(b);
     }
     const B = this.bodies;
-    for (let it = 0; it < 3; it++) for (let a = 0; a < B.length; a++) for (let c = a + 1; c < B.length; c++) this.hit(B[a], B[c]);
+    for (let it = 0; it < 2; it++) for (let a = 0; a < B.length; a++) for (let c = a + 1; c < B.length; c++) this.hit(B[a], B[c]);
     for (const g of this.goals) for (const b of B) { this.post(b, g.x1, g.y); this.post(b, g.x2, g.y); }
     for (const b of B) this.walls(b);
     if (this.phase === 'move') for (const g of this.goals)
@@ -484,16 +481,7 @@ export class Engine {
     cands.sort((a, b) => b.sc - a.sc); const pool = cands.slice(0, [4, 2, 1][lvl]), c = pool[Math.floor(Math.random() * pool.length)];
     const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
     const ang = Math.atan2(c.dy, c.dx) + gauss() * sg;
-    // physics-aware power: invert the measured model instead of guessing a drag length
-    // ball: v(s) = v0 - BK*s  ->  reach the goal line still rolling; disc: v(s) ~ v0 - PKD*s on the way to the ball
-    const G = c.atk ? hyp(this.CX - ball.x, target.y - ball.y) : 0;
-    const vBall = c.atk ? 520 + BK * G : 1500, xfer = (1 + E_BD) * M_DISC / (M_DISC + M_BALL);
-    let vLaunch = vBall / xfer + PKD * c.dist * .9;
-    const mul = this.cfg.stats ? powerMul(this.statsOf(me).power) : (this.cfg.vip[me] ? 1.16 : 1);
-    let f = clamp((vLaunch / (VFULL * mul) - VMIN_F) / (1 - VMIN_F), .05, 1);
-    let pw = Math.pow(f, 1 / .8125);
-    if (lvl === 0) pw *= .75 + Math.random() * .4; else if (lvl === 1) pw *= .9 + Math.random() * .2;
-    pw = clamp(pw, .25, 1);
-    return { b: c.p, dx: Math.cos(ang), dy: Math.sin(ang), l: pw * LMAX };
+    let pw = lvl === 2 ? Math.min(1, .66 + c.dist / 1000) : Math.min(1, .5 + c.dist / 1100); if (lvl === 0) pw *= .7 + Math.random() * .3; if (c.atk && lvl > 0) pw = Math.max(pw, .78);
+    return { b: c.p, dx: Math.cos(ang), dy: Math.sin(ang), l: Math.max(.3, pw) * LMAX };
   }
 }

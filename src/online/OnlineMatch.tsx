@@ -26,7 +26,7 @@ import { BALL_IMG, FIELD_IMG, GOAL_IMG, TEAM_IMG, UI2 } from '../game/assets';
 import { teamKey } from '../game/util';
 import { Btn, Img, Panel, Press, T } from '../ui/kit';
 import { C, F, G, fa } from '../ui/theme';
-import { buzz, caster, playLoop, sfx, stopLoop } from '../sound';
+import { buzz, playLoop, sfx, stopLoop } from '../sound';
 import { Room, RoomPlayer, rpc, supabase } from '../net/supabase';
 import { RoomLink, useLink } from './link';
 import ScoreBug from '../ui/ScoreBug';
@@ -168,7 +168,7 @@ export default function OnlineMatch({ link, matchId, onFinish, onExit, toast, fx
     else if (ev.t === 'shot') buzz('light');
     else if (ev.t === 'goal') {
       if (ev.nogoal) showBanner('گل مردود', 'با ضربه‌ی اول نمی‌شه گل زد', C.dim);
-      else { co.current.touched = true; sfx('goal'); sfx('roar'); caster(); buzz('heavy'); showBanner('گل!', start.names[ev.team], ev.team === 0 ? C.cyan : C.red); if (!isHost && cs.goalEp !== eng.epoch) eng.fxGoal(ev.team); if (ev.team === start.myTeam) oracleRef.current.react('goal'); }
+      else { co.current.touched = true; sfx('goal'); sfx('roar'); buzz('heavy'); showBanner('گل!', start.names[ev.team], ev.team === 0 ? C.cyan : C.red); if (!isHost && cs.goalEp !== eng.epoch) eng.fxGoal(ev.team); if (ev.team === start.myTeam) oracleRef.current.react('goal'); }
     } else if (ev.t === 'clock') showBanner('گل طلایی', 'گل بعدی برنده‌ست', C.gold);
     else if (ev.t === 'end' && done.current === 'no') { done.current = 'ended'; sfx('final'); stopLoop('crowd'); if (isHost) hostReport(ev.score); else cs.endAt = Date.now(); }
   };

@@ -57,7 +57,7 @@ export default function Settings({ toast, replayIntro }: { toast: (m: string, k?
       <View style={{ marginTop: 10 }}>
         <Btn label={sure ? 'مطمئنی؟ دوباره بزن' : 'پاک کردن پیشرفت'} small colors={G.red} onPress={() => { if (!sure) { setSure(true); return; } reset(); setSure(false); toast('پیشرفت پاک شد', 'ok'); }} />
       </View>
-      <T s="NEXORA · Finger Soccer · v1.10.0" style={{ fontFamily: F.head, textAlign: 'center', color: C.dim2, fontSize: 10, letterSpacing: 2, marginTop: 24 }} />
+      <T s="NEXORA · Finger Soccer · v1.11.0" style={{ fontFamily: F.head, textAlign: 'center', color: C.dim2, fontSize: 10, letterSpacing: 2, marginTop: 24 }} />
     </ScrollView>
   );
 }
