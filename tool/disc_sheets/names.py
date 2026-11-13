@@ -1,0 +1,15 @@
+NAMES={
+'A':['Real Madrid','Barcelona','Bayern Munich','Juventus','AC Milan','Inter Milan','Manchester City','Liverpool','Arsenal'],
+'B':['Mercedes-Benz','BMW','Toyota','Ferrari','Lamborghini','Porsche','Tesla','Audi','Ford'],
+'C':['Tottenham','Atletico Madrid','Borussia Dortmund','Napoli','Ajax','Celtic','Flamengo','River Plate','Al Hilal'],
+'D':['Sevilla','Bayer Leverkusen','RB Leipzig','Marseille','Lyon','Galatasaray','Fenerbahce','Sporting CP','Shakhtar Donetsk'],
+'E':['Inter Milan','Lazio','Sevilla','Tottenham','Wolfsburg','Persepolis','Esteghlal','Al Nassr','Al Hilal'],
+'F':['Inter Miami','Newcastle United','Aston Villa','West Ham United','Everton','Valencia','Villarreal','Fiorentina','Corinthians'],
+'G':['France','Brazil','Germany','Argentina','Portugal','Spain','England','Italy','Netherlands'],
+'H':['Iran','Qatar','Saudi Arabia','Morocco','Turkey','Mexico','Argentina','Uruguay','Canada'],
+'I':['France','Brazil','Germany','Argentina','Portugal','Spain','England','Italy','Netherlands'],
+'J':['Real Madrid','Barcelona','Liverpool','Manchester United','Manchester City','Chelsea','Arsenal','AC Milan','Juventus'],
+'K':['Iran','Qatar','Brazil','Portugal','France','Germany','Spain','England','Italy'],
+'L':['France','Brazil','Germany','Argentina','Portugal','Spain','England','Italy','Netherlands'],
+'M':['Lamborghini','Ferrari','Porsche','Mercedes-Benz','BMW','Aston Martin','Rolls-Royce','Bentley','Maserati','Bugatti','McLaren','Lexus','Tesla','Volvo','Land Rover','Audi','Cadillac','Alfa Romeo','Pagani','Koenigsegg'],
+}

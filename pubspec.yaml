@@ -73,6 +73,18 @@ flutter:
     - assets/g/oracle/
     - assets/g/sfx/
     - assets/g/teams/
+    - assets/g/teams_v11/
+    - assets/g/teams_v11/amer/
+    - assets/g/teams_v11/asia/
+    - assets/g/teams_v11/bund/
+    - assets/g/teams_v11/carv/
+    - assets/g/teams_v11/epl/
+    - assets/g/teams_v11/euro/
+    - assets/g/teams_v11/flag/
+    - assets/g/teams_v11/laliga/
+    - assets/g/teams_v11/ligue/
+    - assets/g/teams_v11/natv/
+    - assets/g/teams_v11/seriea/
     - assets/g/ui/
     - assets/g/ui2/
     - lib/i18n/

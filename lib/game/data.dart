@@ -2,6 +2,8 @@
 // ignore_for_file: constant_identifier_names
 import 'dart:math' as math;
 
+import 'discs_v11.dart';
+
 class Field { final String id, name, gs; final int W, H, L, R, T, B, cs, g;
   const Field(this.id, this.name, this.W, this.H, this.L, this.R, this.T, this.B, this.cs, this.g, this.gs); }
 
@@ -54,7 +56,9 @@ const List<List<Object>> _RAW_FIELDS = [
 
 final List<Field> FIELDS = _RAW_FIELDS.map((f) { int s(int i) => _jsRound((f[i] as int) * FS); return Field(f[0] as String, f[1] as String, s(2), s(3), s(4), s(5), s(6), s(7), s(8), _jsRound((f[9] as int) * 1.04), f[10] as String); }).toList(growable: false);
 
-const List<(String, String, List<String>)> CATS = [
+/// v10 roster (identical to data.ts) followed by the v11 additions
+final List<(String, String, List<String>)> CATS = [...CATS_V10, ...CATS_V11];
+const List<(String, String, List<String>)> CATS_V10 = [
   ('club', 'Clubs', ["Barcelona", "Barcelona II", "Arsenal", "Liverpool", "Manchester United", "Celtic", "Ajax", "Inter Milan", "Inter Miami", "Wolfsburg", "Tottenham", "Aston Villa", "RB Leipzig", "Borussia Dortmund", "Lille", "Lyon", "Lille II", "Lyon II", "Lazio", "Napoli", "Al Hilal", "Monaco"]),
   ('nat', 'National', ["Argentina", "France", "Japan", "Portugal", "Spain", "England", "Brazil", "Italy", "Argentina II", "Germany", "Netherlands", "Belgium", "Mexico", "Portugal II", "Croatia", "Uruguay", "Senegal", "Morocco"]),
   ('lux', 'Luxury', ["Louis Vuitton", "Chanel", "Gucci", "Hermes", "Prada", "Dior", "Versace", "Rolex", "Cartier", "Fendi", "Valentino", "Burberry", "Saint Laurent", "Swarovski", "Chanel II", "Louis Vuitton II", "Dior II", "Gucci II", "Saint Laurent II", "Prada II", "MAC", "Victoria's Secret", "Sephora", "Estee Lauder", "Lancome", "Zara", "H&M", "Uniqlo", "Pandora", "Kate Spade", "Coach", "Cartier II", "Tiffany & Co.", "PINK"]),
@@ -149,7 +153,7 @@ const Map<String, FieldFx> FIELD_FX = {
 class Team { final String id, cat, name; final int idx; const Team(this.id, this.cat, this.name, this.idx); }
 final List<Team> TEAMS = [for (final c in CATS) for (var i = 0; i < c.$3.length; i++) Team('${c.$1}$i', c.$1, c.$3[i], i)];
 final Map<String, String> CAT_LABEL = {for (final c in CATS) c.$1: c.$2};
-int teamPrice(Team t) => t.cat == 'club' || t.cat == 'nat' ? 0 : 130;
+int teamPrice(Team t) => t.cat == 'club' || t.cat == 'nat' || (CATS_V11.any((c) => c.$1 == t.cat) && !PAID_V11.contains(t.cat)) ? 0 : 130;
 int ballPrice(int i) => i < 6 ? 0 : 60 + (i % 7) * 20;
 /// index 0 is the free default NEXORA Pitch
 int fieldPrice(int i) => i < 5 ? 0 : 80 + ((i - 1) % 5) * 20;

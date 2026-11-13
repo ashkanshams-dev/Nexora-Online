@@ -52,7 +52,7 @@ class _Wing extends StatelessWidget {
                   boxShadow: s.on ? [BoxShadow(color: c, blurRadius: 8)] : null,
                 ),
                 alignment: Alignment.center,
-                child: ClipOval(child: Img(s.avatar ?? TEAM_IMG[teamKey(s.team)], w: 34, h: 34, fit: BoxFit.cover)),
+                child: ClipOval(child: Img(s.avatar ?? teamImg(teamKey(s.team)), w: 34, h: 34, fit: BoxFit.cover)),
               ),
               Expanded(
                 child: Padding(

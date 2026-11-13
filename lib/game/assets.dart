@@ -1,5 +1,9 @@
 // Auto-generated from src/game/assets.ts (RN) — asset path maps.
 // ignore_for_file: constant_identifier_names
+import 'discs_v11.dart';
+
+/// disc art by team key (v10 roster + v11 additions)
+String? teamImg(String key) => TEAM_IMG[key] ?? TEAM_IMG_V11[key];
 
 const Map<String, String> TEAM_IMG = {
   'car00': 'assets/g/teams/car00.webp',

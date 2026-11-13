@@ -64,8 +64,8 @@ class MatchGame extends FlameGame {
       loadUiImage(FIELD_IMG[f.id]),
       loadUiImage(GOAL_IMG[f.gs]),
       loadUiImage(BALL_IMG['b$ballIdx']),
-      loadUiImage(t0Asset ?? TEAM_IMG[teamKey(teams[0])]),
-      loadUiImage(t1Asset ?? TEAM_IMG[teamKey(teams[1])]),
+      loadUiImage(t0Asset ?? teamImg(teamKey(teams[0]))),
+      loadUiImage(t1Asset ?? teamImg(teamKey(teams[1]))),
       loadUiImage(ARROW_IMG['head_e']),
       loadUiImage(ARROW_IMG['head_s']),
       loadUiImage(ARROW_IMG['shaft_e']),
@@ -113,7 +113,7 @@ class MatchGame extends FlameGame {
     r.render(canvas, v, _t, 1);
   }
 
-  Offset? world(Offset local) => view == null ? null : toWorld(view!, local.dx, local.dy);
+  Offset? worldAt(Offset local) => view == null ? null : toWorld(view!, local.dx, local.dy);
 
   @override
   void onRemove() {
