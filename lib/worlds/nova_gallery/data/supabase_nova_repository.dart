@@ -22,7 +22,8 @@ class SupabaseNovaRepository implements NovaRepository {
   String _out(String uid) => uid == me ? explorerId : uid;
 
   static const String bucket = 'nx-media';
-  static const String _cols = 'id, author, kind, text, visual, motion, hashtags, like_count, comment_count, created_at, edited_at, expires_at';
+  static const String _cols =
+      'id, author, kind, text, visual, motion, hashtags, like_count, comment_count, created_at, edited_at, expires_at';
 
   List<NovaPost> _feed = <NovaPost>[];
   final Map<String, String> _names = <String, String>{};
@@ -134,7 +135,9 @@ class SupabaseNovaRepository implements NovaRepository {
 
   @override
   Future<void> updatePost(String id, {required String text, required NovaVisual visual, required bool motion}) async {
-    await c.from('nx_posts').update(<String, dynamic>{'text': text.trim(), 'visual': visual.toJson(), 'motion': motion}).eq('id', id);
+    await c
+        .from('nx_posts')
+        .update(<String, dynamic>{'text': text.trim(), 'visual': visual.toJson(), 'motion': motion}).eq('id', id);
   }
 
   @override
@@ -171,7 +174,8 @@ class SupabaseNovaRepository implements NovaRepository {
   }
 
   @override
-  Future<NovaComment?> addComment(String postId, {required String authorId, required String authorName, required String text}) async {
+  Future<NovaComment?> addComment(String postId,
+      {required String authorId, required String authorName, required String text}) async {
     final String t = text.trim();
     if (t.isEmpty) return null;
     final dynamic r = await c
@@ -180,7 +184,8 @@ class SupabaseNovaRepository implements NovaRepository {
         .select()
         .single();
     final Map<dynamic, dynamic> m = r as Map;
-    return NovaComment(id: '${m['id']}', authorId: explorerId, authorName: authorName, text: '${m['text']}', at: _t(m['created_at']));
+    return NovaComment(
+        id: '${m['id']}', authorId: explorerId, authorName: authorName, text: '${m['text']}', at: _t(m['created_at']));
   }
 
   @override
@@ -243,7 +248,8 @@ class SupabaseNovaRepository implements NovaRepository {
   }
 
   @override
-  Future<NovaStory> createStory({required String authorId, required String authorName, required String text, required int gradient}) async {
+  Future<NovaStory> createStory(
+      {required String authorId, required String authorName, required String text, required int gradient}) async {
     final dynamic r = await c
         .from('nx_posts')
         .insert(<String, dynamic>{
@@ -333,14 +339,26 @@ class SupabaseNovaRepository implements NovaRepository {
       List<dynamic> rows;
       if (q.startsWith('#')) {
         final String tag = q.substring(1).toLowerCase();
-        rows = await c.from('nx_posts').select(_cols).eq('kind', 'post').contains('hashtags', <String>[tag]).order('created_at', ascending: false).limit(60);
+        rows = await c
+            .from('nx_posts')
+            .select(_cols)
+            .eq('kind', 'post')
+            .contains('hashtags', <String>[tag])
+            .order('created_at', ascending: false)
+            .limit(60);
       } else if (q.startsWith('@')) {
         final String name = q.substring(1).replaceAll('%', '');
         final List<dynamic> users = await c.from('profiles').select('id').ilike('username', '%$name%').limit(20);
         final List<String> ids = users.map((dynamic r) => '${(r as Map)['id']}').toList();
         rows = ids.isEmpty
             ? <dynamic>[]
-            : await c.from('nx_posts').select(_cols).eq('kind', 'post').inFilter('author', ids).order('created_at', ascending: false).limit(60);
+            : await c
+                .from('nx_posts')
+                .select(_cols)
+                .eq('kind', 'post')
+                .inFilter('author', ids)
+                .order('created_at', ascending: false)
+                .limit(60);
       } else {
         rows = await c
             .from('nx_posts')
@@ -372,7 +390,8 @@ class SupabaseNovaRepository implements NovaRepository {
         }
       }
     } catch (_) {}
-    final List<MapEntry<String, int>> l = n.entries.toList()..sort((MapEntry<String, int> a, MapEntry<String, int> b) => b.value.compareTo(a.value));
+    final List<MapEntry<String, int>> l = n.entries.toList()
+      ..sort((MapEntry<String, int> a, MapEntry<String, int> b) => b.value.compareTo(a.value));
     return l.take(limit).toList();
   }
 

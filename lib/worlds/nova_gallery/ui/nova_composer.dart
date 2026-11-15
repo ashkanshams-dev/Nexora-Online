@@ -113,7 +113,8 @@ class _ComposerSheetState extends ConsumerState<_ComposerSheet> {
     final ctrl = ref.read(novaControllerProvider);
     final profile = ref.read(profileProvider);
     final editing = widget.editing;
-    final NovaVisual visual = _motion && _visual.isNone ? NovaVisual(kind: NovaVisualKind.gradient, gradient: _gradient) : _visual;
+    final NovaVisual visual =
+        _motion && _visual.isNone ? NovaVisual(kind: NovaVisualKind.gradient, gradient: _gradient) : _visual;
     if (editing != null) {
       await ctrl.updatePost(editing.id, text: _text.text, visual: visual, motion: _motion);
       if (!mounted) return;

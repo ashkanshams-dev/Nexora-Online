@@ -50,17 +50,21 @@ class OrbitChat {
 
   final String id;
   final OrbitChatKind kind;
+
   /// Online: my role in this chat ('owner' | 'admin' | 'member').
   String role;
+
   /// Direct chats: the other person.
   final String? peerId;
   final String? peerName;
   final DateTime? peerOnlineAt;
   int memberCount;
+
   /// Lives on the server (real members) rather than only on this device.
   final bool online;
   String name;
   String description;
+
   /// Club badge id (AppAssets.clubBadge), empty for none.
   String badgeId;
   final DateTime createdAt;
@@ -73,8 +77,7 @@ class OrbitChat {
   bool get isChannel => kind == OrbitChatKind.channel;
   bool get isDirect => kind == OrbitChatKind.direct;
   bool get isAdmin => role == 'owner' || role == 'admin';
-  bool get peerOnlineNow =>
-      peerOnlineAt != null && DateTime.now().toUtc().difference(peerOnlineAt!.toUtc()).inMinutes < 3;
+  bool get peerOnlineNow => peerOnlineAt != null && DateTime.now().toUtc().difference(peerOnlineAt!.toUtc()).inMinutes < 3;
 
   /// Channels: only the owner/admins publish.
   bool canPost(String userId) => kind != OrbitChatKind.channel || userId == ownerId || (online && isAdmin);
@@ -130,6 +133,7 @@ class OrbitMessage {
   final String authorName;
   final OrbitMessageKind kind;
   String text;
+
   /// Kind-specific data: art {asset}, invite {gameId}, shared {SharedItem json}.
   final Map<String, dynamic> payload;
   final String? replyToId;

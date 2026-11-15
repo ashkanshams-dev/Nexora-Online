@@ -37,7 +37,8 @@ Future<void> showInviteSheet(BuildContext context, WidgetRef ref, Community c) {
         GlassPanel(
           tint: kSocialPalette.primary.withValues(alpha: 0.12),
           child: SelectableText(c.inviteCode,
-              textAlign: TextAlign.center, style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 4, color: kSocialPalette.primary)),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: 4, color: kSocialPalette.primary)),
         ),
         const SizedBox(height: 10),
         GlassPanel(blur: false, child: Text(text, style: const TextStyle(height: 1.5))),
@@ -70,17 +71,25 @@ Future<void> showInviteSheet(BuildContext context, WidgetRef ref, Community c) {
           onPressed: () async {
             await ref.read(socialControllerProvider).shareInviteToOrbit(c, text);
             if (bc.mounted) {
-              socialSnack(bc, 'کارت دعوت به صندوق اشتراک ORBIT NETWORK رفت.', 'Invite card sent to the ORBIT NETWORK share inbox.');
+              socialSnack(
+                  bc, 'کارت دعوت به صندوق اشتراک ORBIT NETWORK رفت.', 'Invite card sent to the ORBIT NETWORK share inbox.');
             }
           },
           icon: const Icon(Icons.send_rounded),
           label: Text(bc.tx('ارسال به ORBIT NETWORK', 'Send to ORBIT NETWORK')),
         ),
         const SizedBox(height: 12),
-        const OnlineOnlyNotice(
-          featureFa: 'پیوستن کاوشگران دیگر با این کد',
-          featureEn: 'Other explorers joining with this code',
-        ),
+        if (!(ref.read(socialControllerProvider).online?.isRemote(c.id) ?? false))
+          const OnlineOnlyNotice(
+            featureFa: 'پیوستن کاوشگران دیگر با این کد',
+            featureEn: 'Other explorers joining with this code',
+          )
+        else
+          Text(
+            bc.tx('هر کاوشگری با این کد به جامعه می‌پیوندد.', 'Any explorer can join with this code.'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: NxColors.textDim),
+          ),
       ]),
     ),
   );
@@ -206,7 +215,10 @@ class _CommunityDetailPageState extends ConsumerState<CommunityDetailPage> with 
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                  Text(c.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                  Text(c.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
                   Wrap(spacing: 6, runSpacing: 6, children: <Widget>[
                     NxPill(label: kindLabel(context, c.kind), icon: kindIcon(c.kind), color: accent),
@@ -222,7 +234,8 @@ class _CommunityDetailPageState extends ConsumerState<CommunityDetailPage> with 
                     child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
                       Icon(Icons.vpn_key_rounded, size: 14, color: kSocialPalette.primary),
                       const SizedBox(width: 4),
-                      Text(c.inviteCode, style: TextStyle(color: kSocialPalette.primary, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                      Text(c.inviteCode,
+                          style: TextStyle(color: kSocialPalette.primary, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
                       const SizedBox(width: 4),
                       const Icon(Icons.copy_rounded, size: 13, color: NxColors.textDim),
                     ]),

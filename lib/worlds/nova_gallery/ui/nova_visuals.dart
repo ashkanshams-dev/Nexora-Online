@@ -33,8 +33,7 @@ const List<NovaGradientStyle> kNovaGradients = <NovaGradientStyle>[
 NovaGradientStyle novaGradient(int i) => kNovaGradients[i.abs() % kNovaGradients.length];
 
 /// Display name for the current user.
-String novaMyName(BuildContext context, ProfileService p) =>
-    p.username.isEmpty ? context.tx('کاوشگر', 'Explorer') : p.username;
+String novaMyName(BuildContext context, ProfileService p) => p.username.isEmpty ? context.tx('کاوشگر', 'Explorer') : p.username;
 
 /// Relative time, bilingual.
 String novaAgo(BuildContext context, DateTime t) {
@@ -57,9 +56,8 @@ class NovaAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String initial = name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase();
-    final List<Color> colors = official
-        ? const <Color>[NxColors.electricBlue, NxColors.violet]
-        : novaGradient(name.hashCode).colors.take(2).toList();
+    final List<Color> colors =
+        official ? const <Color>[NxColors.electricBlue, NxColors.violet] : novaGradient(name.hashCode).colors.take(2).toList();
     return Container(
       width: size,
       height: size,
@@ -79,8 +77,7 @@ class NovaAvatar extends StatelessWidget {
         alignment: Alignment.center,
         child: official
             ? Icon(Icons.auto_awesome, color: Colors.white, size: size * 0.5)
-            : Text(initial,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * 0.42)),
+            : Text(initial, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: size * 0.42)),
       ),
     );
   }

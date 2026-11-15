@@ -15,7 +15,8 @@ import '../models/orbit_models.dart';
 String orbitTime(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 /// Honest bottom sheet for features that require the server (calls, contacts...).
-Future<void> showOrbitOnlineOnly(BuildContext context, {required String fa, required String en, IconData icon = Icons.call_rounded}) {
+Future<void> showOrbitOnlineOnly(BuildContext context,
+    {required String fa, required String en, IconData icon = Icons.call_rounded}) {
   return showModalBottomSheet<void>(
     context: context,
     builder: (BuildContext c) => Padding(
@@ -86,8 +87,8 @@ class OrbitDeliveryIcon extends StatelessWidget {
     switch (delivery) {
       case OrbitDelivery.queued:
         return Tooltip(
-          message: context.tx('روی دستگاه ذخیره شد؛ بعد از اتصال سرور ارسال می‌شود',
-              'Saved on device; sends once the server is connected'),
+          message: context.tx(
+              'روی دستگاه ذخیره شد؛ بعد از اتصال سرور ارسال می‌شود', 'Saved on device; sends once the server is connected'),
           child: const Icon(Icons.schedule_rounded, size: 14, color: NxColors.textDim),
         );
       case OrbitDelivery.sent:
@@ -209,8 +210,12 @@ class OrbitMessageBubble extends StatelessWidget {
         ],
         const SizedBox(height: 3),
         Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-          if (m.pinned) const Padding(padding: EdgeInsetsDirectional.only(end: 3), child: Icon(Icons.push_pin_rounded, size: 12, color: NxColors.gold)),
-          if (m.starred) const Padding(padding: EdgeInsetsDirectional.only(end: 3), child: Icon(Icons.star_rounded, size: 13, color: NxColors.gold)),
+          if (m.pinned)
+            const Padding(
+                padding: EdgeInsetsDirectional.only(end: 3), child: Icon(Icons.push_pin_rounded, size: 12, color: NxColors.gold)),
+          if (m.starred)
+            const Padding(
+                padding: EdgeInsetsDirectional.only(end: 3), child: Icon(Icons.star_rounded, size: 13, color: NxColors.gold)),
           if (m.editedAt != null && !m.deleted)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 4),
@@ -335,9 +340,9 @@ class OrbitSharedCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            if (author.isNotEmpty)
-              Text(author, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-            Text(item.text, maxLines: compact ? 2 : 5, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.35)),
+            if (author.isNotEmpty) Text(author, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+            Text(item.text,
+                maxLines: compact ? 2 : 5, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.35)),
           ]),
         ),
         TextButton.icon(
@@ -357,6 +362,7 @@ class OrbitInviteCard extends StatelessWidget {
   const OrbitInviteCard({super.key, required this.gameId, this.note = '', this.code = ''});
   final String gameId;
   final String note;
+
   /// Online room code: Play joins that real room.
   final String code;
 
@@ -408,7 +414,6 @@ class OrbitInviteCard extends StatelessWidget {
   }
 }
 
-
 /// A call started in this chat (kind = call). Join opens the real LiveKit call.
 class OrbitCallCard extends StatelessWidget {
   const OrbitCallCard({super.key, required this.message, required this.mine});
@@ -424,7 +429,9 @@ class OrbitCallCard extends StatelessWidget {
       const SizedBox(width: 8),
       Text(
         mine
-            ? (video ? context.tx('تماس تصویری گرفتی', 'You started a video call') : context.tx('تماس صوتی گرفتی', 'You started a voice call'))
+            ? (video
+                ? context.tx('تماس تصویری گرفتی', 'You started a video call')
+                : context.tx('تماس صوتی گرفتی', 'You started a voice call'))
             : (video ? context.tx('تماس تصویری', 'Video call') : context.tx('تماس صوتی', 'Voice call')),
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),

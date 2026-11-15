@@ -14,7 +14,12 @@ import 'social_widgets.dart';
 
 Future<void> composeCommunityPost(BuildContext context, WidgetRef ref, Community c) async {
   final String? text = await askText(context,
-      titleFa: 'پست در ${c.name}', titleEn: 'Post in ${c.name}', hintFa: 'چه خبر؟', hintEn: "What's up?", maxLength: 500, maxLines: 5);
+      titleFa: 'پست در ${c.name}',
+      titleEn: 'Post in ${c.name}',
+      hintFa: 'چه خبر؟',
+      hintEn: "What's up?",
+      maxLength: 500,
+      maxLines: 5);
   if (text == null || text.trim().isEmpty) return;
   final SocialMe me = socialMe(ref);
   await ref.read(socialControllerProvider).addPost(c.id, authorId: me.id, authorName: me.name, text: text);
@@ -22,17 +27,25 @@ Future<void> composeCommunityPost(BuildContext context, WidgetRef ref, Community
 
 Future<void> composeAnnouncement(BuildContext context, WidgetRef ref, Community c) async {
   final String? text = await askText(context,
-      titleFa: 'اطلاعیه تازه', titleEn: 'New announcement', hintFa: 'پیام مهم برای همه اعضا', hintEn: 'Important message for all members',
-      maxLength: 280, maxLines: 4);
+      titleFa: 'اطلاعیه تازه',
+      titleEn: 'New announcement',
+      hintFa: 'پیام مهم برای همه اعضا',
+      hintEn: 'Important message for all members',
+      maxLength: 280,
+      maxLines: 4);
   if (text == null || text.trim().isEmpty) return;
   final SocialMe me = socialMe(ref);
   final bool ok = await ref.read(socialControllerProvider).announce(c.id, actorId: me.id, actorName: me.name, text: text);
-  if (!ok && context.mounted) socialSnack(context, 'فقط مالک و مدیران اطلاعیه می‌دهند.', 'Only the owner and admins can announce.');
+  if (!ok && context.mounted)
+    socialSnack(context, 'فقط مالک و مدیران اطلاعیه می‌دهند.', 'Only the owner and admins can announce.');
 }
 
 Future<void> addLocalPlayer(BuildContext context, WidgetRef ref, Community c) async {
   final String? name = await askText(context,
-      titleFa: 'افزودن بازیکن محلی', titleEn: 'Add local player', hintFa: 'نام بازیکن روی همین دستگاه', hintEn: 'Player name on this device',
+      titleFa: 'افزودن بازیکن محلی',
+      titleEn: 'Add local player',
+      hintFa: 'نام بازیکن روی همین دستگاه',
+      hintEn: 'Player name on this device',
       maxLength: 24);
   if (name == null || name.trim().isEmpty) return;
   final bool ok = await ref.read(socialControllerProvider).addLocalMember(c.id, socialMe(ref).id, name);
@@ -160,7 +173,8 @@ class CommunityFeedTab extends ConsumerWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                   Text(a.text, style: const TextStyle(fontWeight: FontWeight.w700, height: 1.4)),
                   const SizedBox(height: 4),
-                  Text('${a.authorName} · ${formatDateTime(a.at)}', style: const TextStyle(color: NxColors.textDim, fontSize: 11)),
+                  Text('${a.authorName} · ${formatDateTime(a.at)}',
+                      style: const TextStyle(color: NxColors.textDim, fontSize: 11)),
                 ]),
               ),
               if (CommunityPermissions.canAnnounce(role))
@@ -182,7 +196,9 @@ class CommunityFeedTab extends ConsumerWidget {
             child: Text(me.name.characters.first.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900)),
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(context.tx('برای جامعه بنویس…', 'Write to the community…'), style: const TextStyle(color: NxColors.textDim))),
+          Expanded(
+              child: Text(context.tx('برای جامعه بنویس…', 'Write to the community…'),
+                  style: const TextStyle(color: NxColors.textDim))),
           Icon(Icons.send_rounded, color: kSocialPalette.primary),
         ]),
       ),
@@ -190,7 +206,10 @@ class CommunityFeedTab extends ConsumerWidget {
       if (posts.isEmpty)
         const Padding(
           padding: EdgeInsets.only(top: 40),
-          child: SocialEmpty(icon: Icons.forum_rounded, fa: 'فید هنوز خالی است. اولین پست را تو بنویس.', en: 'The feed is empty. Write the first post.'),
+          child: SocialEmpty(
+              icon: Icons.forum_rounded,
+              fa: 'فید هنوز خالی است. اولین پست را تو بنویس.',
+              en: 'The feed is empty. Write the first post.'),
         ),
       for (final CommunityPost p in posts)
         Padding(
@@ -230,7 +249,9 @@ class _PostCard extends ConsumerWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
               Row(children: <Widget>[
-                Flexible(child: Text(p.authorName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+                Flexible(
+                    child:
+                        Text(p.authorName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
                 if (authorRole != null && authorRole != CommunityRole.member) ...<Widget>[
                   const SizedBox(width: 6),
                   Icon(Icons.verified_rounded, size: 14, color: roleColor(authorRole)),
@@ -251,7 +272,8 @@ class _PostCard extends ConsumerWidget {
               },
               itemBuilder: (BuildContext c) => <PopupMenuEntry<String>>[
                 if (canPin)
-                  PopupMenuItem<String>(value: 'pin', child: Text(p.pinned ? c.tx('برداشتن سنجاق', 'Unpin') : c.tx('سنجاق کردن', 'Pin'))),
+                  PopupMenuItem<String>(
+                      value: 'pin', child: Text(p.pinned ? c.tx('برداشتن سنجاق', 'Unpin') : c.tx('سنجاق کردن', 'Pin'))),
                 if (canDelete) PopupMenuItem<String>(value: 'del', child: Text(c.tx('حذف', 'Delete'))),
               ],
             ),
@@ -262,7 +284,8 @@ class _PostCard extends ConsumerWidget {
         Row(children: <Widget>[
           TextButton.icon(
             onPressed: () => ctrl.toggleLike(community.id, p.id, me.id),
-            icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: liked ? NxColors.pink : NxColors.textDim),
+            icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                color: liked ? NxColors.pink : NxColors.textDim),
             label: Text('${p.likedBy.length}', style: TextStyle(color: liked ? NxColors.pink : NxColors.textDim)),
           ),
         ]),
@@ -360,8 +383,12 @@ class _EventCard extends ConsumerWidget {
               const SizedBox(height: 8),
             ],
             Wrap(spacing: 6, runSpacing: 6, children: <Widget>[
-              NxPill(label: '${e.going.length} ${context.tx('شرکت‌کننده', 'going')}', icon: Icons.how_to_reg_rounded, color: kSocialPalette.secondary),
-              if (e.gameId != null) NxPill(label: gameLabel(context, e.gameId), icon: Icons.sports_esports_rounded, color: kSocialPalette.primary),
+              NxPill(
+                  label: '${e.going.length} ${context.tx('شرکت‌کننده', 'going')}',
+                  icon: Icons.how_to_reg_rounded,
+                  color: kSocialPalette.secondary),
+              if (e.gameId != null)
+                NxPill(label: gameLabel(context, e.gameId), icon: Icons.sports_esports_rounded, color: kSocialPalette.primary),
             ]),
             const SizedBox(height: 6),
             Row(children: <Widget>[
@@ -413,28 +440,61 @@ class CommunityMembersTab extends ConsumerWidget {
         return r != 0 ? r : a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     final SocialController ctrl = ref.read(socialControllerProvider);
+    final bool online = ctrl.online?.isRemote(c.id) ?? false;
     return ListView(padding: const EdgeInsets.fromLTRB(NxSpace.md, NxSpace.sm, NxSpace.md, 96), children: <Widget>[
-      GlassPanel(
-        tint: kSocialPalette.primary.withValues(alpha: 0.08),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-          Icon(Icons.info_outline_rounded, color: kSocialPalette.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              context.tx(
-                'روی این دستگاه تو مالک جامعه هستی. اعضایی که اینجا اضافه می‌کنی «بازیکن محلی» هستند: نام‌هایی برای مسابقه‌های روی همین دستگاه، نه حساب واقعی کاوشگران دیگر.',
-                "On this device you are the owner. Members you add here are local players: names for same-device tournaments, not real accounts of other explorers.",
+      if (online)
+        GlassPanel(
+          tint: kSocialPalette.primary.withValues(alpha: 0.08),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+            Icon(Icons.public_rounded, color: kSocialPalette.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tx(
+                  'اعضا حساب‌های واقعی کاوشگران هستند و با کد دعوت یا از «کشف جوامع» می‌پیوندند. «بازیکن محلی» فقط نامی برای مسابقه‌های روی همین دستگاه است.',
+                  'Members are real explorer accounts who join with the invite code or from Discover. A "local player" is only a name for same-device tournaments.',
+                ),
+                style: const TextStyle(height: 1.5, fontSize: 13),
               ),
-              style: const TextStyle(height: 1.5, fontSize: 13),
             ),
+          ]),
+        )
+      else
+        GlassPanel(
+          tint: kSocialPalette.primary.withValues(alpha: 0.08),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+            Icon(Icons.info_outline_rounded, color: kSocialPalette.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tx(
+                  'روی این دستگاه تو مالک جامعه هستی. اعضایی که اینجا اضافه می‌کنی «بازیکن محلی» هستند: نام‌هایی برای مسابقه‌های روی همین دستگاه، نه حساب واقعی کاوشگران دیگر.',
+                  "On this device you are the owner. Members you add here are local players: names for same-device tournaments, not real accounts of other explorers.",
+                ),
+                style: const TextStyle(height: 1.5, fontSize: 13),
+              ),
+            ),
+          ]),
+        ),
+      if (!online) const SizedBox(height: NxSpace.sm),
+      if (!online)
+        const OnlineOnlyNotice(
+          featureFa: 'عضویت کاوشگران واقعی، درخواست عضویت و اخراج حساب‌ها',
+          featureEn: 'Real explorer members, join requests and account removal',
+        ),
+      if (online && myRole != CommunityRole.owner)
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: NxColors.danger),
+            onPressed: () async {
+              final bool ok = await ctrl.leave(c.id);
+              if (ok && context.mounted) Navigator.of(context).maybePop();
+            },
+            icon: const Icon(Icons.logout_rounded),
+            label: Text(context.tx('ترک جامعه', 'Leave community')),
           ),
-        ]),
-      ),
-      const SizedBox(height: NxSpace.sm),
-      const OnlineOnlyNotice(
-        featureFa: 'عضویت کاوشگران واقعی، درخواست عضویت و اخراج حساب‌ها',
-        featureEn: 'Real explorer members, join requests and account removal',
-      ),
+        ),
       SocialSectionTitle(
         '${context.tx('اعضا', 'Members')} (${members.length})',
         trailing: CommunityPermissions.canAddMembers(myRole)
@@ -453,7 +513,8 @@ class CommunityMembersTab extends ConsumerWidget {
             child: Row(children: <Widget>[
               CircleAvatar(
                 backgroundColor: roleColor(m.role).withValues(alpha: 0.25),
-                child: Text(m.name.isEmpty ? '?' : m.name.characters.first.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900)),
+                child: Text(m.name.isEmpty ? '?' : m.name.characters.first.toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -463,7 +524,11 @@ class CommunityMembersTab extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Wrap(spacing: 6, children: <Widget>[
                     RolePill(role: m.role),
-                    if (m.local) NxPill(label: context.tx('بازیکن محلی', 'Local player'), icon: Icons.phone_android_rounded, color: NxColors.textDim),
+                    if (m.local)
+                      NxPill(
+                          label: context.tx('بازیکن محلی', 'Local player'),
+                          icon: Icons.phone_android_rounded,
+                          color: NxColors.textDim),
                   ]),
                 ]),
               ),
@@ -543,11 +608,13 @@ class CommunityAboutTab extends ConsumerWidget {
     return ListView(padding: const EdgeInsets.fromLTRB(NxSpace.md, NxSpace.sm, NxSpace.md, 96), children: <Widget>[
       GlassPanel(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
-          Text(c.description.isEmpty ? context.tx('بدون توضیح.', 'No description.') : c.description, style: const TextStyle(height: 1.5)),
+          Text(c.description.isEmpty ? context.tx('بدون توضیح.', 'No description.') : c.description,
+              style: const TextStyle(height: 1.5)),
           const SizedBox(height: 10),
           Wrap(spacing: 6, runSpacing: 6, children: <Widget>[
             NxPill(label: kindLabel(context, c.kind), icon: kindIcon(c.kind), color: kindColor(c.kind)),
-            if (c.gameId != null) NxPill(label: gameLabel(context, c.gameId), icon: Icons.sports_esports_rounded, color: kSocialPalette.secondary),
+            if (c.gameId != null)
+              NxPill(label: gameLabel(context, c.gameId), icon: Icons.sports_esports_rounded, color: kSocialPalette.secondary),
             NxPill(label: formatDateTime(c.createdAt).split(' ').first, icon: Icons.cake_rounded, color: NxColors.textDim),
           ]),
         ]),
@@ -641,8 +708,8 @@ class _PermissionMatrix extends StatelessWidget {
       _Perm(context.tx('مسابقه', 'Tournaments'), CommunityPermissions.canManageTournaments),
       _Perm(context.tx('سنجاق پست', 'Pin posts'), CommunityPermissions.canPinPosts),
       _Perm(context.tx('افزودن عضو', 'Add members'), CommunityPermissions.canAddMembers),
-      _Perm(context.tx('اخراج عضو', 'Remove member'),
-          (CommunityRole r) => CommunityPermissions.canRemove(r, CommunityRole.member)),
+      _Perm(
+          context.tx('اخراج عضو', 'Remove member'), (CommunityRole r) => CommunityPermissions.canRemove(r, CommunityRole.member)),
     ];
     return GlassPanel(
       padding: const EdgeInsets.all(NxSpace.sm),
@@ -656,12 +723,14 @@ class _PermissionMatrix extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(roleLabel(context, r),
-                    textAlign: TextAlign.center, style: TextStyle(color: roleColor(r), fontSize: 11, fontWeight: FontWeight.w800)),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: roleColor(r), fontSize: 11, fontWeight: FontWeight.w800)),
               ),
           ]),
           for (final _Perm p in perms)
             TableRow(children: <Widget>[
-              Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(p.label, style: const TextStyle(fontSize: 12))),
+              Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6), child: Text(p.label, style: const TextStyle(fontSize: 12))),
               for (final CommunityRole r in CommunityRole.values)
                 Icon(
                   p.allowed(r) ? Icons.check_circle_rounded : Icons.remove_circle_outline_rounded,

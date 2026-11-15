@@ -162,8 +162,7 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
           }
           break;
         }
-        await _ctrl.send(widget.chatId,
-            authorName: name, kind: OrbitMessageKind.invite, payload: <String, dynamic>{'gameId': g});
+        await _ctrl.send(widget.chatId, authorName: name, kind: OrbitMessageKind.invite, payload: <String, dynamic>{'gameId': g});
         await _afterSend();
         break;
       case 'inbox':
@@ -232,11 +231,18 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
       builder: (BuildContext c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
           if (!m.deleted)
-            ListTile(leading: const Icon(Icons.reply_rounded), title: Text(c.tx('پاسخ', 'Reply')), onTap: () => Navigator.pop(c, 'reply')),
+            ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(c.tx('پاسخ', 'Reply')),
+                onTap: () => Navigator.pop(c, 'reply')),
           if (mine && m.editable)
-            ListTile(leading: const Icon(Icons.edit_rounded), title: Text(c.tx('ویرایش', 'Edit')), onTap: () => Navigator.pop(c, 'edit')),
+            ListTile(
+                leading: const Icon(Icons.edit_rounded),
+                title: Text(c.tx('ویرایش', 'Edit')),
+                onTap: () => Navigator.pop(c, 'edit')),
           if (!m.deleted && m.text.isNotEmpty)
-            ListTile(leading: const Icon(Icons.copy_rounded), title: Text(c.tx('کپی', 'Copy')), onTap: () => Navigator.pop(c, 'copy')),
+            ListTile(
+                leading: const Icon(Icons.copy_rounded), title: Text(c.tx('کپی', 'Copy')), onTap: () => Navigator.pop(c, 'copy')),
           if (!m.deleted)
             ListTile(
               leading: const Icon(Icons.push_pin_rounded),
@@ -327,7 +333,8 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
             Center(child: OrbitChatAvatar(chat: live, size: 84)),
             const SizedBox(height: 8),
-            Text(orbitChatTitle(cc, live), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+            Text(orbitChatTitle(cc, live),
+                textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
             if (live.description.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -368,14 +375,17 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                   future: ctrl.members(live.id),
                   builder: (BuildContext fc, AsyncSnapshot<List<OrbitMember>> snap) {
                     final List<OrbitMember> mem = snap.data ?? const <OrbitMember>[];
-                    if (!snap.hasData) return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
+                    if (!snap.hasData)
+                      return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
                     return Column(children: <Widget>[
                       for (final OrbitMember m in mem)
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           dense: true,
                           leading: Icon(
-                            m.role == 'owner' ? Icons.verified_user_rounded : (m.role == 'admin' ? Icons.shield_rounded : Icons.person_rounded),
+                            m.role == 'owner'
+                                ? Icons.verified_user_rounded
+                                : (m.role == 'admin' ? Icons.shield_rounded : Icons.person_rounded),
                             color: m.role == 'member' ? NxColors.textDim : NxColors.gold,
                           ),
                           title: Text(m.id == ctrl.ownerId ? '${m.name} (${fc.tx('تو', 'you')})' : m.name),
@@ -410,13 +420,13 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                 ),
               const SizedBox(height: 10),
               if (!live.isDirect && (!live.online || live.isAdmin))
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await showOrbitChatEditor(cc, kind: live.kind, editing: live);
-                },
-                icon: const Icon(Icons.edit_rounded),
-                label: Text(cc.tx('ویرایش نام، توضیحات و نشان', 'Edit name, description and badge')),
-              ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await showOrbitChatEditor(cc, kind: live.kind, editing: live);
+                  },
+                  icon: const Icon(Icons.edit_rounded),
+                  label: Text(cc.tx('ویرایش نام، توضیحات و نشان', 'Edit name, description and badge')),
+                ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(foregroundColor: NxColors.danger),
@@ -509,7 +519,9 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                         chat.isSaved
                             ? context.tx('فقط تو · روی همین دستگاه', 'Only you · on this device')
                             : chat.isDirect
-                                ? (chat.peerOnlineNow ? context.tx('آنلاین', 'online') : context.tx('گفت‌وگوی خصوصی', 'Private chat'))
+                                ? (chat.peerOnlineNow
+                                    ? context.tx('آنلاین', 'online')
+                                    : context.tx('گفت‌وگوی خصوصی', 'Private chat'))
                                 : !chat.online
                                     ? (chat.isChannel
                                         ? context.tx('کانال · ۱ عضو (آفلاین)', 'Channel · 1 member (offline)')
@@ -645,7 +657,9 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                     Text(_editing != null ? context.tx('ویرایش پیام', 'Editing message') : quote.authorName,
                         style: TextStyle(color: pal.primary, fontWeight: FontWeight.w800, fontSize: 12)),
-                    Text(quote.preview(fa: context.isFa), maxLines: 1, overflow: TextOverflow.ellipsis,
+                    Text(quote.preview(fa: context.isFa),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
                   ]),
                 ),

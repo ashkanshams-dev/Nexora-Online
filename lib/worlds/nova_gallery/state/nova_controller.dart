@@ -20,8 +20,7 @@ final novaRepositoryProvider = Provider<NovaRepository>((ref) {
   return local;
 });
 
-final novaControllerProvider =
-    ChangeNotifierProvider<NovaController>((ref) => NovaController(ref.watch(novaRepositoryProvider)));
+final novaControllerProvider = ChangeNotifierProvider<NovaController>((ref) => NovaController(ref.watch(novaRepositoryProvider)));
 
 /// In-memory view state of NOVA GALLERY, kept in sync with the repository.
 class NovaController extends ChangeNotifier {
@@ -121,7 +120,8 @@ class NovaController extends ChangeNotifier {
     return r;
   }
 
-  Future<void> createStory({required String authorId, required String authorName, required String text, required int gradient}) async {
+  Future<void> createStory(
+      {required String authorId, required String authorName, required String text, required int gradient}) async {
     await repo.createStory(authorId: authorId, authorName: authorName, text: text, gradient: gradient);
     await refresh();
   }

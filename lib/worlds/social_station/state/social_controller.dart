@@ -1,14 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/online/online_service.dart';
+import '../../../core/profile/profile_service.dart';
 import '../../../core/storage/local_store.dart';
 import '../../orbit_network/data/orbit_shared_inbox.dart';
 import '../data/social_repository.dart';
+import '../data/supabase_social_repository.dart';
 import '../models/social_models.dart';
 import '../models/tournament_bracket.dart';
 
-/// Swap this provider for an online implementation later.
-final socialRepositoryProvider = Provider<SocialRepository>((ref) => LocalSocialRepository(LocalStore.instance));
+/// Online (signed in): real communities on Supabase; otherwise device-only.
+final socialRepositoryProvider = Provider<SocialRepository>((ref) {
+  final OnlineService o = ref.watch(onlineProvider);
+  final LocalSocialRepository local = LocalSocialRepository(LocalStore.instance);
+  final client = o.client;
+  if (o.isOnline && client != null) {
+    return SupabaseSocialRepository(client, local, explorerId: ref.read(profileProvider).explorerId);
+  }
+  return local;
+});
 
 final socialControllerProvider =
     ChangeNotifierProvider<SocialController>((ref) => SocialController(ref.watch(socialRepositoryProvider)));
@@ -21,6 +32,8 @@ class SocialController extends ChangeNotifier {
   }
 
   final SocialRepository repo;
+  SupabaseSocialRepository? get online => repo is SupabaseSocialRepository ? repo as SupabaseSocialRepository : null;
+  bool get isOnline => online != null;
   final DateTime Function() _clock;
   bool loading = true;
   bool _disposed = false;
@@ -50,6 +63,12 @@ class SocialController extends ChangeNotifier {
   }
 
   Future<bool> _mutate(String communityId, bool Function(Community c) change) async {
+    final SupabaseSocialRepository? on = online;
+    if (on != null) {
+      final bool ok = await on.mutate(communityId, change);
+      await refresh();
+      return ok;
+    }
     final Community? c = await repo.community(communityId);
     if (c == null) return false;
     final bool ok = change(c);
@@ -127,7 +146,12 @@ class SocialController extends ChangeNotifier {
         id: c.id,
         text: text,
         at: _clock(),
-        extra: <String, dynamic>{'code': c.inviteCode, 'name': c.name, 'badge': c.badgeId, if (c.gameId != null) 'gameId': c.gameId},
+        extra: <String, dynamic>{
+          'code': c.inviteCode,
+          'name': c.name,
+          'badge': c.badgeId,
+          if (c.gameId != null) 'gameId': c.gameId
+        },
       ));
 
   // ---- feed ----
@@ -255,11 +279,76 @@ class SocialController extends ChangeNotifier {
     });
   }
 
-  Future<bool> changeRole(String communityId, String actorId, String targetId, CommunityRole role) =>
-      _mutate(communityId, (Community c) => c.changeRole(actorId, targetId, role));
+  /// Real members: role-checked RPC on the server; local (same-device) players: the document.
+  Future<bool> changeRole(String communityId, String actorId, String targetId, CommunityRole role) async {
+    final SupabaseSocialRepository? on = online;
+    final Community? c = byId(communityId);
+    final CommunityMember? t = c?.member(targetId);
+    if (on != null && on.isRemote(communityId) && t != null && !t.local) {
+      final Community probe = Community.fromJson(c!.toJson());
+      if (!probe.changeRole(actorId, targetId, role)) return false;
+      final bool ok = await on.setRole(communityId, targetId, role);
+      await refresh();
+      return ok;
+    }
+    return _mutate(communityId, (Community c) => c.changeRole(actorId, targetId, role));
+  }
 
-  Future<bool> removeMember(String communityId, String actorId, String targetId) =>
-      _mutate(communityId, (Community c) => c.removeMember(actorId, targetId));
+  Future<bool> removeMember(String communityId, String actorId, String targetId) async {
+    final SupabaseSocialRepository? on = online;
+    final Community? c = byId(communityId);
+    final CommunityMember? t = c?.member(targetId);
+    if (on != null && on.isRemote(communityId) && t != null && !t.local) {
+      final Community probe = Community.fromJson(c!.toJson());
+      if (!probe.removeMember(actorId, targetId)) return false;
+      final bool ok = await on.kick(communityId, targetId);
+      if (ok)
+        await _mutate(communityId, (Community x) {
+          for (final e in x.events) {
+            e.going.remove(targetId);
+          }
+          return true;
+        });
+      await refresh();
+      return ok;
+    }
+    return _mutate(communityId, (Community c) => c.removeMember(actorId, targetId));
+  }
+
+  /// Leave a community (not the owner). Online only.
+  Future<bool> leave(String communityId) async {
+    final SupabaseSocialRepository? on = online;
+    if (on == null) return false;
+    try {
+      await on.leave(communityId);
+    } catch (_) {
+      return false;
+    }
+    await refresh();
+    return true;
+  }
+
+  Future<List<Community>> discover({String query = ''}) async {
+    final SupabaseSocialRepository? on = online;
+    if (on == null) return <Community>[];
+    try {
+      return await on.discover(query: query);
+    } catch (_) {
+      return <Community>[];
+    }
+  }
+
+  Future<bool> joinOpen(String communityId) async {
+    final SupabaseSocialRepository? on = online;
+    if (on == null) return false;
+    try {
+      await on.joinOpen(communityId);
+    } catch (_) {
+      return false;
+    }
+    await refresh();
+    return true;
+  }
 
   // ---- tournaments ----
 
@@ -282,19 +371,18 @@ class SocialController extends ChangeNotifier {
     if (clean.map((String p) => p.toLowerCase()).toSet().length != clean.length) return 'dup';
     if (shuffle) clean.shuffle();
     final TournamentBracket bracket = TournamentBracket.create(clean);
-    c.tournaments.insert(
-      0,
-      CommunityTournament(
-        id: repo.newId('tour'),
-        name: name.trim().isEmpty ? 'Cup' : name.trim(),
-        gameId: gameId,
-        createdAt: _clock(),
-        bracket: bracket,
-      ),
+    final CommunityTournament t = CommunityTournament(
+      id: repo.newId('tour'),
+      name: name.trim().isEmpty ? 'Cup' : name.trim(),
+      gameId: gameId,
+      createdAt: _clock(),
+      bracket: bracket,
     );
-    await repo.save(c);
-    await refresh();
-    return null;
+    final bool ok = await _mutate(communityId, (Community x) {
+      x.tournaments.insert(0, t);
+      return true;
+    });
+    return ok ? null : 'perm';
   }
 
   Future<bool> recordResult(String communityId, String tournamentId, String actorId, MatchRef ref, String winner) =>
@@ -307,8 +395,7 @@ class SocialController extends ChangeNotifier {
         return false;
       });
 
-  Future<bool> deleteTournament(String communityId, String tournamentId, String actorId) =>
-      _mutate(communityId, (Community c) {
+  Future<bool> deleteTournament(String communityId, String tournamentId, String actorId) => _mutate(communityId, (Community c) {
         final role = c.roleOf(actorId);
         if (role == null || !CommunityPermissions.canManageTournaments(role)) return false;
         final int before = c.tournaments.length;

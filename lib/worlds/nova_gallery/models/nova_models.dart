@@ -29,6 +29,7 @@ class NovaVisual {
   const NovaVisual({this.kind = NovaVisualKind.none, this.gradient = 0, this.asset = '', this.url = ''});
 
   final NovaVisualKind kind;
+
   /// Public URL of an uploaded photo ([NovaVisualKind.photo]).
   final String url;
   final int gradient; // index into the gradient style list (also used as backdrop for assets)
@@ -103,10 +104,12 @@ class NovaPost {
   final String authorId;
   final String authorName;
   String text;
+
   /// English text (official posts are bilingual). Null for user posts.
   final String? textEn;
   final bool official;
   NovaVisual visual;
+
   /// Motion post: rendered as an animated gradient in Reels (no video files offline).
   bool motion;
   final DateTime createdAt;
@@ -256,6 +259,7 @@ enum NovaTokenKind { text, hashtag, mention }
 class NovaToken {
   const NovaToken(this.kind, this.value);
   final NovaTokenKind kind;
+
   /// For hashtag/mention: the word WITHOUT the leading symbol.
   final String value;
 
@@ -305,13 +309,9 @@ class NovaText {
     return out;
   }
 
-  static Set<String> hashtags(String text) => parse(text)
-      .where((NovaToken t) => t.kind == NovaTokenKind.hashtag)
-      .map((NovaToken t) => t.value.toLowerCase())
-      .toSet();
+  static Set<String> hashtags(String text) =>
+      parse(text).where((NovaToken t) => t.kind == NovaTokenKind.hashtag).map((NovaToken t) => t.value.toLowerCase()).toSet();
 
-  static Set<String> mentions(String text) => parse(text)
-      .where((NovaToken t) => t.kind == NovaTokenKind.mention)
-      .map((NovaToken t) => t.value.toLowerCase())
-      .toSet();
+  static Set<String> mentions(String text) =>
+      parse(text).where((NovaToken t) => t.kind == NovaTokenKind.mention).map((NovaToken t) => t.value.toLowerCase()).toSet();
 }

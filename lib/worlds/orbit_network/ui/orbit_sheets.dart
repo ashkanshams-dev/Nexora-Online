@@ -25,13 +25,33 @@ const List<String> kOrbitBadges = <String>[
 
 /// Quick emoji bar.
 const List<String> kOrbitEmoji = <String>[
-  '😀', '😂', '😍', '🥳', '😎', '🤔', '😢', '😡',
-  '👍', '👏', '🙏', '🔥', '✨', '🚀', '🪐', '🌙',
-  '⭐', '💫', '🎮', '🏆', '❤️', '💜', '💙', '🎉',
+  '😀',
+  '😂',
+  '😍',
+  '🥳',
+  '😎',
+  '🤔',
+  '😢',
+  '😡',
+  '👍',
+  '👏',
+  '🙏',
+  '🔥',
+  '✨',
+  '🚀',
+  '🪐',
+  '🌙',
+  '⭐',
+  '💫',
+  '🎮',
+  '🏆',
+  '❤️',
+  '💜',
+  '💙',
+  '🎉',
 ];
 
-String orbitMyName(BuildContext context, ProfileService p) =>
-    p.username.isEmpty ? context.tx('کاوشگر', 'Explorer') : p.username;
+String orbitMyName(BuildContext context, ProfileService p) => p.username.isEmpty ? context.tx('کاوشگر', 'Explorer') : p.username;
 
 /// Badge selector row.
 class OrbitBadgePicker extends StatelessWidget {
@@ -63,8 +83,8 @@ class OrbitBadgePicker extends StatelessWidget {
               ),
               child: id.isEmpty
                   ? const Icon(Icons.block_rounded, color: NxColors.textDim)
-                  : Image.asset(AppAssets.clubBadge(id), cacheWidth: 150, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.shield_rounded)),
+                  : Image.asset(AppAssets.clubBadge(id),
+                      cacheWidth: 150, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.shield_rounded)),
             ),
           );
         },
@@ -204,7 +224,8 @@ Future<String?> showArcadeGamePicker(BuildContext context) {
     builder: (BuildContext c) => SizedBox(
       height: MediaQuery.of(c).size.height * 0.62,
       child: Column(children: <Widget>[
-        Text(c.tx('دعوت به کدام بازی؟', 'Invite to which game?'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        Text(c.tx('دعوت به کدام بازی؟', 'Invite to which game?'),
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         Expanded(
           child: GridView.builder(
             padding: const EdgeInsets.all(NxSpace.md),
@@ -223,11 +244,15 @@ Future<String?> showArcadeGamePicker(BuildContext context) {
                 onTap: () => Navigator.of(gc).pop(g.id),
                 child: Column(children: <Widget>[
                   Expanded(
-                    child: Image.asset(AppAssets.pedestal(g.id), cacheWidth: 220, fit: BoxFit.contain,
+                    child: Image.asset(AppAssets.pedestal(g.id),
+                        cacheWidth: 220,
+                        fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(Icons.sports_esports_rounded, size: 36)),
                   ),
                   Text(gc.tx(g.nameFa, g.nameEn),
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                 ]),
               );
             },
@@ -270,8 +295,9 @@ Future<String?> showOrbitChatPicker(BuildContext context) {
   );
 }
 
-String orbitChatTitle(BuildContext context, OrbitChat chat) =>
-    chat.isSaved ? context.tx('مدار ذخیره (Saved Orbit)', 'Saved Orbit') : (chat.isDirect ? (chat.peerName ?? chat.name) : chat.name);
+String orbitChatTitle(BuildContext context, OrbitChat chat) => chat.isSaved
+    ? context.tx('مدار ذخیره (Saved Orbit)', 'Saved Orbit')
+    : (chat.isDirect ? (chat.peerName ?? chat.name) : chat.name);
 
 /// Multi-select of my real friends (mutual follows). Online only.
 class OrbitFriendPicker extends ConsumerStatefulWidget {

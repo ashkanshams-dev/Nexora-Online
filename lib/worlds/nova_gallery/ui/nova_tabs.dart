@@ -605,8 +605,10 @@ class _NovaProfileTabState extends ConsumerState<NovaProfileTab> {
           padding: const EdgeInsets.symmetric(horizontal: NxSpace.md),
           child: SegmentedButton<bool>(
             segments: <ButtonSegment<bool>>[
-              ButtonSegment<bool>(value: false, icon: const Icon(Icons.grid_view_rounded), label: Text(context.tx('پست‌ها', 'Posts'))),
-              ButtonSegment<bool>(value: true, icon: const Icon(Icons.bookmark_rounded), label: Text(context.tx('ذخیره‌ها', 'Saved'))),
+              ButtonSegment<bool>(
+                  value: false, icon: const Icon(Icons.grid_view_rounded), label: Text(context.tx('پست‌ها', 'Posts'))),
+              ButtonSegment<bool>(
+                  value: true, icon: const Icon(Icons.bookmark_rounded), label: Text(context.tx('ذخیره‌ها', 'Saved'))),
             ],
             selected: <bool>{_showSaved},
             onSelectionChanged: (Set<bool> s) => setState(() => _showSaved = s.first),

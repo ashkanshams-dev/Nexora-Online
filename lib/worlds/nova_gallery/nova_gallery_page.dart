@@ -80,8 +80,8 @@ class _NovaGalleryPageState extends ConsumerState<NovaGalleryPage> {
   void _openPost(String id) {
     final NovaPost? post = ref.read(novaControllerProvider).byId(id);
     if (post == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.tx('این پست دیگر وجود ندارد.', 'This post no longer exists.'))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(context.tx('این پست دیگر وجود ندارد.', 'This post no longer exists.'))));
       return;
     }
     Navigator.of(context).push<void>(MaterialPageRoute<void>(
@@ -143,8 +143,7 @@ class _NovaGalleryPageState extends ConsumerState<NovaGalleryPage> {
         labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
         onDestinationSelected: (int i) => setState(() => _tab = i),
         destinations: <Widget>[
-          NavigationDestination(
-              icon: const Icon(Icons.dynamic_feed_rounded), label: context.tx('فید', 'Feed')),
+          NavigationDestination(icon: const Icon(Icons.dynamic_feed_rounded), label: context.tx('فید', 'Feed')),
           NavigationDestination(icon: const Icon(Icons.explore_rounded), label: context.tx('اکتشاف', 'Explore')),
           NavigationDestination(icon: const Icon(Icons.movie_filter_rounded), label: context.tx('ریلز', 'Reels')),
           NavigationDestination(

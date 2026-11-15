@@ -34,6 +34,21 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
     if (c != null && mounted) _open(c.id);
   }
 
+  Future<void> _discover() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext c) => SizedBox(
+        height: MediaQuery.of(c).size.height * 0.75,
+        child: _DiscoverSheet(onOpen: (String id) {
+          Navigator.of(c).pop();
+          _open(id);
+        }),
+      ),
+    );
+  }
+
   Future<void> _joinByCode() async {
     final String? raw = await askText(context,
         titleFa: 'ورود با کد دعوت', titleEn: 'Join with invite code', hintFa: 'NX-XXXXXX', hintEn: 'NX-XXXXXX', maxLength: 12);
@@ -46,8 +61,18 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
     final Community? c = await ref.read(socialControllerProvider).findByCode(code);
     if (!mounted) return;
     if (c != null) {
-      socialSnack(context, 'این جامعه روی همین دستگاه است؛ باز شد.', 'This community lives on this device — opened.');
+      if (ref.read(socialControllerProvider).isOnline) {
+        await ref.read(socialControllerProvider).refresh();
+        if (!mounted) return;
+        socialSnack(context, 'به «${c.name}» پیوستی.', 'You joined "${c.name}".');
+      } else {
+        socialSnack(context, 'این جامعه روی همین دستگاه است؛ باز شد.', 'This community lives on this device — opened.');
+      }
       _open(c.id);
+      return;
+    }
+    if (ref.read(socialControllerProvider).isOnline) {
+      socialSnack(context, 'جامعه‌ای با این کد پیدا نشد.', 'No community has this code.');
       return;
     }
     await showModalBottomSheet<void>(
@@ -55,7 +80,8 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
       builder: (BuildContext c) => Padding(
         padding: const EdgeInsets.fromLTRB(NxSpace.md, 0, NxSpace.md, NxSpace.lg),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
-          Text(code, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2)),
+          Text(code,
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2)),
           const SizedBox(height: 12),
           const OnlineOnlyNotice(
             featureFa: 'پیوستن به جوامع دیگر کاوشگران با کد دعوت',
@@ -71,9 +97,8 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
     final SocialController ctrl = ref.watch(socialControllerProvider);
     final ProfileService profile = ref.watch(profileProvider);
     final List<Community> all = ctrl.communities;
-    final List<Community> shown = all
-        .where((Community c) => (_filter == null || c.kind == _filter) && c.matches(_query))
-        .toList();
+    final List<Community> shown =
+        all.where((Community c) => (_filter == null || c.kind == _filter) && c.matches(_query)).toList();
     final DateTime now = DateTime.now();
     CommunityEvent? next;
     Community? nextOwner;
@@ -84,13 +109,19 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
         nextOwner = c;
       }
     }
-    final int running = all.fold<int>(
-        0, (int s, Community c) => s + c.tournaments.where((CommunityTournament t) => !t.finished).length);
+    final int running =
+        all.fold<int>(0, (int s, Community c) => s + c.tournaments.where((CommunityTournament t) => !t.finished).length);
 
     return NxWorldScaffold(
       title: 'SOCIAL STATION',
       palette: kSocialPalette,
       actions: <Widget>[
+        if (ctrl.isOnline)
+          IconButton(
+            tooltip: context.tx('کشف جوامع', 'Discover communities'),
+            icon: const Icon(Icons.travel_explore_rounded),
+            onPressed: _discover,
+          ),
         IconButton(
           tooltip: context.tx('ورود با کد دعوت', 'Join with code'),
           icon: const Icon(Icons.vpn_key_rounded),
@@ -270,7 +301,8 @@ class _Hero extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                  Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(e.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                   Text(nextCommunity!.name, style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
                 ]),
               ),
@@ -333,7 +365,9 @@ class CommunityCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                  Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  Text(c.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
                   Wrap(spacing: 6, runSpacing: 6, children: <Widget>[
@@ -357,7 +391,9 @@ class CommunityCard extends StatelessWidget {
               if (next != null) ...<Widget>[
                 const Icon(Icons.timer_rounded, size: 14, color: NxColors.gold),
                 const SizedBox(width: 4),
-                CountdownText(target: next.startsAt, style: const TextStyle(color: NxColors.gold, fontWeight: FontWeight.w800, fontSize: 12)),
+                CountdownText(
+                    target: next.startsAt,
+                    style: const TextStyle(color: NxColors.gold, fontWeight: FontWeight.w800, fontSize: 12)),
               ],
             ]),
           ]),
@@ -381,4 +417,79 @@ class _Meta extends StatelessWidget {
           Text(text, style: const TextStyle(color: NxColors.textDim, fontSize: 12, fontWeight: FontWeight.w700)),
         ]),
       );
+}
+
+/// Public communities of other explorers (online) — join with one tap.
+class _DiscoverSheet extends ConsumerStatefulWidget {
+  const _DiscoverSheet({required this.onOpen});
+  final void Function(String id) onOpen;
+
+  @override
+  ConsumerState<_DiscoverSheet> createState() => _DiscoverSheetState();
+}
+
+class _DiscoverSheetState extends ConsumerState<_DiscoverSheet> {
+  List<Community>? _list;
+  String _q = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final List<Community> l = await ref.read(socialControllerProvider).discover(query: _q);
+    if (mounted) setState(() => _list = l);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<Community>? l = _list;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(NxSpace.md, 0, NxSpace.md, NxSpace.md),
+      child: Column(children: <Widget>[
+        Text(context.tx('کشف جوامع', 'Discover communities'), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+        const SizedBox(height: 8),
+        TextField(
+          decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search_rounded), hintText: context.tx('نام جامعه…', 'Community name…')),
+          onChanged: (String v) {
+            _q = v;
+            _load();
+          },
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: l == null
+              ? const Center(child: CircularProgressIndicator())
+              : l.isEmpty
+                  ? Center(
+                      child: Text(context.tx('جامعه‌ی عمومی تازه‌ای پیدا نشد.', 'No new public communities found.'),
+                          style: const TextStyle(color: NxColors.textDim)),
+                    )
+                  : ListView(children: <Widget>[
+                      for (final Community c in l)
+                        ListTile(
+                          leading: Icon(kindIcon(c.kind), color: kindColor(c.kind)),
+                          title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                          subtitle: Text(
+                            '${kindLabel(context, c.kind)} · ${c.members.where((CommunityMember m) => !m.local).length} ${context.tx('عضو', 'members')}'
+                            '${c.description.isEmpty ? '' : ' · ${c.description}'}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: FilledButton(
+                            onPressed: () async {
+                              final bool ok = await ref.read(socialControllerProvider).joinOpen(c.id);
+                              if (ok) widget.onOpen(c.id);
+                            },
+                            child: Text(context.tx('پیوستن', 'Join')),
+                          ),
+                        ),
+                    ]),
+        ),
+      ]),
+    );
+  }
 }

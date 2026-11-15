@@ -130,10 +130,11 @@ class OrbitChatsTab extends ConsumerWidget {
                             ),
                           Expanded(
                             child: Text(orbitChatTitle(context, s.chat),
-                                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800)),
                           ),
-                          if (s.chat.muted)
-                            const Icon(Icons.notifications_off_rounded, size: 14, color: NxColors.textDim),
+                          if (s.chat.muted) const Icon(Icons.notifications_off_rounded, size: 14, color: NxColors.textDim),
                           if (s.chat.pinned)
                             const Padding(
                               padding: EdgeInsetsDirectional.only(start: 4),
@@ -252,8 +253,8 @@ class _OfflineCallsTab extends StatelessWidget {
         const SizedBox(height: 14),
         card(Icons.call_rounded, 'تماس صوتی', 'Voice call', 'صدای شفاف با هاله‌ی صوتی', 'Crystal voice with a reactive aura',
             NxColors.turquoise),
-        card(Icons.videocam_rounded, 'تماس تصویری', 'Video call', 'رو در رو، در هر کجای کهکشان', 'Face to face, anywhere in the galaxy',
-            NxColors.electricBlue),
+        card(Icons.videocam_rounded, 'تماس تصویری', 'Video call', 'رو در رو، در هر کجای کهکشان',
+            'Face to face, anywhere in the galaxy', NxColors.electricBlue),
         card(Icons.groups_rounded, 'تماس گروهی', 'Group call', 'گردهمایی صوتی و تصویری دوستان', 'Voice and video with your crew',
             NxColors.violet),
         const SizedBox(height: 20),
@@ -262,7 +263,8 @@ class _OfflineCallsTab extends StatelessWidget {
             const OracleAvatar(pose: 'calm', size: 80),
             const SizedBox(height: 8),
             Text(
-              context.tx('تاریخچه‌ی تماس خالی است. هیچ تماسی شبیه‌سازی نمی‌شود.', 'Call history is empty. No call is ever simulated.'),
+              context.tx(
+                  'تاریخچه‌ی تماس خالی است. هیچ تماسی شبیه‌سازی نمی‌شود.', 'Call history is empty. No call is ever simulated.'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: NxColors.textDim),
             ),
@@ -342,7 +344,8 @@ class _OfflineContactsTab extends ConsumerWidget {
                     await Clipboard.setData(ClipboardData(text: shareText));
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(context.tx('متن دعوت کپی شد؛ هرجا خواستی بفرست', 'Invite text copied; paste it anywhere'))));
+                          content:
+                              Text(context.tx('متن دعوت کپی شد؛ هرجا خواستی بفرست', 'Invite text copied; paste it anywhere'))));
                     }
                   },
                   icon: const Icon(Icons.share_rounded),
@@ -478,7 +481,6 @@ class _OrbitMessageListPageState extends ConsumerState<OrbitMessageListPage> {
   }
 }
 
-
 // ---------------------------------------------------------------- ONLINE CALLS
 class _OnlineCallsTab extends ConsumerStatefulWidget {
   const _OnlineCallsTab();
@@ -519,7 +521,8 @@ class _OnlineCallsTabState extends ConsumerState<_OnlineCallsTab> {
         children: <Widget>[
           GlassPanel(
             child: Text(
-              context.tx('برای تماس صوتی یا تصویری، گفت‌وگو را باز کن و دکمه‌ی تماس بالای صفحه را بزن. در گروه‌ها تماس گروهی است.',
+              context.tx(
+                  'برای تماس صوتی یا تصویری، گفت‌وگو را باز کن و دکمه‌ی تماس بالای صفحه را بزن. در گروه‌ها تماس گروهی است.',
                   'To call, open a chat and tap the call buttons at the top. In groups the call is a group call.'),
               style: const TextStyle(height: 1.5),
             ),
@@ -688,7 +691,9 @@ class _OrbitFriendsPanelState extends ConsumerState<OrbitFriendsPanel> {
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.person_search_rounded),
               hintText: context.tx('جستجوی کاوشگران با نام کاربری…', 'Search explorers by username…'),
-              suffixIcon: _searching ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)) : null,
+              suffixIcon: _searching
+                  ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
+                  : null,
             ),
             onChanged: _search,
           ),
@@ -786,8 +791,12 @@ class _OrbitFriendsPanelState extends ConsumerState<OrbitFriendsPanel> {
               _userTile(
                 u,
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                  IconButton(tooltip: context.tx('پیام', 'Message'), icon: const Icon(Icons.chat_rounded), onPressed: () => _message(u)),
-                  IconButton(tooltip: context.tx('تماس', 'Call'), icon: const Icon(Icons.call_rounded), onPressed: () => _call(u, false)),
+                  IconButton(
+                      tooltip: context.tx('پیام', 'Message'), icon: const Icon(Icons.chat_rounded), onPressed: () => _message(u)),
+                  IconButton(
+                      tooltip: context.tx('تماس', 'Call'),
+                      icon: const Icon(Icons.call_rounded),
+                      onPressed: () => _call(u, false)),
                   PopupMenuButton<String>(
                     onSelected: (String a) async {
                       if (a == 'video') await _call(u, true);

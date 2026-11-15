@@ -54,6 +54,7 @@ class SupabaseOrbitRepository implements OrbitRepository {
 
   final SupabaseClient c;
   final LocalOrbitRepository local;
+
   /// The offline identity used for Saved Orbit messages written before signing in.
   final String explorerId;
 
@@ -292,8 +293,7 @@ class SupabaseOrbitRepository implements OrbitRepository {
 
   Future<List<OrbitMember>> members(String chatId, {bool fresh = false}) async {
     if (!fresh && _members[chatId] != null) return _members[chatId]!;
-    final List<dynamic> rows =
-        await c.from('nx_chat_members').select('user_id, role, last_read_at').eq('chat_id', chatId);
+    final List<dynamic> rows = await c.from('nx_chat_members').select('user_id, role, last_read_at').eq('chat_id', chatId);
     final List<String> ids = rows.map((dynamic r) => '${(r as Map)['user_id']}').toList();
     final List<dynamic> profs =
         ids.isEmpty ? <dynamic>[] : await c.from('profiles').select('id, username, online_at').inFilter('id', ids);
@@ -322,11 +322,14 @@ class SupabaseOrbitRepository implements OrbitRepository {
   Future<void> updateChat(OrbitChat chat) async {
     if (!chat.online) return local.updateChat(chat);
     _chats[chat.id] = chat;
-    await c.from('nx_chat_members').update(<String, dynamic>{'pinned': chat.pinned, 'muted': chat.muted}).eq('chat_id', chat.id).eq('user_id', me);
+    await c
+        .from('nx_chat_members')
+        .update(<String, dynamic>{'pinned': chat.pinned, 'muted': chat.muted})
+        .eq('chat_id', chat.id)
+        .eq('user_id', me);
     if (!chat.isDirect && chat.isAdmin) {
-      await c
-          .from('nx_chats')
-          .update(<String, dynamic>{'name': chat.name, 'description': chat.description, 'badge_id': chat.badgeId}).eq('id', chat.id);
+      await c.from('nx_chats').update(
+          <String, dynamic>{'name': chat.name, 'description': chat.description, 'badge_id': chat.badgeId}).eq('id', chat.id);
     }
   }
 
