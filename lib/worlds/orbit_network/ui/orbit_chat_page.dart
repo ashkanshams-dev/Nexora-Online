@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
@@ -9,7 +10,10 @@ import '../../../core/widgets/nx_widgets.dart';
 import '../../nova_gallery/models/art_asset.dart';
 import '../../nova_gallery/ui/nova_composer.dart' show showArtAssetPicker;
 import '../models/orbit_models.dart';
+import '../../../core/online/online_service.dart';
+import '../data/supabase_orbit_repository.dart';
 import '../state/orbit_controller.dart';
+import 'orbit_call_page.dart';
 import 'orbit_bubbles.dart';
 import 'orbit_sheets.dart';
 
@@ -133,6 +137,31 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
       case 'invite':
         final String? g = await showArcadeGamePicker(context);
         if (g == null) return;
+        final OrbitChat? target = _ctrl.chatById(widget.chatId);
+        final client = ref.read(onlineProvider).client;
+        if (target != null && target.online && client != null) {
+          // A real private room; the card lets every member join it.
+          try {
+            final dynamic r = await client.rpc('nx_create_room', params: <String, dynamic>{
+              'p_game': g,
+              'p_seats': 10,
+              'p_private': true,
+              'p_quick': false,
+              'p_settings': <String, dynamic>{},
+            });
+            final String code = '${(r as Map)['code']}';
+            await _ctrl.send(widget.chatId,
+                authorName: name, kind: OrbitMessageKind.invite, payload: <String, dynamic>{'gameId': g, 'code': code});
+            await _afterSend();
+            if (mounted) context.push('/online/$g?code=$code');
+          } catch (_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(context.tx('ساخت اتاق آنلاین ممکن نشد.', 'Could not create the online room.'))));
+            }
+          }
+          break;
+        }
         await _ctrl.send(widget.chatId,
             authorName: name, kind: OrbitMessageKind.invite, payload: <String, dynamic>{'gameId': g});
         await _afterSend();
@@ -146,6 +175,53 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
         await showOrbitOnlineOnly(context,
             fa: 'ارسال رسانه و پیام صوتی', en: 'Sending media and voice notes', icon: Icons.attach_file_rounded);
         break;
+    }
+  }
+
+  void _call(OrbitChat chat, {required bool video}) {
+    if (!chat.online) {
+      showOrbitOnlineOnly(context,
+          fa: video ? 'تماس تصویری' : 'تماس صوتی',
+          en: video ? 'Video calls' : 'Voice calls',
+          icon: video ? Icons.videocam_rounded : Icons.call_rounded);
+      return;
+    }
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (BuildContext c) => OrbitCallPage(chatId: chat.id, title: orbitChatTitle(c, chat), video: video),
+    ));
+  }
+
+  Future<void> _addMembers(BuildContext cc, OrbitChat chat) async {
+    final Set<String> picked = <String>{};
+    final Set<String> already = (await _ctrl.members(chat.id)).map((OrbitMember m) => m.id).toSet();
+    if (!cc.mounted) return;
+    final bool? ok = await showModalBottomSheet<bool>(
+      context: cc,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext b) => StatefulBuilder(
+        builder: (BuildContext b2, StateSetter set) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(NxSpace.md, 0, NxSpace.md, NxSpace.lg),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
+            OrbitFriendPicker(selected: picked, exclude: already, onChanged: () => set(() {})),
+            const SizedBox(height: 10),
+            FilledButton(
+              onPressed: picked.isEmpty ? null : () => Navigator.pop(b2, true),
+              child: Text(b2.tx('افزودن (${picked.length})', 'Add (${picked.length})')),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (ok == true) {
+      try {
+        await _ctrl.addMembers(chat.id, picked.toList());
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.tx('فقط مدیران می‌توانند عضو اضافه کنند.', 'Only admins can add members.'))));
+        }
+      }
     }
   }
 
@@ -287,14 +363,53 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
             if (!live.isSaved) ...<Widget>[
               const Divider(),
               Text(cc.tx('اعضا', 'Members'), style: const TextStyle(fontWeight: FontWeight.w800)),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.verified_user_rounded, color: NxColors.gold),
-                title: Text(orbitMyName(cc, profile)),
-                subtitle: Text(cc.tx('مالک · ${profile.explorerId}', 'Owner · ${profile.explorerId}')),
-              ),
-              const OnlineOnlyNotice(featureFa: 'دعوت دوستان به این گفت‌وگو', featureEn: 'Inviting friends to this chat'),
+              if (live.online)
+                FutureBuilder<List<OrbitMember>>(
+                  future: ctrl.members(live.id),
+                  builder: (BuildContext fc, AsyncSnapshot<List<OrbitMember>> snap) {
+                    final List<OrbitMember> mem = snap.data ?? const <OrbitMember>[];
+                    if (!snap.hasData) return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
+                    return Column(children: <Widget>[
+                      for (final OrbitMember m in mem)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(
+                            m.role == 'owner' ? Icons.verified_user_rounded : (m.role == 'admin' ? Icons.shield_rounded : Icons.person_rounded),
+                            color: m.role == 'member' ? NxColors.textDim : NxColors.gold,
+                          ),
+                          title: Text(m.id == ctrl.ownerId ? '${m.name} (${fc.tx('تو', 'you')})' : m.name),
+                          subtitle: Text(m.role == 'owner'
+                              ? fc.tx('مالک', 'Owner')
+                              : (m.role == 'admin' ? fc.tx('مدیر', 'Admin') : fc.tx('عضو', 'Member'))),
+                          trailing: m.onlineNow ? const Icon(Icons.circle, size: 10, color: NxColors.success) : null,
+                          onLongPress: live.role == 'owner' && m.role != 'owner' && !live.isDirect
+                              ? () async {
+                                  await ctrl.online?.setRole(live.id, m.id, m.role == 'admin' ? 'member' : 'admin');
+                                  await ctrl.refresh();
+                                }
+                              : null,
+                        ),
+                    ]);
+                  },
+                )
+              else ...<Widget>[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.verified_user_rounded, color: NxColors.gold),
+                  title: Text(orbitMyName(cc, profile)),
+                  subtitle: Text(cc.tx('مالک · ${profile.explorerId}', 'Owner · ${profile.explorerId}')),
+                ),
+                const OnlineOnlyNotice(featureFa: 'دعوت دوستان به این گفت‌وگو', featureEn: 'Inviting friends to this chat'),
+              ],
+              if (live.online && !live.isDirect && (live.isAdmin || !live.isChannel))
+                OutlinedButton.icon(
+                  onPressed: () => _addMembers(cc, live),
+                  icon: const Icon(Icons.group_add_rounded),
+                  label: Text(cc.tx('افزودن دوستان', 'Add friends')),
+                ),
               const SizedBox(height: 10),
+              if (!live.isDirect && (!live.online || live.isAdmin))
               OutlinedButton.icon(
                 onPressed: () async {
                   await showOrbitChatEditor(cc, kind: live.kind, editing: live);
@@ -309,8 +424,14 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                   final bool? ok = await showDialog<bool>(
                     context: cc,
                     builder: (BuildContext d) => AlertDialog(
-                      title: Text(d.tx('حذف گفت‌وگو؟', 'Delete chat?')),
-                      content: Text(d.tx('همه‌ی پیام‌های آن از این دستگاه پاک می‌شود.', 'All its messages are removed from this device.')),
+                      title: Text(live.online && live.role != 'owner'
+                          ? d.tx('ترک گفت‌وگو؟', 'Leave chat?')
+                          : d.tx('حذف گفت‌وگو؟', 'Delete chat?')),
+                      content: Text(!live.online
+                          ? d.tx('همه‌ی پیام‌های آن از این دستگاه پاک می‌شود.', 'All its messages are removed from this device.')
+                          : (live.role == 'owner' && !live.isDirect
+                              ? d.tx('گفت‌وگو برای همه‌ی اعضا حذف می‌شود.', 'The chat is deleted for every member.')
+                              : d.tx('از این گفت‌وگو خارج می‌شوی.', 'You leave this chat.'))),
                       actions: <Widget>[
                         TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tx('انصراف', 'Cancel'))),
                         FilledButton(
@@ -387,9 +508,15 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
                       Text(
                         chat.isSaved
                             ? context.tx('فقط تو · روی همین دستگاه', 'Only you · on this device')
-                            : (chat.isChannel
-                                ? context.tx('کانال · ۱ عضو (آفلاین)', 'Channel · 1 member (offline)')
-                                : context.tx('گروه · ۱ عضو (آفلاین)', 'Group · 1 member (offline)')),
+                            : chat.isDirect
+                                ? (chat.peerOnlineNow ? context.tx('آنلاین', 'online') : context.tx('گفت‌وگوی خصوصی', 'Private chat'))
+                                : !chat.online
+                                    ? (chat.isChannel
+                                        ? context.tx('کانال · ۱ عضو (آفلاین)', 'Channel · 1 member (offline)')
+                                        : context.tx('گروه · ۱ عضو (آفلاین)', 'Group · 1 member (offline)'))
+                                    : (chat.isChannel
+                                        ? context.tx('کانال · ${chat.memberCount} عضو', 'Channel · ${chat.memberCount} members')
+                                        : context.tx('گروه · ${chat.memberCount} عضو', 'Group · ${chat.memberCount} members')),
                         style: const TextStyle(fontSize: 11, color: NxColors.textDim),
                       ),
                     ]),
@@ -409,12 +536,12 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
             IconButton(
               tooltip: context.tx('تماس صوتی', 'Voice call'),
               icon: const Icon(Icons.call_rounded),
-              onPressed: () => showOrbitOnlineOnly(context, fa: 'تماس صوتی', en: 'Voice calls'),
+              onPressed: () => _call(chat, video: false),
             ),
             IconButton(
               tooltip: context.tx('تماس تصویری', 'Video call'),
               icon: const Icon(Icons.videocam_rounded),
-              onPressed: () => showOrbitOnlineOnly(context, fa: 'تماس تصویری', en: 'Video calls', icon: Icons.videocam_rounded),
+              onPressed: () => _call(chat, video: true),
             ),
           ],
         ],

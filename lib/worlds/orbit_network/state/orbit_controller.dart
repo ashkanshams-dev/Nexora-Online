@@ -1,20 +1,37 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:async';
+
+import '../../../core/online/online_service.dart';
 import '../../../core/profile/profile_service.dart';
 import '../../../core/storage/local_store.dart';
 import '../data/orbit_repository.dart';
+import '../data/supabase_orbit_repository.dart';
 import '../data/orbit_shared_inbox.dart';
 import '../models/orbit_models.dart';
 
-/// Swap for an online implementation later.
-final orbitRepositoryProvider = Provider<OrbitRepository>((ref) => LocalOrbitRepository(LocalStore.instance));
+/// Online (signed in to Supabase): real chats on the server; otherwise the device-only repository.
+final orbitRepositoryProvider = Provider<OrbitRepository>((ref) {
+  final OnlineService o = ref.watch(onlineProvider);
+  final LocalOrbitRepository local = LocalOrbitRepository(LocalStore.instance);
+  final client = o.client;
+  if (o.isOnline && client != null) {
+    return SupabaseOrbitRepository(client, local, explorerId: ref.read(profileProvider).explorerId);
+  }
+  return local;
+});
 
-final orbitControllerProvider = ChangeNotifierProvider<OrbitController>((ref) => OrbitController(
-      ref.watch(orbitRepositoryProvider),
-      OrbitSharedInbox(LocalStore.instance),
-      ownerId: ref.read(profileProvider).explorerId,
-    ));
+final orbitControllerProvider = ChangeNotifierProvider<OrbitController>((ref) {
+  final OrbitRepository repo = ref.watch(orbitRepositoryProvider);
+  final OnlineService o = ref.read(onlineProvider);
+  return OrbitController(
+    repo,
+    OrbitSharedInbox(LocalStore.instance),
+    ownerId:
+        repo is SupabaseOrbitRepository ? (o.uid ?? ref.read(profileProvider).explorerId) : ref.read(profileProvider).explorerId,
+  );
+});
 
 class OrbitChatSummary {
   OrbitChatSummary(this.chat, this.last, this.unread);
@@ -47,8 +64,52 @@ class OrbitXpRules {
 
 class OrbitController extends ChangeNotifier {
   OrbitController(this.repo, this.inbox, {required this.ownerId}) {
+    final OrbitRepository r = repo;
+    if (r is SupabaseOrbitRepository) {
+      r.listen(onChange: _onRemoteChange, onCall: (_) {});
+    }
     refresh();
   }
+
+  /// The server-backed repository when signed in (real members, calls), else null.
+  SupabaseOrbitRepository? get online => repo is SupabaseOrbitRepository ? repo as SupabaseOrbitRepository : null;
+  bool get isOnline => online != null;
+
+  Timer? _debounce;
+  final Set<String> _dirty = <String>{};
+
+  void _onRemoteChange(String chatId) {
+    if (chatId.isNotEmpty) _dirty.add(chatId);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () async {
+      if (_disposed) return;
+      final List<String> open = _dirty.where(_messages.containsKey).toList();
+      _dirty.clear();
+      for (final String id in open) {
+        await repo.markRead(id);
+      }
+      await refresh();
+    });
+  }
+
+  /// Opens (or creates) the 1:1 chat with a real user. Online only.
+  Future<String?> openDirect(String userId) async {
+    final SupabaseOrbitRepository? r = online;
+    if (r == null) return null;
+    final String id = await r.openDirect(userId);
+    await refresh();
+    return id;
+  }
+
+  Future<int> addMembers(String chatId, List<String> users) async {
+    final SupabaseOrbitRepository? r = online;
+    if (r == null || users.isEmpty) return 0;
+    final int n = await r.addMembers(chatId, users);
+    await refresh();
+    return n;
+  }
+
+  Future<List<OrbitMember>> members(String chatId) async => await online?.members(chatId, fresh: true) ?? <OrbitMember>[];
 
   final OrbitRepository repo;
   final OrbitSharedInbox inbox;
@@ -65,6 +126,8 @@ class OrbitController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _debounce?.cancel();
+    online?.stop();
     super.dispose();
   }
 
@@ -123,15 +186,22 @@ class OrbitController extends ChangeNotifier {
     String? replyToId,
   }) async {
     if (kind == OrbitMessageKind.text && text.trim().isEmpty) return null;
-    final m = await repo.send(
-      chatId: chatId,
-      authorId: ownerId,
-      authorName: authorName,
-      kind: kind,
-      text: text,
-      payload: payload,
-      replyToId: replyToId,
-    );
+    final OrbitMessage m;
+    try {
+      m = await repo.send(
+        chatId: chatId,
+        authorId: ownerId,
+        authorName: authorName,
+        kind: kind,
+        text: text,
+        payload: payload,
+        replyToId: replyToId,
+      );
+    } catch (e) {
+      debugPrint('orbit send refused: $e');
+      await refresh();
+      return null;
+    }
     await refresh();
     return m;
   }
@@ -174,15 +244,27 @@ class OrbitController extends ChangeNotifier {
     required String ownerName,
     String description = '',
     String badgeId = '',
+    List<String> members = const <String>[],
   }) async {
-    final c = await repo.createChat(
-      kind: kind,
-      name: name,
-      ownerId: ownerId,
-      ownerName: ownerName,
-      description: description,
-      badgeId: badgeId,
-    );
+    final OrbitRepository r = repo;
+    final c = r is SupabaseOrbitRepository
+        ? await r.createChat(
+            kind: kind,
+            name: name,
+            ownerId: ownerId,
+            ownerName: ownerName,
+            description: description,
+            badgeId: badgeId,
+            members: members,
+          )
+        : await repo.createChat(
+            kind: kind,
+            name: name,
+            ownerId: ownerId,
+            ownerName: ownerName,
+            description: description,
+            badgeId: badgeId,
+          );
     await refresh();
     return c;
   }
@@ -209,9 +291,8 @@ class OrbitController extends ChangeNotifier {
       authorName: authorName,
       kind: item.type == SharedItem.gameInvite ? OrbitMessageKind.invite : OrbitMessageKind.shared,
       text: item.text,
-      payload: item.type == SharedItem.gameInvite
-          ? <String, dynamic>{'gameId': item.gameId ?? '', 'text': item.text}
-          : item.toJson(),
+      payload:
+          item.type == SharedItem.gameInvite ? <String, dynamic>{'gameId': item.gameId ?? '', 'text': item.text} : item.toJson(),
     );
     await inbox.remove(item.key);
     await refresh();

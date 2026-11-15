@@ -16,6 +16,7 @@ import '../worlds/nova_gallery/nova_gallery_page.dart';
 import '../worlds/onboarding/onboarding_page.dart';
 import '../worlds/oracle_core/oracle_core_page.dart';
 import '../worlds/orbit_network/orbit_network_page.dart';
+import '../worlds/orbit_network/ui/orbit_call_page.dart';
 import '../worlds/personal_orbit/personal_orbit_page.dart';
 import '../worlds/settings/account_page.dart';
 import '../worlds/settings/settings_page.dart';
@@ -66,6 +67,16 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) => OnlineLobbyPage(
           gameId: state.pathParameters['gameId'] ?? '',
           joinCode: state.uri.queryParameters['code'],
+        ),
+      ),
+      GoRoute(
+        path: '/call/:chatId',
+        builder: (context, state) => OrbitCallPage(
+          chatId: state.pathParameters['chatId'] ?? '',
+          callId: state.uri.queryParameters['call'],
+          video: state.uri.queryParameters['video'] == '1',
+          title: state.uri.queryParameters['title'] ?? 'NEXORA',
+          startNew: false,
         ),
       ),
       GoRoute(

@@ -135,9 +135,10 @@ begin
   select id into cid from nx_chats where dm_key = k;
   if cid is null then
     insert into nx_chats(kind, owner, dm_key) values ('direct', me, k) returning id into cid;
-    insert into nx_chat_members(chat_id, user_id, role) values (cid, me, 'member'), (cid, p_user, 'member')
-      on conflict do nothing;
   end if;
+  -- (re)join both sides: a person who removed the chat gets it back on the next message
+  insert into nx_chat_members(chat_id, user_id, role) values (cid, me, 'member'), (cid, p_user, 'member')
+    on conflict do nothing;
   return cid;
 end $$;
 

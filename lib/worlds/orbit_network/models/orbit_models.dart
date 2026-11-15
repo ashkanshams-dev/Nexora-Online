@@ -19,13 +19,14 @@ T _enumByName<T extends Enum>(List<T> values, Object? name, T fallback) {
 /// The self chat id ("Saved Orbit").
 const String kSavedOrbitId = 'saved_orbit';
 
-enum OrbitChatKind { saved, group, channel }
+/// [direct] = 1:1 chat with a real user (online only).
+enum OrbitChatKind { saved, group, channel, direct }
 
 /// Delivery state of a message. Offline, group/channel messages stay [queued]
 /// until the server exists; Saved Orbit messages are [read] by you on this device.
 enum OrbitDelivery { queued, sent, delivered, read }
 
-enum OrbitMessageKind { text, art, shared, invite, system }
+enum OrbitMessageKind { text, art, shared, invite, system, call }
 
 class OrbitChat {
   OrbitChat({
@@ -39,10 +40,25 @@ class OrbitChat {
     this.pinned = false,
     this.muted = false,
     this.lastReadAt,
+    this.role = 'owner',
+    this.peerId,
+    this.peerName,
+    this.peerOnlineAt,
+    this.memberCount = 1,
+    this.online = false,
   });
 
   final String id;
   final OrbitChatKind kind;
+  /// Online: my role in this chat ('owner' | 'admin' | 'member').
+  String role;
+  /// Direct chats: the other person.
+  final String? peerId;
+  final String? peerName;
+  final DateTime? peerOnlineAt;
+  int memberCount;
+  /// Lives on the server (real members) rather than only on this device.
+  final bool online;
   String name;
   String description;
   /// Club badge id (AppAssets.clubBadge), empty for none.
@@ -55,9 +71,13 @@ class OrbitChat {
 
   bool get isSaved => kind == OrbitChatKind.saved;
   bool get isChannel => kind == OrbitChatKind.channel;
+  bool get isDirect => kind == OrbitChatKind.direct;
+  bool get isAdmin => role == 'owner' || role == 'admin';
+  bool get peerOnlineNow =>
+      peerOnlineAt != null && DateTime.now().toUtc().difference(peerOnlineAt!.toUtc()).inMinutes < 3;
 
   /// Channels: only the owner/admins publish.
-  bool canPost(String userId) => kind != OrbitChatKind.channel || userId == ownerId;
+  bool canPost(String userId) => kind != OrbitChatKind.channel || userId == ownerId || (online && isAdmin);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
@@ -135,6 +155,8 @@ class OrbitMessage {
         return (fa ? '🔗 اشتراک: ' : '🔗 Shared: ') + '${payload['text'] ?? text}';
       case OrbitMessageKind.invite:
         return fa ? '🎮 دعوت به آرکید' : '🎮 Arcade invite';
+      case OrbitMessageKind.call:
+        return payload['video'] == true ? (fa ? '📹 تماس تصویری' : '📹 Video call') : (fa ? '📞 تماس صوتی' : '📞 Voice call');
     }
   }
 

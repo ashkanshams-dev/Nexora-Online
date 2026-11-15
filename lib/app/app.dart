@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/online/call_watcher.dart';
 import '../core/online/cloud_profile_sync.dart';
 import '../core/online/invite_watcher.dart';
 import '../core/online/online_service.dart';
@@ -22,6 +23,13 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
   final GlobalKey<ScaffoldMessengerState> _messenger = GlobalKey<ScaffoldMessengerState>();
   late final InviteWatcher _invites =
       InviteWatcher(ref, _messenger, (String game, String code) => _router.push('/online/$game?code=$code'));
+  late final CallWatcher _calls = CallWatcher(ref, _messenger, (String chat, String call, bool video, String title) {
+    _router.push(Uri(path: '/call/$chat', queryParameters: <String, String>{
+      'call': call,
+      'video': video ? '1' : '0',
+      'title': title,
+    }).toString());
+  });
 
   @override
   void initState() {
@@ -31,12 +39,15 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
       ref.read(cloudSyncProvider).start();
       ref.read(onlineProvider).addListener(_invites.sync);
       _invites.sync();
+      ref.read(onlineProvider).addListener(_calls.sync);
+      _calls.sync();
     });
   }
 
   @override
   void dispose() {
     _invites.dispose();
+    _calls.dispose();
     _router.dispose();
     super.dispose();
   }

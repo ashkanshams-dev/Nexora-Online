@@ -6,6 +6,7 @@ import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../core/widgets/nx_widgets.dart';
+import '../../../core/online/social_api.dart';
 import '../data/orbit_shared_inbox.dart';
 import '../models/arcade_refs.dart';
 import '../models/orbit_models.dart';
@@ -96,6 +97,7 @@ class _ChatEditorState extends ConsumerState<_ChatEditor> {
   late final TextEditingController _desc = TextEditingController(text: widget.editing?.description ?? '');
   late String _badge = widget.editing?.badgeId ?? kOrbitBadges.first;
   bool _busy = false;
+  final Set<String> _picked = <String>{};
 
   @override
   void dispose() {
@@ -125,6 +127,7 @@ class _ChatEditorState extends ConsumerState<_ChatEditor> {
       ownerName: me,
       description: _desc.text,
       badgeId: _badge,
+      members: _picked.toList(),
     );
     profile.award(
       'orbit.create',
@@ -175,7 +178,10 @@ class _ChatEditorState extends ConsumerState<_ChatEditor> {
           const SizedBox(height: 6),
           OrbitBadgePicker(selected: _badge, onChanged: (String b) => setState(() => _badge = b)),
           const SizedBox(height: 12),
-          const OnlineOnlyNotice(featureFa: 'افزودن اعضای واقعی', featureEn: 'Adding real members'),
+          if (!editing && ref.watch(orbitControllerProvider).isOnline)
+            OrbitFriendPicker(selected: _picked, onChanged: () => setState(() {}))
+          else if (!editing)
+            const OnlineOnlyNotice(featureFa: 'افزودن اعضای واقعی', featureEn: 'Adding real members'),
           const SizedBox(height: 12),
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: WorldPalette.orbit.primary),
@@ -265,7 +271,71 @@ Future<String?> showOrbitChatPicker(BuildContext context) {
 }
 
 String orbitChatTitle(BuildContext context, OrbitChat chat) =>
-    chat.isSaved ? context.tx('مدار ذخیره (Saved Orbit)', 'Saved Orbit') : chat.name;
+    chat.isSaved ? context.tx('مدار ذخیره (Saved Orbit)', 'Saved Orbit') : (chat.isDirect ? (chat.peerName ?? chat.name) : chat.name);
+
+/// Multi-select of my real friends (mutual follows). Online only.
+class OrbitFriendPicker extends ConsumerStatefulWidget {
+  const OrbitFriendPicker({super.key, required this.selected, required this.onChanged, this.exclude = const <String>{}});
+  final Set<String> selected;
+  final VoidCallback onChanged;
+  final Set<String> exclude;
+
+  @override
+  ConsumerState<OrbitFriendPicker> createState() => _OrbitFriendPickerState();
+}
+
+class _OrbitFriendPickerState extends ConsumerState<OrbitFriendPicker> {
+  List<NxUser>? _friends;
+
+  @override
+  void initState() {
+    super.initState();
+    final repo = ref.read(orbitControllerProvider).online;
+    if (repo != null) {
+      SocialApi(repo.c).friends().then((List<NxUser> f) {
+        if (mounted) setState(() => _friends = f.where((NxUser u) => !widget.exclude.contains(u.id)).toList());
+      }, onError: (Object _) {
+        if (mounted) setState(() => _friends = <NxUser>[]);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<NxUser>? f = _friends;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
+      Text(context.tx('اعضا از میان دوستانت', 'Members from your friends'), style: const TextStyle(fontWeight: FontWeight.w800)),
+      if (f == null)
+        const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()))
+      else if (f.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            context.tx('هنوز دوستی نداری؛ از بخش «مخاطبان» دوست پیدا کن.', 'No friends yet — find some in Contacts.'),
+            style: const TextStyle(color: NxColors.textDim, fontSize: 12),
+          ),
+        )
+      else
+        for (final NxUser u in f)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            value: widget.selected.contains(u.id),
+            title: Text(u.username),
+            subtitle: Text('Lv ${u.level}${u.isOnlineNow ? ' · ●' : ''}'),
+            onChanged: (bool? v) {
+              if (v == true) {
+                widget.selected.add(u.id);
+              } else {
+                widget.selected.remove(u.id);
+              }
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+    ]);
+  }
+}
 
 /// Lists items other worlds shared. If [chatId] is given, tapping delivers there;
 /// otherwise the user picks a chat.

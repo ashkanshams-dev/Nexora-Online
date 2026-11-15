@@ -124,6 +124,19 @@ class OrbitMessageBubble extends StatelessWidget {
     if (m.kind == OrbitMessageKind.system) {
       final String by = '${m.payload['by'] ?? ''}';
       final bool channel = m.text == 'channel_created';
+      if (m.text == 'member_added') {
+        final String who = '${m.payload['who'] ?? ''}';
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: NxPill(
+              icon: Icons.person_add_alt_1_rounded,
+              color: WorldPalette.orbit.primary,
+              label: context.tx('$by، $who را اضافه کرد', '$by added $who'),
+            ),
+          ),
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -185,7 +198,9 @@ class OrbitMessageBubble extends StatelessWidget {
         else ...<Widget>[
           if (m.kind == OrbitMessageKind.art) _ArtBody(assetRef: '${m.payload['asset'] ?? ''}'),
           if (m.kind == OrbitMessageKind.shared) OrbitSharedCard(payload: m.payload),
-          if (m.kind == OrbitMessageKind.invite) OrbitInviteCard(gameId: '${m.payload['gameId'] ?? ''}'),
+          if (m.kind == OrbitMessageKind.invite)
+            OrbitInviteCard(gameId: '${m.payload['gameId'] ?? ''}', code: '${m.payload['code'] ?? ''}'),
+          if (m.kind == OrbitMessageKind.call) OrbitCallCard(message: m, mine: mine),
           if (m.text.isNotEmpty && m.kind != OrbitMessageKind.shared && m.kind != OrbitMessageKind.invite)
             Padding(
               padding: EdgeInsets.only(top: m.kind == OrbitMessageKind.art ? 6 : 0),
@@ -339,9 +354,11 @@ class OrbitSharedCard extends StatelessWidget {
 
 /// Invite card that launches the Arcade game setup.
 class OrbitInviteCard extends StatelessWidget {
-  const OrbitInviteCard({super.key, required this.gameId, this.note = ''});
+  const OrbitInviteCard({super.key, required this.gameId, this.note = '', this.code = ''});
   final String gameId;
   final String note;
+  /// Online room code: Play joins that real room.
+  final String code;
 
   @override
   Widget build(BuildContext context) {
@@ -382,11 +399,46 @@ class OrbitInviteCard extends StatelessWidget {
         const SizedBox(height: 6),
         FilledButton.icon(
           style: FilledButton.styleFrom(backgroundColor: accent, padding: const EdgeInsets.symmetric(vertical: 10)),
-          onPressed: g == null ? null : () => context.push('/arcade/${g.id}'),
+          onPressed: g == null ? null : () => context.push(code.isEmpty ? '/arcade/${g.id}' : '/online/${g.id}?code=$code'),
           icon: const Icon(Icons.play_arrow_rounded),
-          label: Text(context.tx('بازی کن', 'Play')),
+          label: Text(code.isEmpty ? context.tx('بازی کن', 'Play') : context.tx('ورود به اتاق $code', 'Join room $code')),
         ),
       ]),
     );
+  }
+}
+
+
+/// A call started in this chat (kind = call). Join opens the real LiveKit call.
+class OrbitCallCard extends StatelessWidget {
+  const OrbitCallCard({super.key, required this.message, required this.mine});
+  final OrbitMessage message;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool video = message.payload['video'] == true;
+    final bool recent = DateTime.now().difference(message.createdAt).inMinutes < 30;
+    return Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+      Icon(video ? Icons.videocam_rounded : Icons.call_rounded, color: WorldPalette.orbit.primary),
+      const SizedBox(width: 8),
+      Text(
+        mine
+            ? (video ? context.tx('تماس تصویری گرفتی', 'You started a video call') : context.tx('تماس صوتی گرفتی', 'You started a voice call'))
+            : (video ? context.tx('تماس تصویری', 'Video call') : context.tx('تماس صوتی', 'Voice call')),
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      if (recent) ...<Widget>[
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () => context.push(Uri(path: '/call/${message.chatId}', queryParameters: <String, String>{
+            'call': '${message.payload['call'] ?? ''}',
+            'video': video ? '1' : '0',
+            'title': message.authorName,
+          }).toString()),
+          child: Text(context.tx('پیوستن', 'Join')),
+        ),
+      ],
+    ]);
   }
 }
