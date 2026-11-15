@@ -79,9 +79,112 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
 
   GameLaunch get _l => widget.launch;
   bool get _isBotTurn => _l.vsBot && _match.current == 1;
-  bool get _humanCanAct => !_isBotTurn && _stage == _Stage.aiming && !_match.isOver && !_spinOpen;
+  bool get _humanCanAct =>
+      !_isBotTurn &&
+      _stage == _Stage.aiming &&
+      !_match.isOver &&
+      !_spinOpen &&
+      (!_l.online || (_netReady && _synced && _match.current == _l.mySeat));
+
+  // ------------------------------------------------------------- online
+  // Same deterministic table physics on both phones from the same cue input; the authority posts
+  // a snapshot after each shot so both tables always agree.
+  NetInbox? _inbox;
+  bool _netReady = true;
+  bool _synced = true;
+  double _syncWait = 0;
+  bool _remoteShot = false;
+
+  String _hash() => hashOf('${_match.toSnap()}');
+
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      _netReady = true;
+      _synced = true;
+      _scene.syncLast();
+      if (_match.isOver) {
+        _stage = _Stage.over;
+        _endWait = 1.0;
+      } else {
+        _stage = _Stage.aiming;
+        _prepareTurn();
+      }
+      _syncScene();
+      setState(() {});
+      return;
+    }
+    final String a = '${m.data['a']}';
+    final int sc = (m.data['sc'] as num?)?.toInt() ?? -1;
+    if (m.replay) {
+      if (a == 'shot' && sc == _match.shotCount) {
+        final PoolShot shot = _shotFrom(m.data);
+        if (_match.beginShot(shot)) {
+          int guard = 0;
+          while (!_match.world.tick() && guard < 200000) {
+            guard++;
+          }
+          _match.finishShot();
+        }
+      } else if (a == 'snap' && sc == _match.shotCount) {
+        _match.applySnap(Map<String, dynamic>.from(m.data['m'] as Map));
+      }
+      return;
+    }
+    while (mounted && (_stage == _Stage.rolling || _stage == _Stage.striking)) {
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    if (!mounted) return;
+    if (a == 'snap') {
+      if (sc == _match.shotCount) {
+        final String want = '${m.data['h'] ?? ''}';
+        if (want != _hash()) {
+          _l.net?.verify(-1, want, _hash());
+          _match.applySnap(Map<String, dynamic>.from(m.data['m'] as Map));
+          _scene.syncLast();
+          _prepareTurn();
+        }
+      }
+      _synced = true;
+      _syncScene();
+      setState(() {});
+    } else if (a == 'shot') {
+      if (sc != _match.shotCount || _stage != _Stage.aiming || _match.isOver) return;
+      _l.net?.verify(m.seq, m.data['h'] as String?, _hash());
+      final PoolShot shot = _shotFrom(m.data);
+      if (shot.cueX != null && shot.cueY != null) _match.placeCue(shot.cueX!, shot.cueY!);
+      _scene.aimAngle = math.atan2(shot.dirY, shot.dirX);
+      _remoteShot = true;
+      _shoot(shot);
+      _remoteShot = false;
+    }
+  }
+
+  PoolShot _shotFrom(Map<String, dynamic> d) => PoolShot(
+        dirX: (d['dx'] as num).toDouble(),
+        dirY: (d['dy'] as num).toDouble(),
+        power: (d['p'] as num).toDouble(),
+        spin: (d['s'] as num?)?.toDouble() ?? 0,
+        side: (d['e'] as num?)?.toDouble() ?? 0,
+        cueX: (d['cx'] as num?)?.toDouble(),
+        cueY: (d['cy'] as num?)?.toDouble(),
+      );
+
+  void _postSettle() {
+    final NetLink? net = _l.net;
+    if (net == null) return;
+    if (net.isAuthority) {
+      net.send(<String, dynamic>{'a': 'snap', 'sc': _match.shotCount, 'm': _match.toSnap(), 'h': _hash()}, kind: 'snap');
+      _synced = true;
+    } else {
+      _synced = false;
+      _syncWait = 0;
+    }
+  }
 
   String _name(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) return _l.playerName.isEmpty ? _l.tx('بازیکن ۱', 'Player 1') : _l.playerName;
     if (_l.vsBot) {
       if (_l.difficulty == BotDifficulty.easy) return _l.tx('ربات نکسورا · آسان', 'NEXORA Bot · Easy');
@@ -115,10 +218,19 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
     _bannerColor = _match.current == 0 ? _p0Color : _p1Color;
     _bannerLeft = 2.2;
     _prepareTurn();
+    final NetLink? net = _l.net;
+    if (net != null) {
+      _netReady = false;
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    }
   }
 
   @override
   void dispose() {
+    _inbox?.close();
     _ticker.dispose();
     _match.world.onImpact = null;
     _match.world.onPocket = null;
@@ -225,6 +337,14 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
     switch (_stage) {
       case _Stage.aiming:
         if (_isBotTurn) _botTick(dt);
+        if (_l.online && !_synced) {
+          _syncWait += dt;
+          if (_syncWait > 3.5) {
+            _synced = true; // authority silent: our identical simulation stands
+            _syncScene();
+            setState(() {});
+          }
+        }
         break;
       case _Stage.striking:
         _strikeT += dt / 0.11;
@@ -335,6 +455,21 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
   // ---------------------------------------------------------------- shooting
   void _shoot(PoolShot shot) {
     if (_match.validate(shot) != null) return;
+    if (_l.online && !_remoteShot) {
+      final PoolBall c = _match.cue;
+      _l.net!.send(<String, dynamic>{
+        'a': 'shot',
+        'sc': _match.shotCount,
+        'dx': shot.dirX,
+        'dy': shot.dirY,
+        'p': shot.power,
+        's': shot.spin,
+        'e': shot.side,
+        if (_match.ballInHand) 'cx': c.x,
+        if (_match.ballInHand) 'cy': c.y,
+        'h': _hash(),
+      });
+    }
     _pending = shot;
     _strikeT = 0;
     _stage = _Stage.striking;
@@ -367,6 +502,7 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
   void _onShotDone() {
     final PoolShotReport r = _match.finishShot();
     _scene.syncLast();
+    _postSettle();
     if (_match.isOver) {
       _stage = _Stage.over;
       _syncScene();
@@ -448,10 +584,13 @@ class _BilliardsGameState extends State<BilliardsGame> with SingleTickerProvider
     final int w = _match.winner ?? 1;
     final int s0 = _match.pottedCount(0) + (w == 0 ? 1 : 0);
     final int s1 = _match.pottedCount(1) + (w == 1 ? 1 : 0);
+    final int me = _l.mySeat;
     _l.onFinish(GameResult(
-      outcome: w == 0 ? GameOutcome.win : GameOutcome.loss,
-      score: s0,
-      opponentScore: s1,
+      outcome: w == me ? GameOutcome.win : GameOutcome.loss,
+      score: me == 0 ? s0 : s1,
+      opponentScore: me == 0 ? s1 : s0,
+      winnerSeats: <int>[w],
+      scores: <int>[s0, s1],
       summaryFa: '${_name(w)} برنده‌ی ایت‌بال شد · ${_match.shotCount} ضربه',
       summaryEn: '${_name(w)} won the 8-ball match · ${_match.shotCount} shots',
     ));

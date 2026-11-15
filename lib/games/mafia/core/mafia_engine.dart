@@ -424,6 +424,24 @@ class MafiaEngine {
     ));
   }
 
+  /// Online: a player left the match. They are out of the game (role revealed) and the
+  /// win condition is re-checked. Offline play never calls this.
+  void leave(int id) {
+    final MafiaPlayer p = players[id];
+    if (!p.alive) return;
+    p.alive = false;
+    p.diedOnDay = day;
+    p.roleRevealed = true;
+    log.add(GameLogEntry(
+      day: day,
+      night: isNight,
+      kind: LogKind.death,
+      fa: '${p.name} (${p.role.labelFa}) بازی را ترک کرد.',
+      en: '${p.name} (${p.role.labelEn}) left the game.',
+    ));
+    _checkWinner();
+  }
+
   /// Adds a public line to the log (speech, notes).
   void addLog(LogKind kind, String fa, String en, {Set<int>? visibleTo}) {
     log.add(GameLogEntry(day: day, night: isNight, kind: kind, fa: fa, en: en, visibleTo: visibleTo));

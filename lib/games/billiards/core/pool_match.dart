@@ -131,6 +131,47 @@ class PoolMatch {
     return m;
   }
 
+  /// Online sync: full resting-state snapshot (balls + rules state).
+  Map<String, dynamic> toSnap() => <String, dynamic>{
+        'b': <List<num>>[
+          for (final PoolBall b in balls) <num>[b.x, b.y, b.pocketed ? b.pocket : -1],
+        ],
+        'cur': current,
+        'g': <int>[groups[0].index, groups[1].index],
+        'ph': phase.index,
+        'brk': isBreak ? 1 : 0,
+        'bih': ballInHand ? 1 : 0,
+        'k': kitchenOnly ? 1 : 0,
+        'w': winner,
+        'er': endReason.index,
+        'sc': shotCount,
+      };
+
+  void applySnap(Map<String, dynamic> j) {
+    final List<dynamic> bs = (j['b'] as List<dynamic>?) ?? const <dynamic>[];
+    for (int i = 0; i < bs.length && i < balls.length; i++) {
+      final List<dynamic> e = bs[i] as List<dynamic>;
+      final int pk = (e[2] as num).toInt();
+      balls[i]
+        ..x = (e[0] as num).toDouble()
+        ..y = (e[1] as num).toDouble()
+        ..vx = 0
+        ..vy = 0
+        ..pocketed = pk >= 0
+        ..pocket = pk;
+    }
+    current = (j['cur'] as num).toInt();
+    final List<dynamic> g = (j['g'] as List<dynamic>?) ?? const <dynamic>[0, 0];
+    groups = <PoolGroup>[PoolGroup.values[(g[0] as num).toInt()], PoolGroup.values[(g[1] as num).toInt()]];
+    phase = PoolPhase.values[(j['ph'] as num).toInt()];
+    isBreak = (j['brk'] as num).toInt() == 1;
+    ballInHand = (j['bih'] as num).toInt() == 1;
+    kitchenOnly = (j['k'] as num).toInt() == 1;
+    winner = j['w'] == null ? null : (j['w'] as num).toInt();
+    endReason = PoolEndReason.values[(j['er'] as num).toInt()];
+    shotCount = (j['sc'] as num).toInt();
+  }
+
   // ---------------------------------------------------------------- queries
   List<int> groupBalls(PoolGroup g) {
     if (g == PoolGroup.solids) return const <int>[1, 2, 3, 4, 5, 6, 7];

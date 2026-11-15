@@ -386,7 +386,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   }
 
   Widget _seatPicker(BuildContext context, GameInfo game, int value, ValueChanged<int> onPick) {
-    final int min = widget.gameId == 'mafia' ? 5 : game.minPlayers;
+    final int min = widget.gameId == 'mafia' ? 6 : game.minPlayers;
     final int max = widget.gameId == 'mafia' ? 10 : game.maxPlayers;
     if (max <= min) return const SizedBox.shrink();
     return Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
@@ -493,7 +493,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
     final bool host = r['host'] == _me;
     final int seats = (r['seats'] as num?)?.toInt() ?? 2;
     final bool quick = r['quick'] == true;
-    final int minSeats = widget.gameId == 'mafia' ? 5 : (game?.minPlayers ?? 2);
+    final int minSeats = widget.gameId == 'mafia' ? 6 : (game?.minPlayers ?? 2);
     final bool canStart = host && _seats.length >= minSeats && r['status'] == 'lobby';
     final _Seat? mine = _seats.where((_Seat s) => s.userId == _me).firstOrNull;
     final bool allReady = _seats.every((_Seat s) => s.ready || s.seat == 0);

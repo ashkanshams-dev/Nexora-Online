@@ -67,6 +67,7 @@ final List<GameInfo> kGames = <GameInfo>[
     maxPlayers: 2,
     accent: const Color(0xFF00C2FF),
     builder: buildBilliardsGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'backgammon',
@@ -168,6 +169,7 @@ final List<GameInfo> kGames = <GameInfo>[
     defaultPlayers: 8,
     accent: const Color(0xFFFF5A6E),
     builder: buildMafiaGame,
+    supportsOnline: true,
   ),
 ];
 

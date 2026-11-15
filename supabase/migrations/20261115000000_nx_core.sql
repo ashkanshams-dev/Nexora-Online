@@ -295,8 +295,8 @@ end $$;
 create or replace function public.nx_game_bounds(p_game text, out min_seats int, out max_seats int)
 language sql immutable as $$
   select case p_game when 'ludo' then 2 when 'snakes_ladders' then 2 when 'uno' then 2 when 'quiz' then 2
-                     when 'mafia' then 5 else 2 end,
-         case p_game when 'ludo' then 4 when 'snakes_ladders' then 4 when 'uno' then 4 when 'quiz' then 6
+                     when 'mafia' then 6 else 2 end,
+         case p_game when 'ludo' then 4 when 'snakes_ladders' then 4 when 'uno' then 4 when 'quiz' then 2
                      when 'mafia' then 10 else 2 end
 $$;
 
