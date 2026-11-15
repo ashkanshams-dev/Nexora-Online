@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/backend/backend_gateway.dart';
+import '../../core/backend/supabase_backend.dart';
 import '../../core/profile/achievements.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/settings/app_settings.dart';
@@ -98,6 +100,7 @@ class _OracleCorePageState extends ConsumerState<OracleCorePage> {
   final FocusNode _focus = FocusNode();
   final List<_ChatMsg> _msgs = <_ChatMsg>[];
   late final OfflineOracleEngine _engine;
+  RemoteOracleEngine? _remote;
   bool _thinking = false;
   bool _initialAsked = false;
 
@@ -108,6 +111,10 @@ class _OracleCorePageState extends ConsumerState<OracleCorePage> {
       for (final GameInfo g in kGames)
         g.id: OracleGameInfo(id: g.id, nameFa: g.nameFa, nameEn: g.nameEn, rulesFa: g.rulesFa, rulesEn: g.rulesEn),
     });
+    final BackendGateway be = ref.read(backendProvider);
+    if (be is SupabaseBackend) {
+      _remote = RemoteOracleEngine(invoke: be.oracleInvoke, offline: _engine);
+    }
     _load();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _jumpToEnd();
@@ -221,7 +228,9 @@ class _OracleCorePageState extends ConsumerState<OracleCorePage> {
 
     OracleReply reply;
     try {
-      reply = await _engine.ask(q, _context());
+      final RemoteOracleEngine? remote = _remote;
+      final bool online = ref.read(backendProvider).isOnline;
+      reply = remote != null && online ? await remote.ask(q, _context()) : await _engine.ask(q, _context());
     } catch (_) {
       reply = const OracleReply(
         textFa: 'متأسفم، در پردازش این پیام خطایی رخ داد. لطفاً دوباره بپرس.',

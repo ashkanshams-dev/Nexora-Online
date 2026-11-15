@@ -890,24 +890,98 @@ class OfflineOracleEngine implements OracleEngine {
   Future<OracleReply> ask(String input, OracleContext context) async => brain.respond(input, context);
 }
 
-/// Placeholder for the online engine (NOT used in the offline build).
+/// Online engine: the project's `oracle-chat` Edge Function (LLM key server-side, per-user daily limit).
 ///
-/// Plan (STEP_27): a Supabase Edge Function proxies an LLM (API key server-side
-/// only, rate limited, cost logged). The client would POST
-/// `{text, context: {world, level, ...minimal non-private fields}}` to [endpoint]
-/// and receive `{textFa, textEn, actions[], pose}`; tool calls (navigate,
-/// change_setting, explain_rules, ...) map 1:1 onto [OracleAction]. Until that
-/// exists this engine answers honestly that it is not connected.
+/// Contract (deployed function): POST `{messages:[{role,content}], ctx}` with the user's JWT →
+/// `{message:{role:'assistant', content, tool_calls?}, model}`. The function's tools belong to the other
+/// NEXORA app, so this client never executes them: it answers each with `not_available_in_this_app` once and
+/// asks again; anything still unusable falls back to the offline brain.
+///
+/// App-aware intents (navigation, settings, rules, stats, coins…) stay on the instant offline brain because it
+/// reads real local data; open conversation goes to the LLM. Any network/limit error → offline reply.
 class RemoteOracleEngine implements OracleEngine {
-  const RemoteOracleEngine({required this.endpoint});
+  RemoteOracleEngine({required this.invoke, required this.offline, this.appContext = const <String, dynamic>{}});
 
-  final String endpoint;
+  /// Calls the Edge Function with a JSON body and returns its decoded JSON (or throws).
+  final Future<Map<String, dynamic>?> Function(Map<String, dynamic> body) invoke;
+  final OfflineOracleEngine offline;
+  final Map<String, dynamic> appContext;
+  final List<Map<String, dynamic>> _history = <Map<String, dynamic>>[];
+
+  static const Set<String> remoteIntents = <String>{
+    'fallback', 'offline_limit', 'joke', 'how_are_you', 'kind', 'who', 'cannot_send', 'rules_missing', 'recommend', 'greet',
+  };
+
+  void _remember(String role, String content) {
+    _history.add(<String, dynamic>{'role': role, 'content': content});
+    if (_history.length > 16) _history.removeRange(0, _history.length - 16);
+  }
 
   @override
-  Future<OracleReply> ask(String input, OracleContext context) async => const OracleReply(
-        textFa: 'موتور آنلاین ORACLE هنوز به سرور وصل نشده است.',
-        textEn: 'The online ORACLE engine is not connected to a server yet.',
-        pose: 'alert',
-        intent: 'offline_limit',
+  Future<OracleReply> ask(String input, OracleContext context) async {
+    final OracleReply local = offline.answer(input, context);
+    if (!remoteIntents.contains(local.intent)) {
+      _remember('user', input);
+      _remember('assistant', context.languageCode == 'fa' ? local.textFa : local.textEn);
+      return local;
+    }
+    try {
+      final String? text = await _remote(input, context);
+      if (text == null || text.trim().isEmpty) return local;
+      return OracleReply(
+        textFa: text.trim(),
+        textEn: text.trim(),
+        actions: local.intent == 'fallback' ? const <OracleAction>[] : local.actions,
+        pose: 'talk',
+        intent: 'remote',
       );
+    } catch (_) {
+      return local;
+    }
+  }
+
+  Future<String?> _remote(String input, OracleContext c) async {
+    final List<Map<String, dynamic>> msgs = <Map<String, dynamic>>[
+      ..._history,
+      <String, dynamic>{'role': 'user', 'content': input},
+    ];
+    final Map<String, dynamic> ctx = <String, dynamic>{
+      'app': 'NEXORA hub (Flutter): 7 worlds (Hub, Arcade with 9 games, Orbit Network messenger, Nova Gallery, '
+          'Social Station, Personal Orbit, ORACLE Core). NOT the finger-football app: app tools are unavailable here, '
+          'answer in plain text only, short, in the user\'s language.',
+      'language': c.languageCode,
+      'username': c.username,
+      'level': c.level,
+      'xp': c.xp,
+      'coins': c.coins,
+      'played': c.totalPlayed,
+      'won': c.totalWon,
+      ...appContext,
+    };
+    for (int round = 0; round < 2; round++) {
+      final Map<String, dynamic>? r = await invoke(<String, dynamic>{'messages': msgs, 'ctx': ctx});
+      if (r == null || r['error'] != null) return null;
+      final Object? m = r['message'];
+      if (m is! Map) return null;
+      final Object? calls = m['tool_calls'];
+      final String content = '${m['content'] ?? ''}';
+      if (calls is List && calls.isNotEmpty) {
+        msgs.add(<String, dynamic>{'role': 'assistant', 'content': m['content'], 'tool_calls': calls});
+        for (final Object? tc in calls) {
+          if (tc is! Map) continue;
+          msgs.add(<String, dynamic>{
+            'role': 'tool',
+            'tool_call_id': '${tc['id']}',
+            'content': '{"error":"not_available_in_this_app","hint":"answer in text only"}',
+          });
+        }
+        continue;
+      }
+      if (content.trim().isEmpty) return null;
+      _remember('user', input);
+      _remember('assistant', content);
+      return content;
+    }
+    return null;
+  }
 }
