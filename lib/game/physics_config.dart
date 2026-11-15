@@ -22,8 +22,10 @@ class PhysicsConfig {
   /// almost constant speed until it hits something, then stops with puckK.
   final double puckFlightK;
 
-  /// flight also ends when the flicked puck slows below this (W/s): soft flicks never crawl on flight friction.
-  final double puckFlightMin;
+  /// v0.7b: flight friction blends linearly from puckFlightK (at or above puckFlightFull W/s) to puckK (at
+  /// puckFlightMin W/s); flight ends below puckFlightMin. Without the blend a flick just above the old 1 W/s cut-off
+  /// glided twice as far as one just below it (pull -> distance had a 6x kink): imprecise aiming.
+  final double puckFlightMin, puckFlightFull;
 
   /// below this speed a body stops dead (W/s).
   final double stopSpeed;
@@ -38,6 +40,14 @@ class PhysicsConfig {
   // ---- shot / kick ----
   /// full-pull launch speed (W/s) before the power stat; launch speed = shotMax * shotCurve(pull) * statMul(power).
   final double shotMax;
+
+  /// pull -> speed curve: shotCurve(q) = shotMinFrac + (1 - shotMinFrac) * q^shotExp (q = pull / max pull, 0..1).
+  final double shotMinFrac, shotExp;
+
+  /// a puck that ends up inside a goal net is walked back out at most at puckEjectSpeed (W/s), accelerating at
+  /// puckEjectAccel (W/s^2). v0.7b: was a velocity forced every substep (an infinitely heavy bulldozer that shoved the
+  /// ball and other pucks around and re-collided every substep).
+  final double puckEjectSpeed, puckEjectAccel;
 
   /// a puck striking a ball sends it off at kickGain x the closing speed: a reference flick (puckShotRef) gives
   /// ballKickSpeed. Momentum is not conserved here on purpose (a flick is a striker, not a free body).
@@ -76,6 +86,7 @@ class PhysicsConfig {
     required this.puckK,
     required this.puckFlightK,
     required this.puckFlightMin,
+    required this.puckFlightFull,
     required this.stopSpeed,
     required this.massPuck,
     required this.massBall,
@@ -86,6 +97,10 @@ class PhysicsConfig {
     required this.tBallWall,
     required this.tPuckWall,
     required this.shotMax,
+    this.shotMinFrac = .06,
+    this.shotExp = 1.35,
+    this.puckEjectSpeed = 270 * 1.27 / 825,
+    this.puckEjectAccel = 4,
     required this.ballKickSpeed,
     required this.puckShotRef,
     required this.ballMaxSpeed,
@@ -109,7 +124,8 @@ const PHYSICS_CONFIG = PhysicsConfig(
   ballK: 2.1, // [measured, medium] tau .48 s (spec 2026-11-15). Owner's earlier 'heavier' retune was 2.6
   puckK: 2.9, // [measured, LOW: one path] tau .34 s (spec 2026-11-15). Owner's 'heavier' retune was 3.6
   puckFlightK: .5, // [guess] 'almost constant speed until the first hit'. Owner's 'heavier' retune was 1.2
-  puckFlightMin: 1, // [guess] new
+  puckFlightMin: .5, // [guess] v0.7b: lower knee of the flight blend (was a hard 1 W/s cut-off)
+  puckFlightFull: 1.8, // [guess] v0.7b: full flight (near-constant speed) at and above this; reference flick ~2 W/s
   stopSpeed: .02, // [measured] was 2 px/s = .0024 W/s
   massPuck: 1, // [guess] ball 3x puck; was ball 1 : puck 4
   massBall: 3,
@@ -119,13 +135,21 @@ const PHYSICS_CONFIG = PhysicsConfig(
   ePuckWall: .6, // [guess] spec default; owner 'heavier' was .35
   tBallWall: .96, // [kept] v0.6.2 value; owner 'heavier' was .85
   tPuckWall: .97, // [kept] v0.6.2 value; owner 'heavier' was .85
-  shotMax: 3500 / 825, // [kept] 3500 px/s = 4.24 W/s
+  shotMax: 2.6, // [derived] v0.7b: = ballMaxSpeed / kickGain (6.5 / 2.5), so a full pull gives exactly the reference
+  //            ball peak and every pull length still changes the kick. Was 3500/825 = 4.24 W/s: 2x the reference
+  //            flick (~2 W/s) and above 2.6 W/s every kick hit the 6.5 cap (pull 60%..100% kicked the same).
+  shotMinFrac: .06, // [kept] v0.6.1 shotCurve constant, moved here from engine.dart
+  shotExp: 1.35, // [kept] v0.6.1 shotCurve constant, moved here from engine.dart
+  puckEjectSpeed: 270 * 1.27 / 825, // [kept] 343 px/s = .416 W/s (gout walk-out speed)
+  puckEjectAccel: 4, // [guess] v0.7b: reaches the walk-out speed in ~0.1 s
   ballKickSpeed: 5, // [guess, low] reference peak ~6.5, spec start 5. Owner 'heavier' was 3.8
   puckShotRef: 2, // [measured] reference flick ~2 W/s
   ballMaxSpeed: 6.5, // [measured, low] reference peak ball speed. Owner 'heavier' was 5
   maxSpeed: 7, // safety clamp; was 4200 px/s = 5.03 W/s
   postR: 5 / 825, // [kept]
-  playbackSpeed: .6, // owner: too fast, play at normal speed
+  playbackSpeed: 1.0, // v0.7b: real time again (was .6 slow motion: on screen tau ball .80 s / puck .58 s, outside
+  //                    acceptance 1-2). The calm pace now comes from shotMax 2.6 (on-screen flick speed ~= the old
+  //                    4.24 x .6 = 2.54 W/s) instead of slowing every decay and bounce.
   useDiscStats: true, // owner: real 1..10 power/accuracy on every disc
   powerMulAt1: .55, // was .62 (statMul)
   accDevAt1Deg: 8, // was 4 (aimDevDeg)

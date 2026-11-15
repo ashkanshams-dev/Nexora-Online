@@ -75,6 +75,8 @@ class PhysTune {
   final bool expFric; // false: legacy constant-decel + drag model (godot)
   final double ballK, discK, discFlightK; // 1/s
   final double discFlightMin; // px/s: flight ends below this speed
+  final double discFlightFull; // px/s: full flight friction at and above this speed (linear blend down to discFlightMin)
+  final double ejectV, ejectA; // px/s, px/s^2: a puck in a goal net is walked out (stars)
   final double kickGain; // a puck striking the ball: ball normal speed = kickGain x closing speed
   final double ballVmax; // cap on ball speed (px/s)
   final double subBallFrac; // ball travel per substep < subBallFrac x ball radius
@@ -115,6 +117,9 @@ class PhysTune {
     this.discK = 0,
     this.discFlightK = 0,
     this.discFlightMin = 0,
+    this.discFlightFull = 0,
+    this.ejectV = 0,
+    this.ejectA = 0,
     this.kickGain = 0,
     this.ballVmax = 1e9,
     this.subBallFrac = 1e9,
@@ -153,6 +158,7 @@ final kTuneStars = PhysTune(
   postR: _C.postR * _W, cornerNudge: 0, // v0.7: no corner nudge (it kept pinned bodies moving forever)
   subPx: _C.subTravel * _W, subMax: _C.subMax, stepCap: _C.stepCap, rollK: 1,
   expFric: true, ballK: _C.ballK, discK: _C.puckK, discFlightK: _C.puckFlightK, discFlightMin: _C.puckFlightMin * _W,
+  discFlightFull: _C.puckFlightFull * _W, ejectV: _C.puckEjectSpeed * _W, ejectA: _C.puckEjectAccel * _W,
   kickGain: _C.ballKickSpeed / _C.puckShotRef, ballVmax: _C.ballMaxSpeed * _W, subBallFrac: _C.subBallFrac,
 );
 
@@ -160,7 +166,8 @@ final kTuneStars = PhysTune(
 /// pull is a soft touch (10% just past the dead zone), half a pull ~43%, a full pull 100%.
 double shotCurve(double p) {
   final q = _clamp(p, 0, 1);
-  return .06 + .94 * fpow(q, 1.35); // fdlibm pow: bit-identical on every peer (lockstep)
+  final c = PHYSICS_CONFIG;
+  return c.shotMinFrac + (1 - c.shotMinFrac) * fpow(q, c.shotExp); // fdlibm pow: bit-identical on every peer (lockstep)
 }
 
 /// v0.6.1 power stat multiplier (stars): power 1 -> 0.62, power 10 -> 1.0 (linear). Capped at 1: no disc, Premium
@@ -299,6 +306,10 @@ class Body {
 
   /// v0.7: a flicked puck that has not touched anything yet (low flight friction, see PhysicsConfig.puckFlightK)
   bool fly = false;
+
+  /// v0.7b: the flicked puck until its FIRST contact of any kind (puck, ball, post, cushion). Only a striker hitting
+  /// the ball uses the kick model (PhysicsConfig.kickGain); every other ball-puck contact is the plain impulse.
+  bool striker = false;
   // per-disc motion trail: ring of at most 13 points (TS keeps <= 12 after shift)
   final Float64List trX = Float64List(16), trY = Float64List(16);
   int trStart = 0, trLen = 0;
@@ -675,8 +686,10 @@ class Engine {
       b.spin = 0;
       for (final o in bodies) {
         o.fly = false;
+        o.striker = false;
       }
       b.fly = tu.expFric;
+      b.striker = tu.expFric;
       if (b.team != turn) turn = b.team;
       phase = Phase.move;
       idle = 0;
@@ -1091,7 +1104,10 @@ class Engine {
         var j = -(1 + ee) * vn / sm;
         if (!isB) j *= tu.discDiscK;
         // v0.7 striker kick: the puck's own velocity toward the ball (pv) dominates the closing speed
-        final pk = isB && tu.expFric ? (identical(a, ball) ? b : a) : null;
+        // v0.7b: only the flicked puck's FIRST contact is a striker kick (was: any puck moving toward the ball, which
+        // turned every knocked-on puck into a 2.5x energy pump in crowds)
+        final pk0 = isB && tu.expFric ? (identical(a, ball) ? b : a) : null;
+        final pk = pk0 != null && pk0.striker ? pk0 : null;
         final sx = identical(b, ball) ? nx : -nx, sy = identical(b, ball) ? ny : -ny; // unit puck -> ball
         final pv = pk != null ? pk.vx * sx + pk.vy * sy : 0.0;
         final bv = pk != null ? ball.vx * sx + ball.vy * sy : 0.0;
@@ -1109,6 +1125,8 @@ class Engine {
         if (tu.expFric) {
           a.fly = false;
           b.fly = false;
+          a.striker = false;
+          b.striker = false;
         }
         _gcap(a);
         _gcap(b);
@@ -1169,6 +1187,7 @@ class Engine {
       b.vx = tx * et - en * vn * nx;
       b.vy = ty * et - en * vn * ny;
       b.fly = false;
+      b.striker = false;
       if (identical(b, ball)) _push(EvType.post).power = -vn / 1800;
     }
   }
@@ -1184,6 +1203,7 @@ class Engine {
       b.vy *= et;
       b.x = wall + side * over * en;
       b.fly = false;
+      b.striker = false;
     } else {
       b.x = wall;
     }
@@ -1200,6 +1220,7 @@ class Engine {
       b.vx *= et;
       b.y = wall + side * over * en;
       b.fly = false;
+      b.striker = false;
     } else {
       b.y = wall;
     }
@@ -1222,7 +1243,7 @@ class Engine {
 
   void _walls8(Body b) {
     final ball = this.ball;
-    if (!identical(b, ball) && b.gout != null) {
+    if (!tu.expFric && !identical(b, ball) && b.gout != null) {
       final g = b.gout!, dq = g.d * (b.y - g.y);
       if (dq > -b.r * 1.05) {
         b.vy = -g.d * 270 * K;
@@ -1279,6 +1300,29 @@ class Engine {
     _cornerNudge(b);
   }
 
+  /// v0.7b (stars): a puck inside a goal net is walked back out by a bounded push (accelerates to ejectV, never
+  /// faster), so contacts can resist it like any other body; once in front of the line it is released.
+  void _gout8(Body b, double h) {
+    final g = b.gout!, dq = g.d * (b.y - g.y);
+    if (dq > -b.r * 1.05) {
+      final out = -g.d * b.vy; // outward speed (towards the pitch)
+      if (out < tu.ejectV) {
+        final dv = _min(tu.ejectV - out, tu.ejectA * h);
+        b.vy -= g.d * dv;
+      }
+      final q = fexp(-8 * h); // sideways drift dies out quickly (was vx *= .6 per call)
+      b.vx *= q;
+    } else {
+      // out: stop the walk-out push only (keep at most the walk-out speed; friction ends it smoothly)
+      b.gout = null;
+      final sp = math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      if (sp > tu.ejectV) {
+        b.vx *= tu.ejectV / sp;
+        b.vy *= tu.ejectV / sp;
+      }
+    }
+  }
+
   /// adaptive substeps: no body travels more than tu.subPx per substep (energy bound over all bodies).
   void _sim8(double dt) {
     var e2 = 0.0, mmin = 1e9;
@@ -1325,6 +1369,7 @@ class Engine {
         if (b.vox.abs() < .04) b.vox = 0;
         if (b.voy.abs() < .04) b.voy = 0;
       }
+      if (tu.expFric && b.gout != null && !identical(b, ball)) _gout8(b, h);
       b.x += b.vx * h;
       b.y += b.vy * h;
       final sp = math.sqrt(b.vx * b.vx + b.vy * b.vy);
@@ -1332,7 +1377,14 @@ class Engine {
         // v0.7: exponential friction v *= exp(-k h) (frame-rate independent), dead stop below vStop
         final bl = identical(b, ball);
         if (b.fly && sp < tu.discFlightMin) b.fly = false;
-        final k = bl ? tu.ballK : (b.fly ? tu.discFlightK : tu.discK);
+        var k = bl ? tu.ballK : tu.discK;
+        if (!bl && b.fly) {
+          // v0.7b: flight friction blends into the normal puck friction between discFlightFull and discFlightMin
+          final w = tu.discFlightFull > tu.discFlightMin
+              ? _clamp((sp - tu.discFlightMin) / (tu.discFlightFull - tu.discFlightMin), 0, 1)
+              : 1.0;
+          k = tu.discK + (tu.discFlightK - tu.discK) * w;
+        }
         final ns = sp * fexp(-k * h);
         if (ns < tu.vStop) {
           b.vx = 0;
