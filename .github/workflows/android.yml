@@ -129,7 +129,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nxg-${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
           name: NEXORA NXG build ${{ github.run_number }}
           body: |
             NEXORA (Flutter, branch nxg) — automatic build #${{ github.run_number }} from ${{ github.sha }}.
