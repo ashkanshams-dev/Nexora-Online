@@ -1,0 +1,127 @@
+name: Flutter Android APK
+# NEXORA Flutter build on asbiulder/Nexora_godot branch 'flutter' (copied from nexora-flutter/.github/workflows/android-apk.yml).
+
+on:
+  push:
+    branches: [flutter]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v0.6.0). Empty = build only.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flutter-android-apk-${{ github.sha }}
+  cancel-in-progress: true
+
+env:
+  # Committed sideload-testing keystore (android/keys/nexora-release.keystore): every build is signed with the
+  # same key, so a new APK installs over the previous one. Replace with repo secrets before Google Play.
+  NX_KS: android/keys/nexora-release.keystore
+  NX_KS_ALIAS: nexora
+  NX_KS_PASS: "NexoraSideload2026!"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+      - id: ver
+        run: |
+          V=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          echo "version=${V}-b${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+      - name: Signing config
+        run: |
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$GITHUB_WORKSPACE/$NX_KS" "$NX_KS_PASS" "$NX_KS_ALIAS" "$NX_KS_PASS" > android/key.properties
+      - run: flutter pub get
+      - name: Analyze (errors only block)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Tests
+        run: flutter test
+      - name: Build universal APK
+        run: flutter build apk --release --tree-shake-icons --build-number=${{ github.run_number }}
+      - name: Build arm64 APK
+        run: flutter build apk --release --tree-shake-icons --split-per-abi --target-platform android-arm64 --build-number=${{ github.run_number }}
+      - name: Collect APKs
+        run: |
+          mkdir -p dist
+          V=${{ steps.ver.outputs.version }}
+          cp build/app/outputs/flutter-apk/app-release.apk dist/NEXORA-$V-universal.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/NEXORA-$V-arm64.apk
+          ls -la dist
+          "$ANDROID_SDK_ROOT"/build-tools/*/apksigner verify --print-certs dist/NEXORA-$V-universal.apk | head -3 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexora-apks
+          path: dist/*.apk
+          if-no-files-found: error
+          compression-level: 0
+
+  # (emulator smoke-test job omitted on this branch: its script .github/scripts/emu_test.sh is not in this repo)
+
+  # v0.6: pushes only build + test; a GitHub Release is published from a manual run with a tag input.
+  release:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nexora-apks
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: NEXORA Flutter ${{ inputs.tag }} (build ${{ needs.build.outputs.version }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            NEXORA (Flutter + Flame), Android 7.0+.
+            - `*-universal.apk`: works on every phone. Pick this if unsure.
+            - `*-arm64.apk`: smaller, for modern 64-bit phones.
+            Signed with the fixed NEXORA sideload key, so later builds install over this one. If an older NEXORA
+            Flutter build is installed, uninstall it once first (it was signed with a different key).
+            Commit: ${{ github.sha }}
+          files: dist/*.apk
+
+  # Every push to 'flutter': the arm64 APK is also published to the rolling pre-release 'flutter-test'
+  # (public direct download, no GitHub sign-in needed).
+  test-release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nexora-apks
+          path: dist
+      - name: Rename arm64 APK with commit
+        run: |
+          mkdir -p pub
+          cp dist/*-arm64.apk "pub/NEXORA-test-${GITHUB_SHA::7}-arm64.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: flutter-test
+          name: NEXORA Flutter test build (latest push)
+          prerelease: true
+          make_latest: false
+          body: |
+            Rolling test build from branch 'flutter'. Newest file = newest commit (${{ github.sha }}).
+          files: pub/*.apk
