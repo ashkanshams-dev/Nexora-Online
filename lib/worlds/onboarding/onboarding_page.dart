@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/assets/app_assets.dart';
+import '../../core/online/cloud_profile_sync.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/nx_theme.dart';
@@ -50,6 +53,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     await p.createIdentity(name: name, avatar: _avatar);
     final outcome = p.award('identity.created', xp: 50, coins: 0);
     ref.read(settingsProvider).markOnboarded();
+    unawaited(ref.read(cloudSyncProvider).identityCreated());
     if (!mounted) return;
     await showAwardOutcome(context, outcome);
     if (mounted) context.go('/hub');
@@ -180,7 +184,19 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           ),
         ),
         const SizedBox(height: NxSpace.lg),
-        const OnlineOnlyNotice(featureFa: 'ورود با ایمیل/گوگل و همگام‌سازی بین دستگاه‌ها', featureEn: 'Email/Google sign-in and cross-device sync'),
+        GlassPanel(
+          child: Row(children: [
+            const Icon(Icons.cloud_done_rounded, color: NxColors.turquoise),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                context.tx('با ورود، یک حساب مهمان آنلاین برایت ساخته می‌شود. بعداً از تنظیمات ← حساب کاربری می‌توانی ایمیل و رمز ثبت کنی یا وارد حساب قبلی‌ات شوی.',
+                    'Entering creates an online guest account. Later, in Settings → Account, add email + password or sign in to an existing account.'),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ]),
+        ),
         const SizedBox(height: NxSpace.lg),
         FilledButton.icon(
           onPressed: _finish,

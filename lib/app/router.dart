@@ -15,6 +15,7 @@ import '../worlds/onboarding/onboarding_page.dart';
 import '../worlds/oracle_core/oracle_core_page.dart';
 import '../worlds/orbit_network/orbit_network_page.dart';
 import '../worlds/personal_orbit/personal_orbit_page.dart';
+import '../worlds/settings/account_page.dart';
 import '../worlds/settings/settings_page.dart';
 import '../worlds/social_station/social_station_page.dart';
 
@@ -43,6 +44,7 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(path: '/onboarding', pageBuilder: (context, state) => _fade(state, const OnboardingPage())),
       GoRoute(path: '/hub', pageBuilder: (context, state) => _fade(state, const HubPage())),
       GoRoute(path: '/settings', builder: (context, state) => const SettingsPage()),
+      GoRoute(path: '/account', builder: (context, state) => const AccountPage()),
       GoRoute(
         path: '/oracle',
         pageBuilder: (context, state) => _warp(

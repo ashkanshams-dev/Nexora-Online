@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/online/cloud_profile_sync.dart';
 import '../core/settings/app_settings.dart';
 import '../core/theme/nx_theme.dart';
 import 'router.dart';
@@ -16,6 +17,14 @@ class NexoraApp extends ConsumerStatefulWidget {
 
 class _NexoraAppState extends ConsumerState<NexoraApp> {
   late final GoRouter _router = buildRouter(ref);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(cloudSyncProvider).start();
+    });
+  }
 
   @override
   void dispose() {

@@ -7,6 +7,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/storage/local_store.dart';
 import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
+import 'account_page.dart';
 
 /// Settings (STEP_12, P13, P16, P27, P28).
 class SettingsPage extends ConsumerWidget {
@@ -104,11 +105,11 @@ class SettingsPage extends ConsumerWidget {
               Text('Explorer ID: ${p.explorerId}', style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text(
-                context.tx('داده‌ها روی همین گوشی ذخیره می‌شوند (حالت آفلاین).', 'Your data is stored on this device (offline mode).'),
+                context.tx('یک نسخه از داده‌ها همیشه روی همین گوشی می‌ماند (کار آفلاین).', 'A copy of your data always stays on this phone (works offline).'),
                 style: const TextStyle(color: NxColors.textDim, fontSize: 12),
               ),
               const SizedBox(height: 10),
-              const OnlineOnlyNotice(featureFa: 'حساب ابری و همگام‌سازی', featureEn: 'Cloud account & sync'),
+              const AccountStatusCard(),
               const SizedBox(height: 10),
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(foregroundColor: NxColors.danger),

@@ -9,10 +9,19 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
+env:
+  # Public values only (the anon/publishable key is designed to ship inside the app; RLS protects the data).
+  SUPABASE_URL: https://eisstodgncimypdawisy.supabase.co
+  SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpc3N0b2RnbmNpbXlwZGF3aXN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjkwMTAsImV4cCI6MjEwOTgwNTAxMH0.uEPldAQjJdRyZTGXaz_OpFR7WpFXMiPXlW1S34cR3p8
+  LIVEKIT_URL: wss://nexora-space-xzjzlfyl.livekit.cloud
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -27,16 +36,43 @@ jobs:
           channel: stable
           cache: true
 
+      # Same signing key on every build so a new APK installs over the previous one.
+      - name: Restore signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nxg-signing-key-v1
+
+      - name: Create signing key (first run only)
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
+              -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=NEXORA,O=NEXORA,C=US"
+          fi
+
       - name: Generate Android platform (if missing)
         run: |
           if [ ! -d android ]; then
             flutter create --platforms=android --org com.nexora --project-name nexora .
           fi
+          M=android/app/src/main/AndroidManifest.xml
           # Branding: app name + launcher icon
-          sed -i 's/android:label="[^"]*"/android:label="NEXORA"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="NEXORA"/' $M
           for d in branding/mipmap-*; do
             cp "$d/ic_launcher.png" "android/app/src/main/res/$(basename $d)/ic_launcher.png"
           done
+          # Online: network + voice/video call permissions
+          if ! grep -q "android.permission.INTERNET" $M; then
+            sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.CAMERA"/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>\n    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-feature android:name="android.hardware.camera" android:required="false"/>\n    <application#' $M
+          fi
+          cat > android/app/proguard-rules.pro <<'PRO'
+          -keep class org.webrtc.** { *; }
+          -keep class io.livekit.** { *; }
+          -keep class com.cloudwebrtc.webrtc.** { *; }
+          -dontwarn org.webrtc.**
+          PRO
+          sed -i 's/^ *//' android/app/proguard-rules.pro
           # minSdk 24 (P03)
           if grep -q "minSdk = flutter.minSdkVersion" android/app/build.gradle* 2>/dev/null; then
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle*
@@ -44,6 +80,7 @@ jobs:
           if grep -q "minSdkVersion flutter.minSdkVersion" android/app/build.gradle 2>/dev/null; then
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/' android/app/build.gradle
           fi
+          head -20 $M
 
       - name: Pub get
         run: flutter pub get
@@ -65,12 +102,18 @@ jobs:
           exit 0
 
       - name: Build release APK
-        run: flutter build apk --release 2>&1 | tee build.txt
+        run: |
+          set -o pipefail
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            --dart-define=SUPABASE_URL=$SUPABASE_URL \
+            --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY \
+            --dart-define=LIVEKIT_URL=$LIVEKIT_URL 2>&1 | tee build.txt
 
       - name: Rename APK
         run: |
           mkdir -p out
-          cp build/app/outputs/flutter-apk/app-release.apk out/NEXORA-${{ github.run_number }}.apk
+          cp build/app/outputs/flutter-apk/app-release.apk out/NEXORA-NXG.apk
           ls -la out
 
       - name: Upload APK
@@ -79,6 +122,21 @@ jobs:
           name: NEXORA-apk
           path: out/*.apk
           retention-days: 30
+
+      # Prerelease only: never becomes the repo's "latest" release (the main-branch app updater reads that).
+      - name: Publish prerelease
+        if: github.ref == 'refs/heads/nxg'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nxg-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: NEXORA NXG build ${{ github.run_number }}
+          body: |
+            NEXORA (Flutter, branch nxg) — automatic build #${{ github.run_number }} from ${{ github.sha }}.
+            Online: Supabase auth/sync, online multiplayer. Install NEXORA-NXG.apk.
+          prerelease: true
+          make_latest: false
+          files: out/NEXORA-NXG.apk
 
       - name: Upload logs
         if: always()
@@ -97,4 +155,4 @@ jobs:
           echo "### NEXORA build #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "- analyze exit: ${ANALYZE_EXIT:-n/a}" >> $GITHUB_STEP_SUMMARY
           echo "- tests exit: ${TEST_EXIT:-n/a}" >> $GITHUB_STEP_SUMMARY
-          echo "- APK artifact: NEXORA-apk" >> $GITHUB_STEP_SUMMARY
+          echo "- APK: NEXORA-NXG.apk (prerelease nxg-${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY

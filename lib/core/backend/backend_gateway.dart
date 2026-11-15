@@ -8,6 +8,9 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../online/online_service.dart';
+import 'supabase_backend.dart';
+
 enum BackendStatus { offline, connecting, online }
 
 abstract class BackendGateway {
@@ -50,4 +53,9 @@ class OfflineBackend extends BackendGateway {
   Future<String?> oracleRemote(String prompt, {required String languageCode}) async => null;
 }
 
-final backendProvider = Provider<BackendGateway>((ref) => OfflineBackend());
+/// Supabase when the build carries the online config, otherwise the honest offline backend.
+final backendProvider = Provider<BackendGateway>((ref) {
+  final OnlineService online = ref.watch(onlineProvider);
+  if (!online.configured) return OfflineBackend();
+  return SupabaseBackend(online);
+});
