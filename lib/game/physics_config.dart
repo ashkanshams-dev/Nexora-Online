@@ -56,7 +56,11 @@ class PhysicsConfig {
   /// hard cap on ball speed (reference peak) and numerical safety cap on any body.
   final double ballMaxSpeed, maxSpeed;
 
+  /// goal posts: collision radius == drawn radius (W)
   final double postR;
+
+  /// v0.7b goal mouth width (post centre to post centre) and net depth behind the goal line (W)
+  final double goalWidth, goalDepth;
 
   // ---- integration ----
   /// fixed physics step (s); each step is split into substeps so that no body travels more than subTravel and the
@@ -72,6 +76,9 @@ class PhysicsConfig {
   /// aim deviation = (10 - accuracy) / 9 * accDevAt1Deg degrees          -> accuracy 10 = exact, accuracy 1 = 8 deg
   final bool useDiscStats;
   final double powerMulAt1, accDevAt1Deg;
+
+  /// v0.7b: power also scales the striker kick: kick gain x (kickMulAt1 + (1 - kickMulAt1) * (power - 1) / 9)
+  final double kickMulAt1;
   final int subMax, stepCap;
 
   const PhysicsConfig({
@@ -80,6 +87,7 @@ class PhysicsConfig {
     this.useDiscStats = true,
     this.powerMulAt1 = .55,
     this.accDevAt1Deg = 8,
+    this.kickMulAt1 = .8,
     required this.puckDiameter,
     required this.ballDiameter,
     required this.ballK,
@@ -106,6 +114,8 @@ class PhysicsConfig {
     required this.ballMaxSpeed,
     required this.maxSpeed,
     required this.postR,
+    required this.goalWidth,
+    required this.goalDepth,
     required this.fixedStep,
     required this.subTravel,
     required this.subBallFrac,
@@ -146,13 +156,16 @@ const PHYSICS_CONFIG = PhysicsConfig(
   puckShotRef: 2, // [measured] reference flick ~2 W/s
   ballMaxSpeed: 6.5, // [measured, low] reference peak ball speed. Owner 'heavier' was 5
   maxSpeed: 7, // safety clamp; was 4200 px/s = 5.03 W/s
-  postR: 5 / 825, // [kept]
+  postR: .009, // [visual] v0.7b: 7.4 px = the drawn post (render drew 7.2 px while collision used 5 px)
+  goalWidth: .33, // [owner 2026-11-15: 'a bit wider'] was 248 px = .301 W (+10%)
+  goalDepth: .125, // [owner 2026-11-15: 'deeper'] was 72 px = .087 W (+43%); a whole ball (.058 W) sits in it with room
   playbackSpeed: 1.0, // v0.7b: real time again (was .6 slow motion: on screen tau ball .80 s / puck .58 s, outside
   //                    acceptance 1-2). The calm pace now comes from shotMax 2.6 (on-screen flick speed ~= the old
   //                    4.24 x .6 = 2.54 W/s) instead of slowing every decay and bounce.
   useDiscStats: true, // owner: real 1..10 power/accuracy on every disc
   powerMulAt1: .55, // was .62 (statMul)
   accDevAt1Deg: 8, // was 4 (aimDevDeg)
+  kickMulAt1: .8, // [guess] v0.7b: power 1 kicks with 80% of the gain (with powerMulAt1: full-pull ball 2.9 vs 6.5 W/s)
   fixedStep: 1 / 120, // was 1/240 (brief: 1/120 + substeps)
   subTravel: 4 / 825, // [kept] 4 px
   subBallFrac: .5, // spec: ball moves < half its radius per substep

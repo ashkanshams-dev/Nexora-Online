@@ -77,6 +77,11 @@ class PhysTune {
   final double discFlightMin; // px/s: flight ends below this speed
   final double discFlightFull; // px/s: full flight friction at and above this speed (linear blend down to discFlightMin)
   final double ejectV, ejectA; // px/s, px/s^2: a puck in a goal net is walked out (stars)
+  /// v0.7b Coulomb cushion friction (stars): tangential speed loss = mu * (1 + e) * |vn|, at most (1 - tWall) of it,
+  /// so a grazing touch keeps ~all its speed (clean glance along the side line) and a 45 deg or steeper hit keeps
+  /// tWall exactly as in v0.7. < 0: legacy
+  /// multiplicative tWall on every touch (godot).
+  final double muWallBall, muWallDisc;
   final double kickGain; // a puck striking the ball: ball normal speed = kickGain x closing speed
   final double ballVmax; // cap on ball speed (px/s)
   final double subBallFrac; // ball travel per substep < subBallFrac x ball radius
@@ -120,6 +125,8 @@ class PhysTune {
     this.discFlightFull = 0,
     this.ejectV = 0,
     this.ejectA = 0,
+    this.muWallBall = -1,
+    this.muWallDisc = -1,
     this.kickGain = 0,
     this.ballVmax = 1e9,
     this.subBallFrac = 1e9,
@@ -155,6 +162,7 @@ final kTuneStars = PhysTune(
   eSoft: 1, vSoft: 0, // no soft-contact blending: the plain impulse rule (only while approaching, vrel < 0)
   eWallBall: _C.eBallWall, tWallBall: _C.tBallWall,
   eWallDisc: _C.ePuckWall, tWallDisc: _C.tPuckWall,
+  muWallBall: (1 - _C.tBallWall) / (1 + _C.eBallWall), muWallDisc: (1 - _C.tPuckWall) / (1 + _C.ePuckWall),
   postR: _C.postR * _W, cornerNudge: 0, // v0.7: no corner nudge (it kept pinned bodies moving forever)
   subPx: _C.subTravel * _W, subMax: _C.subMax, stepCap: _C.stepCap, rollK: 1,
   expFric: true, ballK: _C.ballK, discK: _C.puckK, discFlightK: _C.puckFlightK, discFlightMin: _C.puckFlightMin * _W,
@@ -252,6 +260,13 @@ double powerMul(double p) => .75 + (_min(10, _max(1, p)) - 1) / 9 * .5;
 double _starsPowerMul(double p) => !PHYSICS_CONFIG.useDiscStats
     ? 1.0
     : PHYSICS_CONFIG.powerMulAt1 + (1 - PHYSICS_CONFIG.powerMulAt1) * (_min(10, _max(1, p)) - 1) / 9;
+/// v0.7b stars: power also scales the striker kick (kickGain x this): power 1 = kickMulAt1, power 10 = 1.
+double starsKickMul(double p) => !PHYSICS_CONFIG.useDiscStats
+    ? 1.0
+    : PHYSICS_CONFIG.kickMulAt1 + (1 - PHYSICS_CONFIG.kickMulAt1) * (_min(10, _max(1, p)) - 1) / 9;
+
+/// public for the renderer's aim wobble (stars): the real aim deviation of a disc with accuracy [a], in degrees.
+double starsAimDevDeg(double a) => _starsAimDevDeg(a);
 double _starsAimDevDeg(double a) =>
     !PHYSICS_CONFIG.useDiscStats ? 0.0 : (10 - _min(10, _max(1, a))) / 9 * PHYSICS_CONFIG.accDevAt1Deg;
 double aimDevDeg(double a) => (10 - _min(10, _max(1, a))) / 9 * 4;
@@ -307,7 +322,8 @@ class Body {
   /// v0.7: a flicked puck that has not touched anything yet (low flight friction, see PhysicsConfig.puckFlightK)
   bool fly = false;
 
-  /// v0.7b: the flicked puck until its FIRST contact of any kind (puck, ball, post, cushion). Only a striker hitting
+  /// v0.7b: the flicked puck until its first contact with another BODY (puck or ball); cushion and post touches keep
+  /// it (bank shots, and a ball in a corner can only be reached by grazing the cushion first). Only a striker hitting
   /// the ball uses the kick model (PhysicsConfig.kickGain); every other ball-puck contact is the plain impulse.
   bool striker = false;
   // per-disc motion trail: ring of at most 13 points (TS keeps <= 12 after shift)
@@ -464,12 +480,14 @@ class Engine {
     GGh = gw * gi[1] / gi[0] * 1.28;
     GGx = CX - f.g - gi[2] * gw;
     DEPTH = math.max(120, jsRound(GGh * .98)).toDouble();
+    var gHalf = f.g.toDouble();
     if (stars) {
-      // v0.6.1 standard shallow goals (render + collision share these numbers)
-      DEPTH = kGoalDepth;
-      GGh = kGoalDepth + 10;
+      // v0.7b: goal mouth width and net depth from PHYSICS_CONFIG (W units); render + collision share these numbers
+      DEPTH = PHYSICS_CONFIG.goalDepth * PHYSICS_CONFIG.wPx;
+      GGh = DEPTH + 10;
+      gHalf = PHYSICS_CONFIG.goalWidth / 2 * PHYSICS_CONFIG.wPx;
     }
-    goals = [Goal(0, Ft, CX - f.g, CX + f.g, -1), Goal(1, Fb, CX - f.g, CX + f.g, 1)];
+    goals = [Goal(0, Ft, CX - gHalf, CX + gHalf, -1), Goal(1, Fb, CX - gHalf, CX + gHalf, 1)];
     mleft = cfg.matchTime;
     tleft = cfg.turnTime;
     reset(cfg.first);
@@ -599,7 +617,8 @@ class Engine {
     lastPower = p;
     final v = _shotSpeed(team, p);
     var ux = dx / l, uy = dy / l;
-    if (human && cfg.stats != null) {
+    // v0.7b stars: accuracy applies to EVERY shot (AI discs too), not only to human flicks
+    if ((human || stars) && cfg.stats != null) {
       final dev = (stars ? _starsAimDevDeg(statsOf(team).accuracy) : aimDevDeg(statsOf(team).accuracy)) * math.pi / 180;
       if (dev > 0) {
         final a = fatan2(uy, ux) + (rand() + rand() - 1) * dev;
@@ -1104,7 +1123,7 @@ class Engine {
         var j = -(1 + ee) * vn / sm;
         if (!isB) j *= tu.discDiscK;
         // v0.7 striker kick: the puck's own velocity toward the ball (pv) dominates the closing speed
-        // v0.7b: only the flicked puck's FIRST contact is a striker kick (was: any puck moving toward the ball, which
+        // v0.7b: only the flicked puck's first body contact is a striker kick (was: any puck moving toward the ball, which
         // turned every knocked-on puck into a 2.5x energy pump in crowds)
         final pk0 = isB && tu.expFric ? (identical(a, ball) ? b : a) : null;
         final pk = pk0 != null && pk0.striker ? pk0 : null;
@@ -1116,7 +1135,8 @@ class Engine {
         b.vx += j * nx * b.im;
         b.vy += j * ny * b.im;
         if (pk != null && pv > 0 && pv > -bv) {
-          final bn = ball.vx * sx + ball.vy * sy, kn = tu.kickGain * (pv - bv);
+          final km = stars && cfg.stats != null ? starsKickMul(statsOf(pk.team).power) : 1.0;
+          final bn = ball.vx * sx + ball.vy * sy, kn = tu.kickGain * km * (pv - bv);
           if (kn > bn) {
             ball.vx += (kn - bn) * sx;
             ball.vy += (kn - bn) * sy;
@@ -1182,14 +1202,24 @@ class Engine {
     b.y = py + ny * m;
     if (vn < 0) {
       // post: normal component reversed x eWall, tangential component x tWall
-      final bl = identical(b, ball), en = bl ? tu.eWallBall : tu.eWallDisc, et = bl ? tu.tWallBall : tu.tWallDisc;
+      final bl = identical(b, ball), en = bl ? tu.eWallBall : tu.eWallDisc;
       final tx = b.vx - vn * nx, ty = b.vy - vn * ny;
+      final et = tu.muWallBall < 0 ? (bl ? tu.tWallBall : tu.tWallDisc) : _tKeep(bl, vn, math.sqrt(tx * tx + ty * ty));
       b.vx = tx * et - en * vn * nx;
       b.vy = ty * et - en * vn * ny;
       b.fly = false;
-      b.striker = false;
       if (identical(b, ball)) _push(EvType.post).power = -vn / 1800;
     }
+  }
+
+  /// tangential keep factor for a cushion/post touch with incoming normal speed |vn| and tangential speed |vt|.
+  double _tKeep(bool bl, double vn, double vt) {
+    final mu = bl ? tu.muWallBall : tu.muWallDisc;
+    if (mu < 0) return bl ? tu.tWallBall : tu.tWallDisc;
+    if (vt <= 1e-9) return 1;
+    final en = bl ? tu.eWallBall : tu.eWallDisc, t = bl ? tu.tWallBall : tu.tWallDisc;
+    // never loses more than the plain tWall factor (steep hits = v0.7 behaviour); grazing touches lose ~nothing
+    return 1 - _min(1 - t, mu * (1 + en) * vn.abs() / vt);
   }
 
   void _cushionX(Body b, double wall, double side) {
@@ -1199,11 +1229,11 @@ class Engine {
       final vs = math.sqrt(b.vx * b.vx + b.vy * b.vy);
       final bl = identical(b, ball), en = bl ? tu.eWallBall : tu.eWallDisc, et = bl ? tu.tWallBall : tu.tWallDisc;
       if (bl && vs > 200) _push(EvType.wall).power = vs / 1800;
+      final vn = b.vx;
       b.vx = -b.vx * en;
-      b.vy *= et;
+      b.vy *= tu.muWallBall < 0 ? et : _tKeep(bl, vn, b.vy.abs());
       b.x = wall + side * over * en;
       b.fly = false;
-      b.striker = false;
     } else {
       b.x = wall;
     }
@@ -1216,11 +1246,11 @@ class Engine {
       final vs = math.sqrt(b.vx * b.vx + b.vy * b.vy);
       final bl = identical(b, ball), en = bl ? tu.eWallBall : tu.eWallDisc, et = bl ? tu.tWallBall : tu.tWallDisc;
       if (bl && vs > 200) _push(EvType.wall).power = vs / 1800;
+      final vn = b.vy;
       b.vy = -b.vy * en;
-      b.vx *= et;
+      b.vx *= tu.muWallBall < 0 ? et : _tKeep(bl, vn, b.vx.abs());
       b.y = wall + side * over * en;
       b.fly = false;
-      b.striker = false;
     } else {
       b.y = wall;
     }
@@ -1258,6 +1288,10 @@ class Engine {
     final en = bl ? tu.eWallBall : tu.eWallDisc, et = bl ? tu.tWallBall : tu.tWallDisc;
     _cushionX(b, Fl + r, 1);
     _cushionX(b, Fr - r, -1);
+    if (tu.expFric) {
+      _goals8s(b);
+      return;
+    }
     final vs = math.sqrt(b.vx * b.vx + b.vy * b.vy);
     for (var gi = 0; gi < 2; gi++) {
       final g = goals[gi];
@@ -1298,6 +1332,66 @@ class Engine {
       }
     }
     _cornerNudge(b);
+  }
+
+  /// v0.7b (stars) goal geometry, exactly what render draws: the goal line is a cushion outside the mouth; the mouth
+  /// has two round posts (radius postR, every body collides with them); the net is three straight walls (side nets
+  /// from each post straight back, back net across) handled as circle-vs-segment contacts, so the inner corners of
+  /// the net and the post ends are true round/segment contacts (no axis snapping, no teleport across a post).
+  void _goals8s(Body b) {
+    final bl = identical(b, ball), r = b.r, pr = tu.postR;
+    for (var gi = 0; gi < 2; gi++) {
+      final g = goals[gi];
+      final dp = g.d * (b.y - g.y); // > 0: centre behind the goal line (inside the net)
+      if (dp <= -(r + pr)) continue;
+      final inMouth = b.x > g.x1 && b.x < g.x2;
+      if (!inMouth && dp <= 0) {
+        // goal line cushion beside the goal (half-plane: always pushes back onto the pitch)
+        _cushionY(b, g.y - g.d * r, -g.d.toDouble());
+      } else if (!inMouth) {
+        // safety only (never reached in the sweeps): a centre behind the goal line beside the mouth is put back inside
+        // the net instead of being left off the pitch
+        b.x = _clamp(b.x, g.x1 + r, g.x2 - r);
+      }
+      if (!bl && inMouth && dp > r * .3 && b.gout == null) {
+        final vs = math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (vs < 150 * K) b.gout = g;
+      }
+      final gl = phase == Phase.goal && bl;
+      final back = g.y + g.d * DEPTH;
+      if (dp > -r) {
+        _seg8(b, g.x1, g.y, g.x1, back, gl ? .3 : -1, gl ? 1 : -1);
+        _seg8(b, g.x2, g.y, g.x2, back, gl ? .3 : -1, gl ? 1 : -1);
+        _seg8(b, g.x1, back, g.x2, back, gl ? .2 : -1, gl ? .6 : -1);
+      }
+      _post8(b, g.x1, g.y);
+      _post8(b, g.x2, g.y);
+    }
+  }
+
+  /// circle vs line segment (ax,ay)-(bx,by): push the body out along the normal from the closest point and reflect
+  /// the approaching normal velocity (restitution e, Coulomb tangential loss). e / tk < 0: the body's cushion values.
+  void _seg8(Body b, double ax, double ay, double bx, double by, double e, double tk) {
+    final ex = bx - ax, ey = by - ay, l2 = ex * ex + ey * ey;
+    var t = l2 > 0 ? ((b.x - ax) * ex + (b.y - ay) * ey) / l2 : 0.0;
+    t = _clamp(t, 0, 1);
+    final cx = ax + ex * t, cy = ay + ey * t;
+    final dx = b.x - cx, dy = b.y - cy, d2 = dx * dx + dy * dy, r = b.r;
+    if (d2 >= r * r || d2 < 1e-12) return;
+    final d = math.sqrt(d2), nx = dx / d, ny = dy / d;
+    b.x = cx + nx * r;
+    b.y = cy + ny * r;
+    final vn = b.vx * nx + b.vy * ny;
+    if (vn < 0) {
+      final bl = identical(b, ball);
+      final en = e >= 0 ? e : (bl ? tu.eWallBall : tu.eWallDisc);
+      final tx = b.vx - vn * nx, ty = b.vy - vn * ny;
+      final et = tk >= 0 ? tk : _tKeep(bl, vn, math.sqrt(tx * tx + ty * ty));
+      b.vx = tx * et - en * vn * nx;
+      b.vy = ty * et - en * vn * ny;
+      b.fly = false;
+      if (bl && -vn > 200) _push(EvType.wall).power = -vn / 1800;
+    }
   }
 
   /// v0.7b (stars): a puck inside a goal net is walked back out by a bounded push (accelerates to ejectV, never

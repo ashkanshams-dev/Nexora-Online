@@ -1,4 +1,5 @@
-// headless match simulator: AI vs AI + random flicks into crowds; prints anomaly stats
+// Dev tool: headless match play-simulation (AI vs AI, or random flicks into crowds) printing anomaly statistics.
+// dart run tool/physics_match_sim.dart [matches] [turns] [rand]
 import 'dart:math' as math;
 import 'package:nexora/game/engine.dart';
 import 'package:nexora/game/data.dart';
@@ -56,7 +57,7 @@ void main(List<String> args) {
       final ov = List.filled(n, 0.0), cr = List.filled(n, 0.0);
       final lastSign = List.filled(n, 0), flips = List.filled(n, 0);
       final start = [for (final b in e.bodies) [b.x, b.y]];
-      var bp = 0.0, pp = 0.0;
+      var bp = 0.0, pp = 0.0, peakB = 0.0;
       var t = 0.0;
       double ke() => e.bodies.fold(0.0, (s, b) => s + (b.vx * b.vx + b.vy * b.vy) / b.im);
       var k0 = ke();
@@ -76,6 +77,7 @@ void main(List<String> args) {
           final ctx = hadFly ? 'flick' : (gout0 || e.bodies.any((b) => b.gout != null) ? 'gout' : 'other');
           if (!hadFly) {
             energyGain++;
+            hist['gain $ctx'] = (hist['gain $ctx'] ?? 0) + 1;
             worstGain = math.max(worstGain, g);
             if (gainCtx.length < 8) gainCtx.add('m$m t$tn ${t.toStringAsFixed(2)}s x${g.toStringAsFixed(2)} $ctx ball ${(spd(e.ball) / W).toStringAsFixed(2)}');
           }
@@ -83,6 +85,7 @@ void main(List<String> args) {
         if (!shooter.fly) firstContact = true;
         k0 = k1;
         maxBall = math.max(maxBall, spd(e.ball) / W);
+        peakB = math.max(peakB, spd(e.ball) / W);
         for (var i = 0; i < n; i++) {
           final b = e.bodies[i];
           if (!identical(b, e.ball)) maxPuck = math.max(maxPuck, spd(b) / W);
@@ -90,7 +93,7 @@ void main(List<String> args) {
           final mouth = b.x > e.goals[0].x1 && b.x < e.goals[0].x2;
           var o = math.max(e.Fl + r - b.x, b.x - (e.Fr - r));
           if (!mouth) o = math.max(o, math.max(e.Ft + r - b.y, b.y - (e.Fb - r)));
-          if (mouth) o = math.max(o, math.max(e.Ft - kGoalDepth + r - b.y, b.y - (e.Fb + kGoalDepth - r)));
+          if (mouth) o = math.max(o, math.max(e.Ft - e.DEPTH + r - b.y, b.y - (e.Fb + e.DEPTH - r)));
           if (o > .5) { outFrames++; worstOut = math.max(worstOut, o); hist['out ${identical(b, e.ball) ? "ball" : "puck"}'] = (hist['out ${identical(b, e.ball) ? "ball" : "puck"}'] ?? 0) + 1; }
           var over = false;
           for (final c in e.bodies) {
@@ -121,6 +124,7 @@ void main(List<String> args) {
       final k = '${(t).floor()}s';
       hist[k] = (hist[k] ?? 0) + 1;
       ballPath.add(bp / W);
+      if (peakB >= 6.4) hist['ball at cap'] = (hist['ball at cap'] ?? 0) + 1;
       puckPath.add(pp / W);
       if (e.phase == Phase.goal) goals++;
       start.clear();

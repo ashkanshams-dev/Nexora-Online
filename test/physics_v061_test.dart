@@ -195,7 +195,7 @@ void main() {
           var left = false, t = 0.0, dmin = 1e9;
           for (var i = 0; i < 480 * 8; i++) {
             e.update(1 / 480);
-            t += 1 / 480;
+            t += 1 / 480 * PHYSICS_CONFIG.playbackSpeed; // simulated seconds (v0.7b: was wall time, broke at playbackSpeed .6)
             final dc = math.max((b.x - cx).abs(), (b.y - cy).abs());
             dmin = math.min(dmin, dc);
             if (t > .15 && dc > b.r * 4) {

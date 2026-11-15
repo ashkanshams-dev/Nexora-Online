@@ -775,7 +775,7 @@ class MatchRenderer {
   // two round posts, slim side bars run back to a back bar (slightly inset = depth), and the net is a fine diamond
   // mesh over a dark floor that fades towards the back, with an inner shadow under the crossbar. Collision geometry
   // (e.goals) is untouched. Skins recolour the frame and use their own net texture.
-  static const int _nu = 12, _nv = 6;
+  static const int _nu = 24, _nv = 12; // v0.7b: finer net mesh (smoother ripple on the bigger goal)
   final Float32List _vPos = Float32List((_nu + 1) * (_nv + 1) * 2), _vTex = Float32List((_nu + 1) * (_nv + 1) * 2);
   late final Uint16List _vIdx = () {
     final out = <int>[];
@@ -800,8 +800,10 @@ class MatchRenderer {
   /// goal corners: front posts (x1, x2 at the goal line y0) and the inset back corners (bx1, bx2 at yb)
   (double, double, double, double, double, double) _goalBox(int i) {
     final g = e.goals[i];
-    final x1 = g.x1, x2 = g.x2, D = e.DEPTH + 4, y0 = g.y, yb = g.y + g.d * D;
-    final inset = (x2 - x1) * .035;
+    // v0.7b (stars): the drawn net is exactly the collision box (straight side nets, back net at DEPTH); the frame
+    // bars are stroked just outside it (see _drawFrames) so the ball touches the bar's inner edge, not its middle.
+    final x1 = g.x1, x2 = g.x2, D = e.DEPTH + (e.stars ? 0 : 4), y0 = g.y, yb = g.y + g.d * D;
+    final inset = e.stars ? 0.0 : (x2 - x1) * .035;
     return (x1, x2, x1 + inset, x2 - inset, y0, yb);
   }
 
@@ -843,7 +845,7 @@ class MatchRenderer {
         }
       }
       _netTexP ??= ui.Paint()
-        ..filterQuality = ui.FilterQuality.medium
+        ..filterQuality = ui.FilterQuality.high // v0.7b: crisp (mipmapped) net texture at any screen density
         ..color = _netCol.withValues(alpha: .62)
         ..shader = ui.ImageShader(tex, ui.TileMode.repeated, ui.TileMode.repeated, Float64List.fromList(const [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
       c.drawVertices(ui.Vertices.raw(ui.VertexMode.triangles, _vPos, textureCoordinates: _vTex, indices: _vIdx), ui.BlendMode.srcOver, _netTexP!);
@@ -887,7 +889,10 @@ class MatchRenderer {
       final (x1r, x2r, bx1r, bx2r, y0, yb) = _goalBox(i);
       final x1 = x1r + sx, x2 = x2r + sx, bx1 = bx1r + sx, bx2 = bx2r + sx;
       final rb = _bulge((bx1 + bx2) / 2, .25, t, i, _netAnim(i)) * .3;
-      final back = [ui.Offset(x1, y0), ui.Offset(bx1, yb + rb), ui.Offset(bx2, yb + rb), ui.Offset(x2, y0)];
+      // v0.7b (stars): side/back bars sit just OUTSIDE the collision box (half the 3.2 px bar width)
+      final o = e.stars ? 1.6 : 0.0, gd = e.goals[i].d;
+      final back = [ui.Offset(x1 - o, y0), ui.Offset(bx1 - o, yb + rb + gd * o), ui.Offset(bx2 + o, yb + rb + gd * o), ui.Offset(x2 + o, y0)];
+      final pR = e.stars ? e.tu.postR / .9 : POST_R; // stars: drawn post (pR * .9) == collision post radius
       // soft drop shadow of the whole frame on the grass (light from the top-left)
       _bar
         ..shader = null
@@ -929,9 +934,9 @@ class MatchRenderer {
         _fill
           ..color = const ui.Color(0x66000000)
           ..shader = null;
-        c.drawCircle(ui.Offset(px + 2.5, y0 + 3), POST_R * .95, _fill);
-        _fill.shader = ui.Gradient.radial(ui.Offset(px - POST_R * .35, y0 - POST_R * .35), POST_R * 1.3, [light, mid, dark], const [0, .55, 1]);
-        c.drawCircle(ui.Offset(px, y0), POST_R * .9, _fill);
+        c.drawCircle(ui.Offset(px + 2.5, y0 + 3), pR * .95, _fill);
+        _fill.shader = ui.Gradient.radial(ui.Offset(px - pR * .35, y0 - pR * .35), pR * 1.3, [light, mid, dark], const [0, .55, 1]);
+        c.drawCircle(ui.Offset(px, y0), pR * .9, _fill);
       }
       _fill.shader = null;
     }
@@ -961,7 +966,7 @@ class MatchRenderer {
     if (ul == 0) ul = 1;
     final b = a.b!, team = b.team, r = b.r;
     // v4: low accuracy -> the arrow wobbles (visual only; the real deviation is rolled in Engine.fire)
-    final wob = e.cfg.stats != null ? aimDevDeg(e.statsOf(team).accuracy) * .45 * math.pi / 180 * math.sin(t * 7.3) * (.4 + .6 * _ap) : 0.0;
+    final wob = e.cfg.stats != null ? (e.stars ? starsAimDevDeg(e.statsOf(team).accuracy) : aimDevDeg(e.statsOf(team).accuracy)) * .45 * math.pi / 180 * math.sin(t * 7.3) * (.4 + .6 * _ap) : 0.0;
     final cw = math.cos(wob), sw = math.sin(wob);
     final ux = (_aux * cw - _auy * sw) / ul, uy = (_aux * sw + _auy * cw) / ul, pw = _ap;
     // Nexora_godot (0c5c3a9): the arrow beyond the rim grows LINEARLY with power from a short stub
