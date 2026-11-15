@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/catalog/catalog.dart';
+import '../../../core/online/online_service.dart';
 import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
@@ -187,7 +188,15 @@ class IdentityTab extends ConsumerWidget {
           data: ThemeData.dark(useMaterial3: true),
           child: Container(
             decoration: BoxDecoration(color: NxColors.navy, borderRadius: BorderRadius.circular(NxRadius.lg)),
-            child: const OnlineOnlyNotice(featureFa: 'فهرست دوستان', featureEn: 'The friends list'),
+            child: ref.watch(onlineProvider).isOnline
+                ? ListTile(
+                    leading: const Icon(Icons.group_rounded, color: NxColors.turquoise),
+                    title: Text(context.tx('دوستان، درخواست‌ها و جستجو', 'Friends, requests and search')),
+                    subtitle: Text(context.tx('در ORBIT NETWORK › مخاطبان', 'In ORBIT NETWORK › Contacts')),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/world/orbit_network'),
+                  )
+                : const OnlineOnlyNotice(featureFa: 'فهرست دوستان', featureEn: 'The friends list'),
           ),
         ),
       ],

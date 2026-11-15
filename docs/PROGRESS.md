@@ -21,7 +21,43 @@
 - Mafia online: 6–10 players, seeded roles on every phone, UI shows only what that player may know (roles are hidden by the client UI, not
   cryptographically — a modified client could read them).
 
+## Social worlds (M3) — real when signed in (online build + session); device-only otherwise
+Schema: `supabase/migrations/20261115000200_nx_social.sql` (applied live). Only `nx_` tables + a `nx-media` bucket with
+`nx_media_*` policies on storage.objects; nothing of the other app is changed. Friends reuse the shared `follows` /
+`friend_requests` RPCs (same friendships in both apps). No seeded/fake users or content is shown online.
+- **Orbit Network** (`SupabaseOrbitRepository`): 1:1 (`nx_open_direct`), groups, channels (only owner/admins post — enforced
+  in `nx_send_message`), members + roles, add friends, leave/delete, edit/delete/pin (RPCs), per-user stars, read receipts
+  (members' `last_read_at`), unread counts (`nx_my_chats`), server search, Realtime (`nx_messages`, `nx_chat_members`,
+  `nx_calls`). Offline: last server copy stays visible, sends are queued in LocalStore and flushed on the next refresh.
+  Saved Orbit and chats created offline stay on the device. Contacts tab = friends with presence, requests (accept/decline/
+  cancel), username search, message/call/remove. Game invites in an online chat create a real private room and the card
+  joins it (`/online/<game>?code=`).
+- **Calls (M4)**: Edge Function `nx-call-token` (source `supabase/functions/nx-call-token`, verify_jwt) — only members of the
+  chat get a 15-min LiveKit token for room `nxg-call-<chat id>` (channel listeners can't publish). `OrbitCallPage` (livekit_client):
+  voice/video/group, mute/camera/speaker, speaking glow. `nx_start_call` logs the call + a call message; `CallWatcher` rings
+  anywhere in the app (snackbar → `/call/:chatId`). Calls tab = real history.
+- **Nova Gallery** (`SupabaseNovaRepository`): posts, 24 h stories (+ views), likes, comments, saves, notifications (likes/comments
+  by others, via triggers), hashtags (derived server-side), `#tag` / `@user` / text search, trending, photo posts uploaded to
+  `nx-media/<uid>/…` (RLS: write only your own folder; public read), follow / followers on `follows`. My uid is shown to the UI
+  as the explorer id so ownership checks keep working.
+- **Social Station** (`SupabaseSocialRepository`): `nx_communities` (document + version) + `nx_community_members` (real roles).
+  `nx_community_save` refuses stale versions (client re-applies the change, ≤3 tries) and keeps only what the caller's role may
+  change (member: posts + events/RSVP; moderator: + tournaments/local players; admin/owner: all). Role change / kick / delete /
+  join-by-code / join-public / leave are role-checked RPCs. Discover sheet lists public communities.
+  Known limit: within the parts a role may edit, a modified client could rewrite others' posts (no per-post server check).
+
+## ORACLE remote (M5)
+- `RemoteOracleEngine` → existing `oracle-chat` Edge Function (unchanged). Contract: POST `{messages, ctx}` with the user JWT →
+  `{message:{content, tool_calls?}}`. Its tools belong to the other app: the client answers them with
+  `not_available_in_this_app` once and asks again. App-aware intents (navigation, settings, rules, stats…) stay on the offline
+  brain; open conversation goes online; any error → offline reply.
+- As of 2026-11-15 the function's LLM provider (apinex.bond) answers 402 "insufficient balance / daily check-in", so ORACLE
+  currently always falls back to the offline brain. Topping up that provider (or setting another key in its config) turns it on
+  with no app change.
+
 ## Remaining / next
-- Social worlds (Orbit chats/friends/calls, Nova posts, Social Station communities) on Supabase.
-- LiveKit calls in Orbit (Edge Function `nx-call-token`; LIVEKIT_* secrets already exist on the project).
-- No device testing possible from the build agent: online flows verified against the live DB with a headless Dart client; UI verified by analyzer + CI build.
+- Media in Orbit chats (photos/voice notes) — Nova photo upload exists and can be reused.
+- Push notifications for messages/calls when the app is closed (calls ring only while the app is open).
+- ORACLE voice (the notice stays; `oracle-chat` supports audio but needs the provider balance first).
+- No device testing possible from the build agent: SQL/RPC/RLS/Storage/Edge Functions verified live with guest accounts
+  (test data removed); UI verified by analyzer + CI build.
