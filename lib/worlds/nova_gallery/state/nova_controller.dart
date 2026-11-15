@@ -1,13 +1,24 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/online/online_service.dart';
+import '../../../core/profile/profile_service.dart';
 import '../../../core/storage/local_store.dart';
 import '../../orbit_network/data/orbit_shared_inbox.dart';
 import '../data/nova_repository.dart';
+import '../data/supabase_nova_repository.dart';
 import '../models/nova_models.dart';
 
-/// Swap this provider for an online implementation later.
-final novaRepositoryProvider = Provider<NovaRepository>((ref) => LocalNovaRepository(LocalStore.instance));
+/// Online (signed in): real posts on Supabase; otherwise the device-only gallery.
+final novaRepositoryProvider = Provider<NovaRepository>((ref) {
+  final OnlineService o = ref.watch(onlineProvider);
+  final LocalNovaRepository local = LocalNovaRepository(LocalStore.instance);
+  final client = o.client;
+  if (o.isOnline && client != null) {
+    return SupabaseNovaRepository(client, local, explorerId: ref.read(profileProvider).explorerId);
+  }
+  return local;
+});
 
 final novaControllerProvider =
     ChangeNotifierProvider<NovaController>((ref) => NovaController(ref.watch(novaRepositoryProvider)));
@@ -19,6 +30,7 @@ class NovaController extends ChangeNotifier {
   }
 
   final NovaRepository repo;
+  SupabaseNovaRepository? get online => repo is SupabaseNovaRepository ? repo as SupabaseNovaRepository : null;
   bool loading = true;
   bool _disposed = false;
   List<NovaPost> posts = <NovaPost>[];

@@ -7,6 +7,7 @@ import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import 'models/nova_models.dart';
 import 'state/nova_controller.dart';
+import 'ui/nova_follow.dart';
 import 'ui/nova_composer.dart';
 import 'ui/nova_post_card.dart';
 import 'ui/nova_tabs.dart';
@@ -55,7 +56,10 @@ class _NovaGalleryPageState extends ConsumerState<NovaGalleryPage> {
             Text('@$name', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
           ]),
           const SizedBox(height: 14),
-          const OnlineOnlyNotice(featureFa: 'دیدن پروفایل دیگر کاوشگران', featureEn: "Viewing other explorers' profiles"),
+          if (ref.read(novaControllerProvider).online != null)
+            NovaUserLookup(username: name)
+          else
+            const OnlineOnlyNotice(featureFa: 'دیدن پروفایل دیگر کاوشگران', featureEn: "Viewing other explorers' profiles"),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: () {

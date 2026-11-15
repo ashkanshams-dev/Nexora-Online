@@ -10,6 +10,7 @@ import '../state/nova_controller.dart';
 import 'nova_composer.dart';
 import 'nova_post_card.dart';
 import 'nova_story_viewer.dart';
+import 'nova_follow.dart';
 import 'nova_visuals.dart';
 
 const double _kBottomPad = 96;
@@ -591,7 +592,10 @@ class _NovaProfileTabState extends ConsumerState<NovaProfileTab> {
               const SizedBox(height: 12),
               const XpBar(height: 8),
               const SizedBox(height: 10),
-              const OnlineOnlyNotice(featureFa: 'دنبال‌کردن و دنبال‌کننده‌ها', featureEn: 'Following and followers'),
+              if (ctrl.online != null)
+                NovaFollowBar(uid: ctrl.online!.me, self: true)
+              else
+                const OnlineOnlyNotice(featureFa: 'دنبال‌کردن و دنبال‌کننده‌ها', featureEn: 'Following and followers'),
             ]),
           ),
         ),

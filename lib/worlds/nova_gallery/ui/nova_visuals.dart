@@ -182,6 +182,23 @@ class NovaVisualView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (visual.isNone) return const SizedBox.shrink();
+    if (visual.kind == NovaVisualKind.photo && visual.url.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: SizedBox(
+          height: height,
+          width: double.infinity,
+          child: Image.network(
+            visual.url,
+            fit: BoxFit.cover,
+            cacheWidth: 1080,
+            loadingBuilder: (BuildContext c, Widget child, ImageChunkEvent? p) =>
+                p == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_rounded, size: 40)),
+          ),
+        ),
+      );
+    }
     final style = novaGradient(visual.gradient);
     final ArtAsset? art = visual.kind == NovaVisualKind.asset ? ArtAsset.parse(visual.asset) : null;
     final Widget backdrop = animated

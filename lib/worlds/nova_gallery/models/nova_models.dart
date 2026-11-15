@@ -21,13 +21,16 @@ DateTime _time(Object? v) {
 
 DateTime? _timeOrNull(Object? v) => v == null ? null : _time(v);
 
-enum NovaVisualKind { none, gradient, asset }
+/// [photo] = an uploaded image in the Supabase Storage bucket `nx-media` (online only).
+enum NovaVisualKind { none, gradient, asset, photo }
 
 /// Optional visual attached to a post: a cosmic gradient card or a built-in art asset.
 class NovaVisual {
-  const NovaVisual({this.kind = NovaVisualKind.none, this.gradient = 0, this.asset = ''});
+  const NovaVisual({this.kind = NovaVisualKind.none, this.gradient = 0, this.asset = '', this.url = ''});
 
   final NovaVisualKind kind;
+  /// Public URL of an uploaded photo ([NovaVisualKind.photo]).
+  final String url;
   final int gradient; // index into the gradient style list (also used as backdrop for assets)
   final String asset; // ArtAsset ref, e.g. 'gear:helmet'
 
@@ -35,7 +38,7 @@ class NovaVisual {
 
   bool get isNone => kind == NovaVisualKind.none;
 
-  Map<String, dynamic> toJson() => <String, dynamic>{'k': kind.name, 'g': gradient, 'a': asset};
+  Map<String, dynamic> toJson() => <String, dynamic>{'k': kind.name, 'g': gradient, 'a': asset, if (url.isNotEmpty) 'url': url};
 
   static NovaVisual fromJson(Object? raw) {
     if (raw is! Map) return NovaVisual.none;
@@ -48,6 +51,7 @@ class NovaVisual {
       kind: kind,
       gradient: (raw['g'] as num?)?.toInt() ?? 0,
       asset: '${raw['a'] ?? ''}',
+      url: '${raw['url'] ?? ''}',
     );
   }
 }

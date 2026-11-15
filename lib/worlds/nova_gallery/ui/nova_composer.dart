@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
@@ -38,7 +39,9 @@ class _ComposerSheetState extends ConsumerState<_ComposerSheet> {
   late int _gradient = widget.editing?.visual.gradient ?? 0;
   late String _asset = widget.editing?.visual.asset ?? '';
   late bool _motion = widget.editing?.motion ?? widget.startMotion;
+  late String _url = widget.editing?.visual.url ?? '';
   bool _busy = false;
+  bool _uploading = false;
 
   @override
   void initState() {
@@ -57,6 +60,9 @@ class _ComposerSheetState extends ConsumerState<_ComposerSheet> {
   }
 
   NovaVisual get _visual {
+    if (_kind == NovaVisualKind.photo) {
+      return _url.isEmpty ? NovaVisual.none : NovaVisual(kind: NovaVisualKind.photo, gradient: _gradient, url: _url);
+    }
     if (_kind == NovaVisualKind.asset && ArtAsset.parse(_asset) == null) {
       return NovaVisual(kind: NovaVisualKind.gradient, gradient: _gradient);
     }
@@ -64,6 +70,33 @@ class _ComposerSheetState extends ConsumerState<_ComposerSheet> {
   }
 
   bool get _canPublish => !_busy && (_text.text.trim().isNotEmpty || !_visual.isNone);
+
+  /// Real photo: picked from the gallery and uploaded to Supabase Storage (online only).
+  Future<void> _pickPhoto() async {
+    final repo = ref.read(novaControllerProvider).online;
+    if (repo == null) return;
+    final XFile? f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+    if (f == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      final String name = f.name;
+      final String ext = name.contains('.') ? name.split('.').last : 'jpg';
+      final String url = await repo.uploadPhoto(await f.readAsBytes(), ext: ext);
+      if (!mounted) return;
+      setState(() {
+        _url = url;
+        _kind = NovaVisualKind.photo;
+        _motion = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(context.tx('آپلود عکس ممکن نشد.', 'Photo upload failed.'))));
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
 
   Future<void> _pickAsset() async {
     final ArtAsset? a = await showArtAssetPicker(context);
@@ -167,8 +200,21 @@ class _ComposerSheetState extends ConsumerState<_ComposerSheet> {
               selected: _kind == NovaVisualKind.asset,
               onSelected: (_) => _pickAsset(),
             ),
+            if (ref.watch(novaControllerProvider).online != null)
+              ChoiceChip(
+                avatar: _uploading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.photo_rounded, size: 16),
+                label: Text(context.tx('عکس', 'Photo')),
+                selected: _kind == NovaVisualKind.photo,
+                onSelected: _uploading ? null : (_) => _pickPhoto(),
+              ),
           ]),
-          if (_kind != NovaVisualKind.none) ...<Widget>[
+          if (_kind == NovaVisualKind.photo && _url.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            NovaVisualView(visual: _visual, height: 200),
+          ],
+          if (_kind != NovaVisualKind.none && _kind != NovaVisualKind.photo) ...<Widget>[
             const SizedBox(height: 10),
             SizedBox(
               height: 46,
