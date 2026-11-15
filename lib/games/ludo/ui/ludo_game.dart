@@ -46,7 +46,14 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
   String? _bannerFa;
   String? _bannerEn;
 
+  // ------------------------------------------------------------- online
+  NetInbox? _inbox;
+  final Set<int> _out = <int>{};
+  List<LudoMove> _replayPending = <LudoMove>[];
+
   GameLaunch get _l => widget.launch;
+  bool _isRemote(int seat) => _l.isRemoteSeat(seat);
+  int get _me => _l.mySeat;
   bool get _fancy => _l.fancyEffects && !_l.reducedMotion;
   LudoState get _s => _engine.state;
   int get _n => _s.playerCount;
@@ -73,11 +80,137 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       _pulseCtl.repeat(reverse: true);
     }
     _flashCtl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _beginTurn());
+    final NetLink? net = _l.net;
+    if (net != null) {
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _beginTurn());
+    }
+  }
+
+  String _stateHash() {
+    final StringBuffer b = StringBuffer('${_s.turn}|${_s.sixStreak}|');
+    for (int i = 0; i < _n; i++) {
+      b.write('${_s.tokens[i].join(',')};');
+    }
+    b.write('|${_out.join(',')}');
+    return hashOf(b.toString());
+  }
+
+  void _skipOut() {
+    int guard = 0;
+    while (_out.contains(_s.turn) && guard < _n) {
+      _engine.advanceTurn();
+      guard++;
+    }
+  }
+
+  bool _checkLastStanding() {
+    if (!_l.online || _finished) return false;
+    final List<int> alive = <int>[for (int i = 0; i < _n; i++) if (!_out.contains(i)) i];
+    if (alive.length == 1) {
+      _gameOver(alive.first);
+      return true;
+    }
+    return false;
+  }
+
+  LudoMove? _pick(List<LudoMove> moves, Map<String, dynamic> d) {
+    final int t = (d['t'] as num?)?.toInt() ?? -1;
+    final int to = (d['to'] as num?)?.toInt() ?? -999;
+    for (final LudoMove m in moves) {
+      if (m.token == t && m.to == to) return m;
+    }
+    for (final LudoMove m in moves) {
+      if (m.token == t) return m;
+    }
+    return null;
+  }
+
+  /// Online: apply one logged move. Replay = rebuild state instantly.
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      setState(() {});
+      if (_s.winner != null) {
+        _gameOver(_s.winner!);
+      } else if (!_checkLastStanding()) {
+        if (_replayPending.isNotEmpty && !_out.contains(_s.turn)) {
+          final int seat = _s.turn;
+          setState(() {
+            _moves = _replayPending;
+            if (_isRemote(seat)) {
+              _status('${_nameFa(seat)} مهره انتخاب می‌کند…', '${_nameEn(seat)} is choosing…');
+            } else {
+              _status('یک مهره‌ی درخشان را انتخاب کن', 'Pick a glowing token');
+            }
+          });
+          _l.net?.turnSeat = seat;
+        } else {
+          _beginTurn();
+        }
+      }
+      return;
+    }
+    if (m.isForfeit) {
+      final int seat = (m.data['seat'] as num?)?.toInt() ?? m.seat;
+      _out.add(seat);
+      if (_s.turn == seat) {
+        _engine.pendingRoll = null;
+        _replayPending = <LudoMove>[];
+        if (!m.replay) setState(() => _moves = <LudoMove>[]);
+        _engine.advanceTurn();
+      }
+      if (m.replay) return;
+      if (_checkLastStanding()) return;
+      if (!_busy && !_rolling) _beginTurn();
+      return;
+    }
+    if (m.kind != 'move' || m.seat != _s.turn || _s.winner != null) return;
+    final String a = '${m.data['a']}';
+    if (m.replay) {
+      if (a == 'roll') {
+        final LudoRollResult r = _engine.roll();
+        _replayPending = <LudoMove>[];
+        if (r.moves.isNotEmpty) {
+          if (_allSame(r.moves)) {
+            _replayApply(r.moves.first);
+          } else {
+            _replayPending = r.moves;
+          }
+        }
+      } else if (a == 'play') {
+        final LudoMove? mv = _pick(_replayPending, m.data);
+        if (mv != null) _replayApply(mv);
+        _replayPending = <LudoMove>[];
+      }
+      _skipOut();
+      return;
+    }
+    while (_busy || _rolling) {
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      if (!mounted) return;
+    }
+    if (a == 'roll') {
+      _l.net?.verify(m.seq, m.data['h'] as String?, _stateHash());
+      await _roll(fromNet: true);
+    } else if (a == 'play') {
+      final LudoMove? mv = _pick(_moves, m.data);
+      if (mv != null) await _playMove(mv);
+    }
+  }
+
+  void _replayApply(LudoMove mv) {
+    if (mv.captures.isNotEmpty) _captures[mv.seat] += mv.captures.length;
+    _engine.play(mv);
   }
 
   @override
   void dispose() {
+    _inbox?.close();
     _hopCtl.removeListener(_onHopTick);
     _rollCtl.dispose();
     _hopCtl.dispose();
@@ -96,12 +229,16 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       v.toString().split('').map((String c) => _faDigits[int.parse(c)]).join();
 
   String _nameFa(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) return _l.playerName;
     if (_l.vsBot) return _n == 2 ? 'ربات NX' : 'ربات ${_faNum(seat)}';
     return 'بازیکن ${_faNum(seat + 1)}';
   }
 
   String _nameEn(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) return _l.playerName;
     if (_l.vsBot) return _n == 2 ? 'NX Bot' : 'Bot $seat';
     return 'Player ${seat + 1}';
@@ -140,10 +277,14 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
   // ------------------------------------------------------------------ flow
   void _beginTurn() {
     if (!mounted || _finished) return;
+    _skipOut();
     final int seat = _s.turn;
+    _l.net?.turnSeat = seat;
     setState(() {
       _moves = <LudoMove>[];
-      if (_isBot(seat)) {
+      if (_isRemote(seat)) {
+        _status('نوبت ${_nameFa(seat)} — منتظر حرکتش…', "${_nameEn(seat)}'s turn — waiting…");
+      } else if (_isBot(seat)) {
         _status('نوبت ${_nameFa(seat)}', "${_nameEn(seat)}'s turn");
       } else {
         _status('نوبت ${_nameFa(seat)} — تاس را لمس کن', '${_nameEn(seat)} — tap the die');
@@ -158,10 +299,12 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
     await _roll(fromBot: true);
   }
 
-  Future<void> _roll({bool fromBot = false}) async {
+  Future<void> _roll({bool fromBot = false, bool fromNet = false}) async {
     if (_rolling || _busy || _moves.isNotEmpty || _finished) return;
     final int seat = _s.turn;
     if (_isBot(seat) && !fromBot) return;
+    if (_isRemote(seat) && !fromNet) return;
+    if (_l.online && !fromNet) _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
     setState(() => _rolling = true);
     _haptic();
     await _rollCtl.forward(from: 0);
@@ -203,6 +346,10 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       await _wait(320);
       if (!mounted) return;
       await _playMove(r.moves.first);
+      return;
+    }
+    if (_isRemote(seat)) {
+      setState(() => _status('${_nameFa(seat)} مهره انتخاب می‌کند…', '${_nameEn(seat)} is choosing…'));
       return;
     }
     setState(() => _status('یک مهره‌ی درخشان را انتخاب کن', 'Pick a glowing token'));
@@ -281,6 +428,8 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       final int seat = _s.turn;
       if (_isBot(seat)) {
         _botTurn(seat);
+      } else if (_isRemote(seat)) {
+        setState(() => _status('${_nameFa(seat)} دوباره می‌ریزد…', '${_nameEn(seat)} rolls again…'));
       } else {
         setState(() => _status(
             '${_nameFa(seat)}، دوباره تاس را لمس کن', '${_nameEn(seat)}, tap the die again'));
@@ -288,11 +437,12 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       return;
     }
     await _wait(250);
+    if (!mounted || _finished) return;
     _beginTurn();
   }
 
   void _onBoardTap(Offset local, double boardSize) {
-    if (_moves.isEmpty || _busy || _isBot(_s.turn)) return;
+    if (_moves.isEmpty || _busy || _isBot(_s.turn) || _isRemote(_s.turn)) return;
     final double u = boardSize / 15;
     final Offset p = local / u;
     LudoMove? best;
@@ -306,7 +456,10 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       }
     }
     final LudoMove? chosen = best;
-    if (chosen != null) _playMove(chosen);
+    if (chosen != null) {
+      if (_l.online) _l.net!.send(<String, dynamic>{'a': 'play', 't': chosen.token, 'to': chosen.to});
+      _playMove(chosen);
+    }
   }
 
   void _gameOver(int winner) {
@@ -319,20 +472,22 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       _status('همه‌ی مهره‌ها در خانه', 'All tokens home');
     });
     int bestOther = 0;
-    for (int i = 1; i < _n; i++) {
-      bestOther = max(bestOther, _s.homeCount(i));
+    for (int i = 0; i < _n; i++) {
+      if (i != _me) bestOther = max(bestOther, _s.homeCount(i));
     }
-    final int mine = _s.homeCount(0);
+    final int mine = _s.homeCount(_me);
     final String fa =
-        'برنده: ${_nameFa(winner)}. مهره‌های تو در خانه: ${_faNum(mine)}/۴ • ضربه‌های تو: ${_faNum(_captures[0])} • بازیکنان: ${_faNum(_n)}';
+        'برنده: ${_nameFa(winner)}. مهره‌های تو در خانه: ${_faNum(mine)}/۴ • ضربه‌های تو: ${_faNum(_captures[_me])} • بازیکنان: ${_faNum(_n)}';
     final String en =
-        'Winner: ${_nameEn(winner)}. Your tokens home: $mine/4 • your captures: ${_captures[0]} • players: $_n';
+        'Winner: ${_nameEn(winner)}. Your tokens home: $mine/4 • your captures: ${_captures[_me]} • players: $_n';
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
       _l.onFinish(GameResult(
-        outcome: winner == 0 ? GameOutcome.win : GameOutcome.loss,
+        outcome: winner == _me ? GameOutcome.win : GameOutcome.loss,
         score: mine,
-        opponentScore: winner == 0 ? bestOther : _s.homeCount(winner),
+        opponentScore: winner == _me ? bestOther : _s.homeCount(winner),
+        winnerSeats: <int>[winner],
+        scores: <int>[for (int i = 0; i < _n; i++) _s.homeCount(i)],
         summaryFa: fa,
         summaryEn: en,
       ));
@@ -369,7 +524,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
           pos: c,
           color: _color(seat),
           scale: scale,
-          movable: movable.contains('$seat:$t') && !_isBot(seat),
+          movable: movable.contains('$seat:$t') && !_isBot(seat) && !_isRemote(seat),
         ));
       }
     });
@@ -574,7 +729,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
 
   Widget _bottomBar() {
     final int seat = _s.turn;
-    final bool canTap = !_isBot(seat) && !_rolling && !_busy && _moves.isEmpty && !_finished;
+    final bool canTap = !_isBot(seat) && !_isRemote(seat) && !_rolling && !_busy && _moves.isEmpty && !_finished;
     final Color col = _color(seat);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),

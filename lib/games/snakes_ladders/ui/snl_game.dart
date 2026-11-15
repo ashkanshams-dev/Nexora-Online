@@ -50,7 +50,13 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
   String? _bannerFa;
   String? _bannerEn;
 
+  // ------------------------------------------------------------- online
+  NetInbox? _inbox;
+  final Set<int> _out = <int>{}; // forfeited seats (online)
+
   GameLaunch get _l => widget.launch;
+  bool _isRemote(int seat) => _l.isRemoteSeat(seat);
+  int get _me => _l.mySeat;
   bool get _fancy => _l.fancyEffects && !_l.reducedMotion;
   int get _n => _engine.playerCount;
 
@@ -76,11 +82,88 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
     }
     if (_fancy) _ambientCtl.repeat();
     _burstCtl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _beginTurn());
+    final NetLink? net = _l.net;
+    if (net != null) {
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _beginTurn());
+    }
+  }
+
+  String _stateHash() => hashOf('${_engine.positions.join(',')}|${_engine.turn}|${_out.join(',')}');
+
+  /// Online: apply one logged move. Replay = rebuild state instantly, no animation.
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      setState(() {
+        for (int i = 0; i < _n; i++) {
+          _shown[i] = _engine.positions[i];
+        }
+        _dieValue = null;
+      });
+      if (_engine.winner != null) {
+        _gameOver(_engine.winner!);
+      } else if (!_checkLastStanding()) {
+        _beginTurn();
+      }
+      return;
+    }
+    if (m.isForfeit) {
+      final int seat = (m.data['seat'] as num?)?.toInt() ?? m.seat;
+      _out.add(seat);
+      if (m.replay) {
+        if (_engine.turn == seat) _skipOut();
+        return;
+      }
+      if (_checkLastStanding()) return;
+      if (_engine.turn == seat && !_busy && !_rolling) _beginTurn();
+      return;
+    }
+    if (m.kind != 'move' || m.data['a'] != 'roll') return;
+    if (_engine.turn != m.seat || _engine.winner != null) return;
+    _l.net?.verify(m.seq, m.data['h'] as String?, _stateHash());
+    if (m.replay) {
+      final int roll = _engine.rollDie();
+      final SnlMoveResult res = _engine.move(roll);
+      if (res.climbed) _climbs[res.seat]++;
+      if (res.bitten) _bites[res.seat]++;
+      _skipOut();
+      return;
+    }
+    while (_busy || _rolling) {
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      if (!mounted) return;
+    }
+    await _roll(fromNet: true);
+  }
+
+  void _skipOut() {
+    int guard = 0;
+    while (_out.contains(_engine.turn) && guard < _n) {
+      _engine.turn = (_engine.turn + 1) % _n;
+      guard++;
+    }
+  }
+
+  /// Online: when everyone else left, the last player standing wins.
+  bool _checkLastStanding() {
+    if (!_l.online || _finished) return false;
+    final List<int> alive = <int>[for (int i = 0; i < _n; i++) if (!_out.contains(i)) i];
+    if (alive.length == 1) {
+      _engine.winner = alive.first;
+      _gameOver(alive.first);
+      return true;
+    }
+    return false;
   }
 
   @override
   void dispose() {
+    _inbox?.close();
     _hopCtl.removeListener(_onHopTick);
     _rollCtl.dispose();
     _hopCtl.dispose();
@@ -99,12 +182,16 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
   String _faNum(int v) => snlNum(v, true);
 
   String _nameFa(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) return _l.playerName;
     if (_l.vsBot) return _n == 2 ? 'ربات NX' : 'ربات ${_faNum(seat)}';
     return 'بازیکن ${_faNum(seat + 1)}';
   }
 
   String _nameEn(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) return _l.playerName;
     if (_l.vsBot) return _n == 2 ? 'NX Bot' : 'Bot $seat';
     return 'Player ${seat + 1}';
@@ -142,10 +229,14 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
   // ------------------------------------------------------------------ flow
   void _beginTurn() {
     if (!mounted || _finished) return;
+    _skipOut();
     final int seat = _engine.turn;
+    _l.net?.turnSeat = seat;
     setState(() {
       _uiTurn = seat;
-      if (_isBot(seat)) {
+      if (_isRemote(seat)) {
+        _status('نوبت ${_nameFa(seat)} — منتظر حرکتش…', "${_nameEn(seat)}'s turn — waiting…");
+      } else if (_isBot(seat)) {
         _status('نوبت ${_nameFa(seat)}', "${_nameEn(seat)}'s turn");
       } else {
         _status('نوبت ${_nameFa(seat)} — تاس را لمس کن', '${_nameEn(seat)} — tap the die');
@@ -161,10 +252,15 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
     await _roll(fromBot: true);
   }
 
-  Future<void> _roll({bool fromBot = false}) async {
+  Future<void> _roll({bool fromBot = false, bool fromNet = false}) async {
     if (_rolling || _busy || _finished) return;
     final int seat = _engine.turn;
     if (_isBot(seat) && !fromBot) return;
+    if (_isRemote(seat) && !fromNet) return;
+    if (_l.online && !fromNet) {
+      // Our own roll: log it first so every phone rolls the same seeded die in the same order.
+      _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
+    }
     setState(() => _rolling = true);
     _haptic();
     await _rollCtl.forward(from: 0);
@@ -266,6 +362,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
       return;
     }
     await _wait(res.climbed || res.bitten || bounced ? 700 : 280);
+    if (!mounted || _finished) return;
     _beginTurn();
   }
 
@@ -282,19 +379,21 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
       _status('رسید به ستاره‌ی ۱۰۰', 'Reached star 100');
     });
     int bestOther = 0;
-    for (int i = 1; i < _n; i++) {
-      bestOther = max(bestOther, _engine.positions[i]);
+    for (int i = 0; i < _n; i++) {
+      if (i != _me) bestOther = max(bestOther, _engine.positions[i]);
     }
-    final int mine = _engine.positions[0];
+    final int mine = _engine.positions[_me];
     final String fa =
-        'برنده: ${_nameFa(winner)}. خانه‌ی تو: ${_faNum(mine)} • پل‌های نور: ${_faNum(_climbs[0])} • نیش مار: ${_faNum(_bites[0])} • بازیکنان: ${_faNum(_n)}';
+        'برنده: ${_nameFa(winner)}. خانه‌ی تو: ${_faNum(mine)} • پل‌های نور: ${_faNum(_climbs[_me])} • نیش مار: ${_faNum(_bites[_me])} • بازیکنان: ${_faNum(_n)}';
     final String en =
-        'Winner: ${_nameEn(winner)}. Your square: $mine • ladders climbed: ${_climbs[0]} • snake bites: ${_bites[0]} • players: $_n';
+        'Winner: ${_nameEn(winner)}. Your square: $mine • ladders climbed: ${_climbs[_me]} • snake bites: ${_bites[_me]} • players: $_n';
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted || _resultSent) return;
       _resultSent = true;
       _l.onFinish(GameResult(
-        outcome: winner == 0 ? GameOutcome.win : GameOutcome.loss,
+        outcome: winner == _me ? GameOutcome.win : GameOutcome.loss,
+        winnerSeats: <int>[winner],
+        scores: List<int>.from(_engine.positions),
         score: mine,
         opponentScore: bestOther,
         summaryFa: fa,
@@ -567,7 +666,8 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
 
   Widget _bottomBar() {
     final int seat = _uiTurn;
-    final bool canTap = !_isBot(seat) && !_rolling && !_busy && !_finished && _engine.turn == seat;
+    final bool canTap =
+        !_isBot(seat) && !_isRemote(seat) && !_rolling && !_busy && !_finished && _engine.turn == seat;
     final Color col = _color(_movingSeat ?? seat);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),

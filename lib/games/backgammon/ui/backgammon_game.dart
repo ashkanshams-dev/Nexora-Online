@@ -53,7 +53,15 @@ class _BackgammonGameState extends State<BackgammonGame>
   String? _bannerFa;
   String? _bannerEn;
 
+  // ------------------------------------------------------------- online
+  NetInbox? _inbox;
+  bool _replayedAny = false;
+  BgTurnTracker? _replayTracker;
+
   GameLaunch get _l => widget.launch;
+  bool _isRemote(int p) => _l.isRemoteSeat(p);
+  bool _human(int p) => !_isBot(p) && !_isRemote(p);
+  int get _me => _l.mySeat;
   bool get _fancy => _l.fancyEffects && !_l.reducedMotion;
 
   @override
@@ -74,11 +82,145 @@ class _BackgammonGameState extends State<BackgammonGame>
       _pulseCtl.repeat(reverse: true);
     }
     _flashCtl = AnimationController(vsync: this, duration: const Duration(milliseconds: 520));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _opening());
+    final NetLink? net = _l.net;
+    if (net != null) {
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _opening());
+    }
+  }
+
+  String _stateHash() =>
+      hashOf('${_s.points.join(',')}|${_s.bar.join(',')}|${_s.off.join(',')}|$_turn');
+
+  List<List<int>> _encode(List<BgMove> ms) => <List<int>>[for (final BgMove m in ms) <int>[m.from, m.to, m.die]];
+
+  List<BgMove> _decode(dynamic raw) {
+    final List<BgMove> out = <BgMove>[];
+    if (raw is! List) return out;
+    for (final dynamic e in raw) {
+      if (e is List && e.length >= 3) {
+        out.add(BgMove((e[0] as num).toInt(), (e[1] as num).toInt(), (e[2] as num).toInt()));
+      }
+    }
+    return out;
+  }
+
+  /// Same dice as the animated opening, instantly (used when rebuilding from the log).
+  void _fastOpening() {
+    int a = 0;
+    int b = 0;
+    do {
+      a = _dice.roll();
+      b = _dice.roll();
+    } while (a == b);
+    _turn = a > b ? 0 : 1;
+    _replayStart(<int>[a, b]);
+  }
+
+  void _replayStart(List<int> dice) {
+    final BgTurnTracker t = BgTurnTracker(_s, _turn, dice);
+    _s.turn = _turn;
+    _replayTracker = t;
+    if (t.total == 0) {
+      _turn = 1 - _turn;
+      _replayTracker = null;
+    }
+  }
+
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      if (!_replayedAny) {
+        await _opening();
+        return;
+      }
+      if (_s.winner != null) {
+        _gameOver();
+        return;
+      }
+      final BgTurnTracker? t = _replayTracker;
+      _replayTracker = null;
+      if (t != null) {
+        _startTurnWithDice(List<int>.from(t.rolled));
+      } else {
+        _turn = 1 - _turn;
+        _endTurn();
+      }
+      return;
+    }
+    if (m.kind != 'move') return;
+    final String a = '${m.data['a']}';
+    if (m.replay) {
+      if (!_replayedAny) {
+        _replayedAny = true;
+        _fastOpening();
+      }
+      if (m.seat != _turn || _s.winner != null) return;
+      if (a == 'roll') {
+        _replayStart(<int>[_dice.roll(), _dice.roll()]);
+      } else if (a == 'turn') {
+        final BgTurnTracker? t = _replayTracker;
+        if (t == null) return;
+        for (final BgMove mv in _decode(m.data['m'])) {
+          t.play(mv);
+        }
+        _s = t.state.copy();
+        _replayTracker = null;
+        if (_s.winner == null) _turn = 1 - _turn;
+      }
+      return;
+    }
+    if (m.seat != _turn || _finished) return;
+    while (_busy || _phase == _Phase.rolling || _phase == _Phase.opening) {
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      if (!mounted) return;
+    }
+    _l.net?.verify(m.seq, m.data['h'] as String?, _stateHash());
+    if (a == 'roll') {
+      setState(() => _phase = _Phase.rolling);
+      if (!await _run(_rollCtl)) return;
+      _startTurnWithDice(<int>[_dice.roll(), _dice.roll()]);
+    } else if (a == 'turn') {
+      await _netPlay(_decode(m.data['m']));
+    }
+  }
+
+  /// Animate the remote player's whole turn, checker by checker.
+  Future<void> _netPlay(List<BgMove> plan) async {
+    final BgTurnTracker? t = _tracker;
+    if (t == null) return;
+    for (final BgMove mv in plan) {
+      if (!mounted || _finished) return;
+      final BgState before = _s.copy();
+      final BgMove? played = t.play(mv);
+      if (played == null) break;
+      await _animateMove(played, t.player, before, t.state.copy());
+      if (!mounted) return;
+      setState(() => _usedDice = List<bool>.from(t.used));
+      if (_s.winner != null) {
+        _gameOver();
+        return;
+      }
+      await _wait(200);
+    }
+    if (!mounted) return;
+    await _wait(200);
+    if (!mounted) return;
+    _endTurn();
+  }
+
+  void _sendTurn(BgTurnTracker t) {
+    if (!_l.online) return;
+    _l.net!.send(<String, dynamic>{'a': 'turn', 'm': _encode(t.played)});
   }
 
   @override
   void dispose() {
+    _inbox?.close();
     _rollCtl.dispose();
     _flyCtl.dispose();
     _pulseCtl.dispose();
@@ -90,6 +232,8 @@ class _BackgammonGameState extends State<BackgammonGame>
   bool _isBot(int p) => _l.vsBot && p == 1;
 
   String _name(int p, {bool fa = true}) {
+    final String? online = _l.netName(p);
+    if (online != null) return online;
     if (p == 0) return _l.playerName;
     if (_l.vsBot) return fa ? 'ربات NX' : 'NX Bot';
     return fa ? 'بازیکن ۲' : 'Player 2';
@@ -155,7 +299,8 @@ class _BackgammonGameState extends State<BackgammonGame>
   }
 
   Future<void> _rollHuman() async {
-    if (_phase != _Phase.awaitRoll || _isBot(_turn)) return;
+    if (_phase != _Phase.awaitRoll || !_human(_turn)) return;
+    if (_l.online) _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
     setState(() => _phase = _Phase.rolling);
     _haptic();
     if (!await _run(_rollCtl)) return;
@@ -176,6 +321,16 @@ class _BackgammonGameState extends State<BackgammonGame>
     });
     if (_isBot(_turn)) {
       _botPlay(t);
+      return;
+    }
+    if (_isRemote(_turn)) {
+      _l.net?.turnSeat = _turn;
+      setState(() {
+        _phase = _Phase.bot;
+        _status(t.total == 0 ? '${_name(_turn)} حرکتی ندارد' : '${_name(_turn)} در حال بازی…',
+            t.total == 0 ? '${_name(_turn, fa: false)} cannot move' : '${_name(_turn, fa: false)} is playing…');
+      });
+      if (t.total == 0) _passAfterDelay();
       return;
     }
     if (t.total == 0) {
@@ -216,7 +371,7 @@ class _BackgammonGameState extends State<BackgammonGame>
 
   Future<void> _onBoardTap(Offset p) async {
     final BgTurnTracker? t = _tracker;
-    if (_phase == _Phase.awaitRoll && !_isBot(_turn)) {
+    if (_phase == _Phase.awaitRoll && _human(_turn)) {
       if ((p - BgGeom.diceCenter).distance < 140) _rollHuman();
       return;
     }
@@ -263,6 +418,7 @@ class _BackgammonGameState extends State<BackgammonGame>
     _busy = false;
     setState(() => _usedDice = List<bool>.from(t.used));
     if (_s.winner != null) {
+      _sendTurn(t);
       _gameOver();
       return;
     }
@@ -285,6 +441,7 @@ class _BackgammonGameState extends State<BackgammonGame>
     final BgTurnTracker? t = _tracker;
     if (t == null || !t.complete || _busy) return;
     _haptic();
+    _sendTurn(t);
     _endTurn();
   }
 
@@ -298,12 +455,15 @@ class _BackgammonGameState extends State<BackgammonGame>
       _shownDice = <int>[];
       _usedDice = <bool>[];
       _phase = _Phase.awaitRoll;
-      if (_isBot(_turn)) {
+      if (_isRemote(_turn)) {
+        _status('نوبت ${_name(_turn)} — منتظر تاس…', "${_name(_turn, fa: false)}'s turn — waiting…");
+      } else if (_isBot(_turn)) {
         _status('نوبت ${_name(1)}', "${_name(1, fa: false)}'s turn");
       } else {
         _status('نوبت ${_name(_turn)} — تاس بریز', '${_name(_turn, fa: false)} — roll the dice');
       }
     });
+    _l.net?.turnSeat = _turn;
     if (_isBot(_turn)) _botTurn();
   }
 
@@ -431,9 +591,11 @@ class _BackgammonGameState extends State<BackgammonGame>
     Future<void>.delayed(const Duration(milliseconds: 1800), () {
       if (!mounted) return;
       _l.onFinish(GameResult(
-        outcome: w == 0 ? GameOutcome.win : GameOutcome.loss,
-        score: w == 0 ? mult : 0,
-        opponentScore: w == 1 ? mult : 0,
+        outcome: w == _me ? GameOutcome.win : GameOutcome.loss,
+        score: w == _me ? mult : 0,
+        opponentScore: w != _me ? mult : 0,
+        winnerSeats: <int>[w],
+        scores: <int>[w == 0 ? mult : 0, w == 1 ? mult : 0],
         summaryFa: sumFa,
         summaryEn: sumEn,
       ));
@@ -548,7 +710,7 @@ class _BackgammonGameState extends State<BackgammonGame>
     final Set<int> dests = <int>{};
     bool destOff = false;
     final Set<int> sources = <int>{};
-    if (_phase == _Phase.playing && !_busy && !_isBot(_turn)) {
+    if (_phase == _Phase.playing && !_busy && _human(_turn)) {
       for (final BgMove m in _legal) {
         sources.add(m.from);
         if (m.from == _selected) {
@@ -672,7 +834,7 @@ class _BackgammonGameState extends State<BackgammonGame>
     final bool rolling = _phase == _Phase.rolling;
     final int count = rolling ? 2 : n;
     if (count == 0) {
-      if (_phase == _Phase.awaitRoll && !_isBot(_turn)) {
+      if (_phase == _Phase.awaitRoll && _human(_turn)) {
         return Positioned(
           left: BgGeom.diceCenter.dx - 120,
           top: BgGeom.diceCenter.dy - 50,
@@ -829,7 +991,7 @@ class _BackgammonGameState extends State<BackgammonGame>
 
   Widget _controls() {
     final BgTurnTracker? t = _tracker;
-    final bool humanTurn = !_isBot(_turn) && !_finished;
+    final bool humanTurn = _human(_turn) && !_finished;
     final List<Widget> buttons = <Widget>[];
     if (humanTurn && _phase == _Phase.awaitRoll) {
       buttons.add(BgButton(

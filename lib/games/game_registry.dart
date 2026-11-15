@@ -82,6 +82,7 @@ final List<GameInfo> kGames = <GameInfo>[
     maxPlayers: 2,
     accent: const Color(0xFFE0B252),
     builder: buildBackgammonGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'ludo',
@@ -100,6 +101,7 @@ final List<GameInfo> kGames = <GameInfo>[
     defaultPlayers: 4,
     accent: const Color(0xFFFF4FA3),
     builder: buildLudoGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'snakes_ladders',
@@ -116,6 +118,7 @@ final List<GameInfo> kGames = <GameInfo>[
     defaultPlayers: 2,
     accent: const Color(0xFF7CFF8A),
     builder: buildSnakesLaddersGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'uno',
