@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -100,7 +101,7 @@ class _FingerSoccerViewState extends State<FingerSoccerView> with SingleTickerPr
                 child: LayoutBuilder(
                   builder: (BuildContext context, BoxConstraints cons) {
                     _c.viewSize = Size(cons.maxWidth, cons.maxHeight);
-                    return GestureDetector(
+                    final Widget pitch = GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onPanStart: (DragStartDetails d) => _c.onAimStart(d.localPosition),
                       onPanUpdate: (DragUpdateDetails d) => _c.onAimUpdate(d.localPosition),
@@ -111,6 +112,9 @@ class _FingerSoccerViewState extends State<FingerSoccerView> with SingleTickerPr
                         painter: FsPainter(_c, _images),
                       ),
                     );
+                    // Online seat 1: rotate the whole pitch so your own goal is at the bottom
+                    // (touches are rotated with it, so aiming maps straight to field coordinates).
+                    return _c.flipped ? Transform.rotate(angle: math.pi, child: pitch) : pitch;
                   },
                 ),
               ),
@@ -146,8 +150,8 @@ class _FsHud extends StatelessWidget {
       status = launch.tx('پایان بازی', 'Full time');
     } else if (hud.botThinking) {
       status = launch.tx('ربات فکر می‌کند…', 'Bot is thinking…');
-    } else if (launch.vsBot) {
-      status = hud.turnTeam == 0 ? launch.tx('نوبت شما', 'Your turn') : launch.tx('نوبت حریف', 'Opponent');
+    } else if (launch.vsBot || launch.online) {
+      status = hud.turnTeam == launch.mySeat ? launch.tx('نوبت شما', 'Your turn') : launch.tx('نوبت حریف', 'Opponent');
     } else {
       status = launch.tx('نوبت ', 'Turn: ') + c.teamName(hud.turnTeam);
     }

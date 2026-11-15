@@ -216,6 +216,14 @@ class QuizEngine {
     return true;
   }
 
+  /// Online: [player] ran out of time. Recorded explicitly (like an answer) so both phones agree.
+  bool submitTimeout(int player) {
+    if (phase != QuizPhase.question || player < 0 || player > 1 || _current[player] != null) return false;
+    _current[player] = const QuizAnswer(choice: null, elapsedMs: timeLimitMs, correct: false, points: 0);
+    if (bothAnswered) _closeRound();
+    return true;
+  }
+
   /// Time ran out: unanswered players get no points; round is revealed.
   void timeUp() {
     if (phase != QuizPhase.question) return;

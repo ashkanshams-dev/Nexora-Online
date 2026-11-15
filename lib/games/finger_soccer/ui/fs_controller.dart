@@ -91,7 +91,127 @@ class FsController extends ChangeNotifier {
     }
     playerSkin = fsSkinFromCatalog(launch.skins['puck']);
     opponentSkin = fsOpponentSkin(playerSkin);
+    final NetLink? net = launch.net;
+    if (net != null) {
+      _netReady = false;
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    }
     _pushHud();
+  }
+
+  // ------------------------------------------------------------- online
+  // Both phones run the same deterministic physics on the same shot input. After each shot settles,
+  // the authority posts a snapshot ('snap'); everyone adopts it, so the boards can never drift apart.
+  NetInbox? _inbox;
+  bool _netReady = true;
+  bool _synced = true;
+  double _syncWait = 0;
+  bool get online => launch.online;
+  int get mySeat => launch.mySeat;
+
+  /// Seat 1 sees the pitch rotated so their own goal is at the bottom.
+  bool get flipped => online && mySeat == 1;
+
+  String _hash() => hashOf('${match.toJson()}');
+
+  Map<String, dynamic> _snap() => <String, dynamic>{'a': 'snap', 'tn': match.turnNumber, 'm': match.toJson(), 'h': _hash()};
+
+  void _applySnap(Map<String, dynamic> d) {
+    final dynamic m = d['m'];
+    if (m is! Map) return;
+    final FsMatch next = FsMatch.fromJson(Map<String, dynamic>.from(m));
+    if (hashOf('${next.toJson()}') != _hash()) {
+      launch.net?.verify(-1, hashOf('${next.toJson()}'), _hash());
+      match = next;
+      trail.clear();
+    }
+  }
+
+  void _postSettle() {
+    if (!online) return;
+    final NetLink net = launch.net!;
+    if (net.isAuthority) {
+      net.send(_snap(), kind: 'snap');
+      _synced = true;
+    } else {
+      _synced = false;
+      _syncWait = 0;
+    }
+  }
+
+  void _runShotNow(FsShot shot) {
+    if (match.validate(shot) != null) return;
+    match.beginShot(shot);
+    final FsSimulator sim = FsSimulator(match.bodies)..runToEnd();
+    match.finishShot(sim.scorer, sim.steps);
+  }
+
+  FsShot? _shotFrom(Map<String, dynamic> d) {
+    final int? b = (d['b'] as num?)?.toInt();
+    if (b == null) return null;
+    return FsShot(
+      bodyId: b,
+      dirX: (d['x'] as num).toDouble(),
+      dirY: (d['y'] as num).toDouble(),
+      power: (d['p'] as num).toDouble(),
+    );
+  }
+
+  Future<void> _onNet(NetMove m) async {
+    if (_disposed) return;
+    if (m.kind == 'replayDone') {
+      _netReady = true;
+      _synced = true;
+      timeLeft = FsConfig.turnSeconds;
+      if (match.phase == FsPhase.finished) _onMatchOver();
+      _pushHud();
+      return;
+    }
+    final String a = '${m.data['a']}';
+    final int tn = (m.data['tn'] as num?)?.toInt() ?? -1;
+    if (m.replay) {
+      if (a == 'shot' && tn == match.turnNumber) {
+        final FsShot? shot = _shotFrom(m.data);
+        if (shot != null) _runShotNow(shot);
+      } else if (a == 'pass' && tn == match.turnNumber) {
+        match.passTurn();
+      } else if (a == 'snap' && tn == match.turnNumber) {
+        _applySnap(m.data);
+      }
+      return;
+    }
+    // Live: never interrupt a running simulation.
+    while (!_disposed && match.phase == FsPhase.simulating) {
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    if (_disposed) return;
+    if (a == 'snap') {
+      if (tn == match.turnNumber) _applySnap(m.data);
+      _synced = true;
+    } else if (a == 'shot') {
+      if (tn != match.turnNumber || match.phase != FsPhase.aiming) return;
+      launch.net?.verify(m.seq, m.data['h'] as String?, _hash());
+      final FsShot? shot = _shotFrom(m.data);
+      if (shot != null) startShot(shot, remote: true);
+    } else if (a == 'pass') {
+      if (tn != match.turnNumber || match.phase != FsPhase.aiming) return;
+      _doPass();
+    }
+    _pushHud();
+  }
+
+  void _doPass() {
+    aimId = null;
+    pull = Offset.zero;
+    _search = null;
+    match.passTurn();
+    timeLeft = FsConfig.turnSeconds;
+    _botDelay = 0.9;
+    _banner('وقت تمام شد', 'Time up', const Color(0xFFFFC857));
+    if (match.phase == FsPhase.finished) _onMatchOver();
   }
 
   final GameLaunch launch;
@@ -156,6 +276,9 @@ class FsController extends ChangeNotifier {
     return Offset((local.dx - o.dx) / s, (local.dy - o.dy) / s);
   }
 
+  /// Gesture positions arrive in the (possibly rotated) pitch widget's own space.
+  Offset toFieldFromGesture(Offset local) => toField(local);
+
   static FsBotLevel _level(BotDifficulty d) => switch (d) {
         BotDifficulty.easy => FsBotLevel.easy,
         BotDifficulty.normal => FsBotLevel.normal,
@@ -163,10 +286,16 @@ class FsController extends ChangeNotifier {
       };
 
   bool get isBotTurn => bot != null && match.turnTeam == bot!.team && match.phase == FsPhase.aiming;
-  bool get humanCanAim => match.phase == FsPhase.aiming && !isBotTurn && bannerTime <= 0;
+  bool get humanCanAim =>
+      match.phase == FsPhase.aiming &&
+      !isBotTurn &&
+      bannerTime <= 0 &&
+      (!online || (_netReady && _synced && match.turnTeam == mySeat));
   bool get botThinking => isBotTurn && bannerTime <= 0;
 
   String teamName(int team) {
+    final String? n = launch.netName(team);
+    if (n != null) return n;
     if (team == 0) return launch.playerName.isEmpty ? launch.tx('شما', 'You') : launch.playerName;
     if (launch.vsBot) return launch.tx('ربات', 'Bot');
     return launch.tx('بازیکن ۲', 'Player 2');
@@ -222,8 +351,19 @@ class FsController extends ChangeNotifier {
   }
 
   /// Entry point for human, bot and (later) remote shots.
-  void startShot(FsShot shot) {
+  void startShot(FsShot shot, {bool remote = false}) {
     if (match.validate(shot) != null) return;
+    if (online && !remote) {
+      launch.net!.send(<String, dynamic>{
+        'a': 'shot',
+        'tn': match.turnNumber,
+        'b': shot.bodyId,
+        'x': shot.dirX,
+        'y': shot.dirY,
+        'p': shot.power,
+        'h': _hash(),
+      });
+    }
     match.beginShot(shot);
     _sim = FsSimulator(match.bodies, impactSink: _impacts);
     _acc = 0;
@@ -262,6 +402,25 @@ class FsController extends ChangeNotifier {
 
   void _tickAiming(double dt) {
     if (bannerTime > 0) return;
+    if (online) {
+      if (!_netReady) return;
+      if (!_synced) {
+        _syncWait += dt;
+        if (_syncWait > 3.5) _synced = true; // authority silent: continue on our identical simulation
+        return;
+      }
+      timeLeft -= dt;
+      final NetLink net = launch.net!;
+      if (match.turnTeam == mySeat && timeLeft <= 0) {
+        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber});
+        _doPass();
+      } else if (match.turnTeam != mySeat && timeLeft <= -8 && net.isAuthority) {
+        // The other player went silent: record their timeout for them.
+        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber}, kind: 'timeout', asSeat: match.turnTeam);
+        _doPass();
+      }
+      return;
+    }
     timeLeft -= dt;
     if (timeLeft <= 0) {
       aimId = null;
@@ -310,6 +469,7 @@ class FsController extends ChangeNotifier {
         _botDelay = 0.9;
         if (out.scorer >= 0) _onGoal(out.scorer, ballX);
         if (out.matchOver) _onMatchOver();
+        _postSettle();
         break;
       }
     }
@@ -353,6 +513,9 @@ class FsController extends ChangeNotifier {
     final w = match.winner;
     if (w == -1) {
       _banner('مساوی', 'Draw', const Color(0xFFFFC857));
+    } else if (online) {
+      final bool won = w == mySeat;
+      _banner(won ? 'بردی!' : 'باختی', won ? 'You win!' : 'You lose', w == 0 ? kFsTeam0 : kFsTeam1);
     } else if (w == 0) {
       _banner(launch.vsBot ? 'بردی!' : 'تیم آبی برد', launch.vsBot ? 'You win!' : 'Blue wins', kFsTeam0);
     } else {
@@ -374,12 +537,15 @@ class FsController extends ChangeNotifier {
     if (_reported) return;
     _reported = true;
     final w = match.winner;
-    final GameOutcome outcome = w == 0 ? GameOutcome.win : (w == 1 ? GameOutcome.loss : GameOutcome.draw);
+    final int me = mySeat;
+    final GameOutcome outcome = w == null || w == -1 ? GameOutcome.draw : (w == me ? GameOutcome.win : GameOutcome.loss);
     final s0 = match.score[0], s1 = match.score[1];
     launch.onFinish(GameResult(
       outcome: outcome,
-      score: s0,
-      opponentScore: s1,
+      score: match.score[me],
+      opponentScore: match.score[1 - me],
+      winnerSeats: w == null || w < 0 ? <int>[] : <int>[w],
+      scores: <int>[s0, s1],
       summaryFa: 'نتیجه‌ی فوتبال انگشتی: $s0 - $s1 در ${match.turnNumber} نوبت',
       summaryEn: 'Finger Soccer final: $s0 - $s1 after ${match.turnNumber} turns',
     ));
@@ -402,6 +568,7 @@ class FsController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _inbox?.close();
     hud.dispose();
     super.dispose();
   }

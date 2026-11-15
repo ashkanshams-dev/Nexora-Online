@@ -107,8 +107,130 @@ class CrController extends ChangeNotifier {
     }
     strikerSkin0 = crStrikerFromCatalog(launch.skins['striker']);
     strikerSkin1 = crOpponentStriker(strikerSkin0);
-    _say('شروع! مهره‌های سفید مال شماست', 'Break! You play the white coins', kCrGold);
+    final NetLink? net = launch.net;
+    if (net != null) {
+      _netReady = false;
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+      _say(net.mySeat == 0 ? 'شروع! مهره‌های سفید مال شماست' : 'مهره‌های سیاه مال شماست؛ حریف شروع می‌کند',
+          net.mySeat == 0 ? 'Break! You play the white coins' : 'You play the black coins; your opponent breaks', kCrGold);
+    } else {
+      _say('شروع! مهره‌های سفید مال شماست', 'Break! You play the white coins', kCrGold);
+    }
     _pushHud();
+  }
+
+  // ------------------------------------------------------------- online
+  // Same deterministic physics on both phones from the same shot input; the authority posts a
+  // snapshot after every shot so the boards always agree exactly.
+  NetInbox? _inbox;
+  bool _netReady = true;
+  bool _synced = true;
+  double _syncWait = 0;
+  bool get online => launch.online;
+  int get mySeat => launch.mySeat;
+
+  /// Seat 1 sees the board rotated so their own baseline is at the bottom.
+  bool get flipped => online && mySeat == 1;
+
+  String _hash() => hashOf('${match.toJson()}');
+
+  void _applySnap(Map<String, dynamic> d) {
+    final dynamic m = d['m'];
+    if (m is! Map) return;
+    final String want = '${d['h'] ?? ''}';
+    if (want.isNotEmpty && want == _hash()) return;
+    launch.net?.verify(-1, want, _hash());
+    match.applyJson(Map<String, dynamic>.from(m));
+    trail.clear();
+    _onNewTurn();
+  }
+
+  void _postSettle() {
+    if (!online) return;
+    final NetLink net = launch.net!;
+    if (net.isAuthority) {
+      net.send(<String, dynamic>{'a': 'snap', 'tn': match.turnNumber, 'm': match.toJson(), 'h': _hash()}, kind: 'snap');
+      _synced = true;
+    } else {
+      _synced = false;
+      _syncWait = 0;
+    }
+  }
+
+  CrShot? _shotFrom(Map<String, dynamic> d) {
+    if (d['px'] == null) return null;
+    return CrShot(
+      placeX: (d['px'] as num).toDouble(),
+      dirX: (d['x'] as num).toDouble(),
+      dirY: (d['y'] as num).toDouble(),
+      power: (d['p'] as num).toDouble(),
+    );
+  }
+
+  Future<void> _onNet(NetMove m) async {
+    if (_disposed) return;
+    if (m.kind == 'replayDone') {
+      _netReady = true;
+      _synced = true;
+      _onNewTurn();
+      if (match.phase == CrPhase.finished) _onMatchOver();
+      _pushHud();
+      return;
+    }
+    final String a = '${m.data['a']}';
+    final int tn = (m.data['tn'] as num?)?.toInt() ?? -1;
+    if (m.replay) {
+      if (a == 'shot' && tn == match.turnNumber) {
+        final CrShot? shot = _shotFrom(m.data);
+        if (shot != null && match.validate(shot) == null) {
+          match.beginShot(shot);
+          final CrSimulator sim = CrSimulator(match.bodies)..runToEnd();
+          match.finishShot(sim.pocketed, sim.steps);
+        }
+      } else if (a == 'pass' && tn == match.turnNumber) {
+        match.passTurn();
+      } else if (a == 'snap' && tn == match.turnNumber) {
+        _applySnap(m.data);
+      }
+      return;
+    }
+    while (!_disposed && match.phase == CrPhase.simulating) {
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+    }
+    if (_disposed) return;
+    if (a == 'snap') {
+      if (tn == match.turnNumber) _applySnap(m.data);
+      _synced = true;
+    } else if (a == 'shot') {
+      if (tn != match.turnNumber || match.phase != CrPhase.aiming) return;
+      launch.net?.verify(m.seq, m.data['h'] as String?, _hash());
+      final CrShot? shot = _shotFrom(m.data);
+      if (shot != null) {
+        placeX[match.turn] = shot.placeX;
+        startShot(shot, remote: true);
+      }
+    } else if (a == 'pass') {
+      if (tn != match.turnNumber || match.phase != CrPhase.aiming) return;
+      _doPass();
+    } else if (a == 'place') {
+      if (match.turn == m.seat) placeX[m.seat] = (m.data['px'] as num).toDouble();
+    }
+    _pushHud();
+  }
+
+  void _doPass() {
+    aiming = false;
+    pull = Offset.zero;
+    _search = null;
+    _stage = _BotStage.idle;
+    _botShot = null;
+    match.passTurn();
+    _onNewTurn();
+    _say('وقت تمام شد؛ نوبت سوخت', 'Time up — turn lost', kCrDanger);
+    if (match.phase == CrPhase.finished) _onMatchOver();
   }
 
   final GameLaunch launch;
@@ -200,13 +322,19 @@ class CrController extends ChangeNotifier {
 
   // ------------------------------------------------------------- state helpers
   bool get isBotTurn => bot != null && match.turn == bot!.seat && match.phase == CrPhase.aiming;
-  bool get humanCanAim => match.phase == CrPhase.aiming && !isBotTurn && bannerTime <= 0;
+  bool get humanCanAim =>
+      match.phase == CrPhase.aiming &&
+      !isBotTurn &&
+      bannerTime <= 0 &&
+      (!online || (_netReady && _synced && match.turn == mySeat));
   bool get botThinking => isBotTurn && (_stage == _BotStage.thinking || _stage == _BotStage.idle);
   double get strikerX => placeX[match.turn];
   double get strikerY => CrMatch.baselineY(match.turn);
   bool get placementValid => match.placementOk(strikerX);
 
   String seatName(int seat) {
+    final String? n = launch.netName(seat);
+    if (n != null) return n;
     if (seat == 0) return launch.playerName.isEmpty ? launch.tx('شما', 'You') : launch.playerName;
     if (launch.vsBot) return launch.tx('ربات', 'Bot');
     return launch.tx('بازیکن ۲', 'Player 2');
@@ -271,8 +399,19 @@ class CrController extends ChangeNotifier {
     pull = Offset.zero;
   }
 
-  void startShot(CrShot shot) {
+  void startShot(CrShot shot, {bool remote = false}) {
     if (match.validate(shot) != null) return;
+    if (online && !remote) {
+      launch.net!.send(<String, dynamic>{
+        'a': 'shot',
+        'tn': match.turnNumber,
+        'px': shot.placeX,
+        'x': shot.dirX,
+        'y': shot.dirY,
+        'p': shot.power,
+        'h': _hash(),
+      });
+    }
     match.beginShot(shot);
     _sim = CrSimulator(match.bodies, impactSink: _impacts);
     _seenPocketed = 0;
@@ -317,6 +456,24 @@ class CrController extends ChangeNotifier {
 
   void _tickAiming(double dt) {
     if (bannerTime > 0) return;
+    if (online) {
+      if (!_netReady) return;
+      if (!_synced) {
+        _syncWait += dt;
+        if (_syncWait > 3.5) _synced = true;
+        return;
+      }
+      timeLeft -= dt;
+      final NetLink net = launch.net!;
+      if (match.turn == mySeat && timeLeft <= 0) {
+        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber});
+        _doPass();
+      } else if (match.turn != mySeat && timeLeft <= -8 && net.isAuthority) {
+        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber}, kind: 'timeout', asSeat: match.turn);
+        _doPass();
+      }
+      return;
+    }
     timeLeft -= dt;
     if (timeLeft <= 0) {
       aiming = false;
@@ -404,6 +561,7 @@ class CrController extends ChangeNotifier {
         final out = match.finishShot(sim.pocketed, sim.steps);
         _sim = null;
         _afterShot(out);
+        _postSettle();
         break;
       }
     }
@@ -469,7 +627,7 @@ class CrController extends ChangeNotifier {
       spawnedAt[id] = clock;
     }
     if (o.queenReturned) spawnedAt[CrConfig.queenId] = clock;
-    final mine = launch.vsBot ? o.shooter == 0 : true;
+    final mine = online ? o.shooter == mySeat : (launch.vsBot ? o.shooter == 0 : true);
     if (o.foul) {
       _say('خطا! استرایکر افتاد — یک مهره برگشت', 'Foul! Striker pocketed — a coin returns', kCrDanger);
       fx.doFlash(kCrDanger, 0.35);
@@ -514,6 +672,10 @@ class CrController extends ChangeNotifier {
     final w = match.winner;
     if (w == -1) {
       _banner('مساوی', 'Draw', kCrGold);
+    } else if (online) {
+      final bool won = w == mySeat;
+      _banner(won ? 'بردی!' : 'باختی', won ? 'You win!' : 'You lose', won ? kCrGold : kCrSeat1);
+      if (won) fx.burst(CrConfig.centerX, CrConfig.centerY, count: 60, speed: 700, color: kCrGold, size: 8, life: 1.3);
     } else if (w == 0) {
       _banner(launch.vsBot ? 'بردی!' : '${seatName(0)} برد', launch.vsBot ? 'You win!' : '${seatName(0)} wins', kCrGold);
       fx.burst(CrConfig.centerX, CrConfig.centerY, count: 60, speed: 700, color: kCrGold, size: 8, life: 1.3);
@@ -543,15 +705,19 @@ class CrController extends ChangeNotifier {
     if (_reported) return;
     _reported = true;
     final w = match.winner;
-    final GameOutcome outcome = w == 0 ? GameOutcome.win : (w == 1 ? GameOutcome.loss : GameOutcome.draw);
-    final p0 = match.pocketedCount(0), p1 = match.pocketedCount(1);
+    final int me = mySeat;
+    final GameOutcome outcome =
+        w == null || w == -1 ? GameOutcome.draw : (w == me ? GameOutcome.win : GameOutcome.loss);
+    final p0 = match.pocketedCount(me), p1 = match.pocketedCount(1 - me);
     final pts = (w != null && w >= 0) ? match.points[w] : 0;
-    final queenFa = match.queenCoveredBy == 0 ? ' · ملکه با شما' : (match.queenCoveredBy == 1 ? ' · ملکه با حریف' : '');
-    final queenEn = match.queenCoveredBy == 0 ? ' · queen: yours' : (match.queenCoveredBy == 1 ? ' · queen: opponent' : '');
+    final queenFa = match.queenCoveredBy == me ? ' · ملکه با شما' : (match.queenCoveredBy == 1 - me ? ' · ملکه با حریف' : '');
+    final queenEn = match.queenCoveredBy == me ? ' · queen: yours' : (match.queenCoveredBy == 1 - me ? ' · queen: opponent' : '');
     launch.onFinish(GameResult(
       outcome: outcome,
       score: p0,
       opponentScore: p1,
+      winnerSeats: w == null || w < 0 ? <int>[] : <int>[w],
+      scores: <int>[match.pocketedCount(0), match.pocketedCount(1)],
       summaryFa: 'کارم: $p0 مهره در برابر $p1$queenFa · امتیاز تخته $pts',
       summaryEn: 'Carrom: $p0 coins vs $p1$queenEn · board points $pts',
     ));
@@ -577,6 +743,7 @@ class CrController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _inbox?.close();
     hud.dispose();
     super.dispose();
   }

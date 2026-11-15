@@ -31,6 +31,7 @@ final List<GameInfo> kGames = <GameInfo>[
     maxPlayers: 2,
     accent: const Color(0xFF3DDC97),
     builder: buildFingerSoccerGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'carrom',
@@ -48,6 +49,7 @@ final List<GameInfo> kGames = <GameInfo>[
     maxPlayers: 2,
     accent: const Color(0xFFFFC857),
     builder: buildCarromGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'billiards',
@@ -135,6 +137,7 @@ final List<GameInfo> kGames = <GameInfo>[
     defaultPlayers: 4,
     accent: const Color(0xFF9D7BFF),
     builder: buildUnoGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'quiz',
@@ -148,6 +151,7 @@ final List<GameInfo> kGames = <GameInfo>[
     maxPlayers: 2,
     accent: const Color(0xFF2EE6D6),
     builder: buildQuizGame,
+    supportsOnline: true,
   ),
   GameInfo(
     id: 'mafia',

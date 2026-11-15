@@ -224,7 +224,8 @@ class FsPainter extends CustomPainter {
       textAlign: TextAlign.center,
     )..layout(maxWidth: size.width);
     canvas.save();
-    canvas.translate(size.width / 2, size.height * 0.45);
+    canvas.translate(size.width / 2, size.height * (c.flipped ? 0.55 : 0.45));
+    if (c.flipped) canvas.rotate(math.pi); // keep text upright on the rotated pitch
     canvas.scale(scale, scale);
     tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
     canvas.restore();

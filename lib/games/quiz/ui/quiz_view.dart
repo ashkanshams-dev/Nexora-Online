@@ -35,6 +35,65 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   GameLaunch get _l => widget.launch;
   bool get _local => _l.mode == GameMode.local;
 
+  // ------------------------------------------------------------- online
+  // Engine player 0 is always THIS phone, 1 the opponent (the quiz is symmetric).
+  NetInbox? _inbox;
+  Timer? _graceTimer;
+  bool get _online => _l.online;
+  int get _other => _l.mySeat == 0 ? 1 : 0;
+  int _ep(int seat) => seat == _l.mySeat ? 0 : 1;
+  bool get _iPick => !_online || _l.mySeat == 0;
+
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      switch (_engine.phase) {
+        case QuizPhase.picking:
+          setState(() {});
+        case QuizPhase.question:
+          _startRound();
+        case QuizPhase.reveal:
+          _onReveal();
+        case QuizPhase.finished:
+          setState(() {});
+      }
+      return;
+    }
+    final String a = '${m.data['a']}';
+    if (a == 'cat') {
+      if (_engine.phase != QuizPhase.picking) return;
+      final int ci = (m.data['c'] as num?)?.toInt() ?? -1;
+      _engine.start(ci < 0 || ci >= QuizCategory.values.length ? null : QuizCategory.values[ci]);
+      if (!m.replay) {
+        setState(() {});
+        if (_engine.phase == QuizPhase.question) _startRound();
+      }
+      return;
+    }
+    if (a != 'ans') return;
+    final int r = (m.data['r'] as num?)?.toInt() ?? 0;
+    if (m.replay) {
+      while (_engine.phase == QuizPhase.reveal && _engine.roundIndex < r) {
+        _engine.next();
+      }
+    } else {
+      while (true) {
+        if (!mounted || _engine.phase == QuizPhase.finished || _engine.roundIndex > r) return;
+        if (_engine.roundIndex == r) break;
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+      }
+    }
+    if (_engine.roundIndex != r || _engine.phase != QuizPhase.question) return;
+    final int p = _ep(m.seat);
+    final int c = (m.data['c'] as num?)?.toInt() ?? -1;
+    if (c < 0) {
+      _engine.submitTimeout(p);
+    } else {
+      _engine.submit(p, c, (m.data['ms'] as num?)?.toInt() ?? QuizEngine.timeLimitMs);
+    }
+    if (!m.replay) _afterAnswer();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -55,10 +114,19 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
     _reveal = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
     _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
     if (_l.fancyEffects && !_l.reducedMotion) _pulse.repeat(reverse: true);
+    final NetLink? net = _l.net;
+    if (net != null) {
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    }
   }
 
   @override
   void dispose() {
+    _inbox?.close();
+    _graceTimer?.cancel();
     _botTimer?.cancel();
     _advanceTimer?.cancel();
     _clock.dispose();
@@ -81,6 +149,8 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   // ------------------------------------------------------------------ flow
 
   void _pickCategory(QuizCategory? c) {
+    if (!_iPick || _engine.phase != QuizPhase.picking) return;
+    if (_online) _l.net!.send(<String, dynamic>{'a': 'cat', 'c': c?.index ?? -1});
     _haptic();
     setState(() => _engine.start(c));
     if (_engine.phase == QuizPhase.question) {
@@ -92,7 +162,20 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
     _botTimer?.cancel();
     _reveal.value = 0;
     _clock.forward(from: 0);
-    if (!_local) {
+    if (_online) {
+      _botThinking = !_engine.hasAnswered(1);
+      _graceTimer?.cancel();
+      final int round = _engine.roundIndex;
+      // Opponent disconnected? The authority records their timeout so the match never stalls.
+      _graceTimer = Timer(const Duration(milliseconds: QuizEngine.timeLimitMs + 9000), () {
+        if (!mounted || _engine.roundIndex != round || _engine.phase != QuizPhase.question) return;
+        if (_engine.hasAnswered(1) || !(_l.net?.isAuthority ?? false)) return;
+        _l.net!.send(<String, dynamic>{'a': 'ans', 'r': round, 'c': -1, 'ms': QuizEngine.timeLimitMs},
+            kind: 'timeout', asSeat: _other);
+        _engine.submitTimeout(1);
+        _afterAnswer();
+      });
+    } else if (!_local) {
       final QuizBotPlan plan = _engine.botPlan(_engine.currentQuestion);
       _botThinking = true;
       _botTimer = Timer(Duration(milliseconds: plan.delayMs), () {
@@ -107,13 +190,18 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
 
   void _answer(int player, int choice) {
     if (_engine.phase != QuizPhase.question || _engine.hasAnswered(player)) return;
-    if (_engine.submit(player, choice, _elapsedMs)) {
+    final int ms = _elapsedMs;
+    final int round = _engine.roundIndex;
+    if (_online && player != 0) return;
+    if (_engine.submit(player, choice, ms)) {
+      if (_online) _l.net!.send(<String, dynamic>{'a': 'ans', 'r': round, 'c': choice, 'ms': ms});
       _haptic();
       _afterAnswer();
     }
   }
 
   void _afterAnswer() {
+    if (_online && _engine.hasAnswered(1)) _botThinking = false;
     if (_engine.phase == QuizPhase.reveal) {
       _onReveal();
     } else {
@@ -123,12 +211,21 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
 
   void _onTimeUp() {
     if (_engine.phase != QuizPhase.question) return;
+    if (_online) {
+      // Only my own timeout is mine to record; the round closes when the opponent's answer arrives.
+      if (_engine.submitTimeout(0)) {
+        _l.net!.send(<String, dynamic>{'a': 'ans', 'r': _engine.roundIndex, 'c': -1, 'ms': QuizEngine.timeLimitMs});
+      }
+      _afterAnswer();
+      return;
+    }
     _engine.timeUp();
     _onReveal();
   }
 
   void _onReveal() {
     _clock.stop();
+    _graceTimer?.cancel();
     _botTimer?.cancel();
     _botThinking = false;
     _haptic(true);
@@ -150,6 +247,10 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
     if (_finishSent) return;
     _finishSent = true;
     final int w = _engine.winner();
+    final List<int> seatScores = _online
+        ? <int>[_l.mySeat == 0 ? _engine.scores[0] : _engine.scores[1], _l.mySeat == 0 ? _engine.scores[1] : _engine.scores[0]]
+        : <int>[_engine.scores[0], _engine.scores[1]];
+    final List<int> winners = w < 0 ? <int>[] : <int>[_online ? (w == 0 ? _l.mySeat : _other) : w];
     final GameOutcome outcome = w == 0
         ? GameOutcome.win
         : w == 1
@@ -160,12 +261,14 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
     final int c0 = _engine.correctCounts[0];
     final int c1 = _engine.correctCounts[1];
     final int n = _engine.totalRounds;
-    final String p2Fa = _local ? 'بازیکن ۲' : 'ربات';
-    final String p2En = _local ? 'Player 2' : 'Bot';
+    final String p2Fa = _local ? 'بازیکن ۲' : (_online ? _p2Name : 'ربات');
+    final String p2En = _local ? 'Player 2' : (_online ? _p2Name : 'Bot');
     _l.onFinish(GameResult(
       outcome: outcome,
       score: s0,
       opponentScore: s1,
+      winnerSeats: winners,
+      scores: seatScores,
       summaryFa: '$c0 از $n پاسخ درست ($s0 امتیاز) در برابر $p2Fa با $c1 پاسخ درست ($s1 امتیاز).',
       summaryEn: '$c0/$n correct ($s0 pts) vs $p2En with $c1/$n correct ($s1 pts).',
     ));
@@ -180,7 +283,8 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   List<String> _opts(QuizQuestion q) => _l.isFa ? q.optionsFa : q.optionsEn;
 
   String get _p1Name => _l.playerName.isEmpty ? _l.tx('بازیکن ۱', 'Player 1') : _l.playerName;
-  String get _p2Name => _local ? _l.tx('بازیکن ۲', 'Player 2') : _l.tx('ربات نکسورا', 'NX Bot');
+  String get _p2Name =>
+      _online ? (_l.netName(_other) ?? 'Pilot') : (_local ? _l.tx('بازیکن ۲', 'Player 2') : _l.tx('ربات نکسورا', 'NX Bot'));
 
   String _roundLabel() => _l.tx(
       'سؤال ${_engine.roundIndex + 1} از ${_engine.totalRounds}', 'Q ${_engine.roundIndex + 1}/${_engine.totalRounds}');
@@ -251,7 +355,9 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
           Text(
             _local
                 ? _l.tx('دو نفره روی یک گوشی · دسته را انتخاب کنید', 'Two players, one device · pick a category')
-                : _l.tx('در برابر $_p2Name · دسته را انتخاب کن', 'Versus $_p2Name · pick a category'),
+                : !_iPick
+                    ? _l.tx('در برابر $_p2Name · میزبان دسته را انتخاب می‌کند…', 'Versus $_p2Name · the host is picking a category…')
+                    : _l.tx('در برابر $_p2Name · دسته را انتخاب کن', 'Versus $_p2Name · pick a category'),
             textAlign: TextAlign.center,
             style: const TextStyle(color: NxColors.textDim, fontSize: 13),
           ),
@@ -273,7 +379,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
                   category: c,
                   label: _catName(c),
                   countLabel: _l.tx('$count سؤال', '$count questions'),
-                  enabled: count > 0,
+                  enabled: count > 0 && _iPick,
                   onTap: () => _pickCategory(c),
                 );
               },

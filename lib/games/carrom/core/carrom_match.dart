@@ -116,6 +116,19 @@ class CrMatch {
   /// Board points (set when the board is won).
   List<int> points;
 
+  /// Online sync: adopt a resting-state snapshot produced by [toJson].
+  void applyJson(Map<String, dynamic> j) {
+    final CrMatch o = CrMatch.fromJson(j);
+    bodies = o.bodies;
+    turn = o.turn;
+    turnNumber = o.turnNumber;
+    phase = o.phase;
+    winner = o.winner;
+    queenPendingFor = o.queenPendingFor;
+    queenCoveredBy = o.queenCoveredBy;
+    points = o.points;
+  }
+
   CrBody get striker => bodies[CrConfig.strikerId];
   CrBody get queen => bodies[CrConfig.queenId];
 

@@ -409,6 +409,7 @@ class CrPainter extends CustomPainter {
     )..layout(maxWidth: size.width * 0.9);
     canvas.save();
     canvas.translate(size.width / 2, size.height / 2);
+    if (c.flipped) canvas.rotate(math.pi);
     canvas.scale(scale, scale);
     tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
     canvas.restore();

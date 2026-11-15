@@ -84,6 +84,109 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
   GameLaunch get _l => widget.launch;
   bool get _motion => !_l.reducedMotion;
 
+  // ------------------------------------------------------------- online
+  NetInbox? _inbox;
+  final Set<int> _out = <int>{};
+  bool _isRemote(int seat) => _l.isRemoteSeat(seat);
+  String _hash() {
+    final StringBuffer b = StringBuffer('${_game.current}|${_game.activeColor.index}|${_game.drawnCardId}|');
+    for (int p = 0; p < _game.playerCount; p++) {
+      b.write('${_game.hands[p].map((UnoCard c) => c.id).join(',')};');
+    }
+    return hashOf(b.toString());
+  }
+
+  void _send(Map<String, dynamic> d) {
+    if (_l.online) _l.net!.send(d);
+  }
+
+  /// Apply one player's logged action to the engine (same calls the UI makes).
+  bool _applyAction(int seat, Map<String, dynamic> d) {
+    switch ('${d['a']}') {
+      case 'play':
+        final int? col = (d['col'] as num?)?.toInt();
+        return _game.play(seat, (d['c'] as num).toInt(),
+            chosenColor: col == null || col < 0 || col >= UnoColor.values.length ? null : UnoColor.values[col]);
+      case 'draw':
+        return _game.draw(seat) != null || true;
+      case 'pass':
+        return _game.pass(seat);
+      case 'nx':
+        return _game.callNx(seat);
+      case 'catch':
+        return _game.catchNx(seat);
+    }
+    return false;
+  }
+
+  /// A player who left: when their turn comes, every phone draws and passes for them (deterministic).
+  void _autoOut() {
+    int guard = 0;
+    while (!_game.isOver && _out.contains(_game.current) && guard < 12) {
+      final int cur = _game.current;
+      _game.draw(cur);
+      if (!_game.isOver && _game.current == cur) _game.pass(cur);
+      guard++;
+    }
+  }
+
+  int? _lastStanding() {
+    final List<int> alive = <int>[for (int i = 0; i < _game.playerCount; i++) if (!_out.contains(i)) i];
+    return alive.length == 1 ? alive.first : null;
+  }
+
+  Future<void> _onNet(NetMove m) async {
+    if (!mounted) return;
+    if (m.kind == 'replayDone') {
+      _cursor = _game.events.length;
+      if (_lastStanding() != null) {
+        _finishOnline(_lastStanding()!);
+        return;
+      }
+      setState(() {});
+      if (!_dealt) {
+        _deal();
+      } else {
+        _afterChange();
+      }
+      return;
+    }
+    if (m.isForfeit) {
+      _out.add((m.data['seat'] as num?)?.toInt() ?? m.seat);
+      if (_lastStanding() != null) {
+        if (!m.replay) _finishOnline(_lastStanding()!);
+        return;
+      }
+      _autoOut();
+      if (!m.replay) _afterChange();
+      return;
+    }
+    if (m.kind != 'move') return;
+    if (m.replay) {
+      _dealt = true;
+      _applyAction(m.seat, m.data);
+      _autoOut();
+      return;
+    }
+    _l.net?.verify(m.seq, m.data['h'] as String?, _hash());
+    if (_applyAction(m.seat, m.data)) {
+      if ('${m.data['a']}' == 'play' && m.seat != _l.mySeat) _pickingWild = null;
+      _autoOut();
+      _afterChange();
+    }
+  }
+
+  void _finishOnline(int winner) {
+    if (_finished || !mounted) return;
+    _finished = true;
+    _l.onFinish(GameResult(
+      outcome: winner == _l.mySeat ? GameOutcome.win : GameOutcome.loss,
+      winnerSeats: <int>[winner],
+      summaryFa: '${_name(winner)} آخرین بازیکن باقی‌مانده بود.',
+      summaryEn: '${_name(winner)} was the last player standing.',
+    ));
+  }
+
   static const List<String> _botFa = <String>['ربات نوا', 'ربات اوریون', 'ربات لیرا', 'ربات وگا', 'ربات آلتایر'];
   static const List<String> _botEn = <String>['Nova Bot', 'Orion Bot', 'Lyra Bot', 'Vega Bot', 'Altair Bot'];
   static const List<Color> _seatColors = <Color>[
@@ -121,11 +224,22 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
     }
     _cursor = _game.events.length;
     _revealed = _l.vsBot; // local: first player taps to reveal their hand
-    WidgetsBinding.instance.addPostFrameCallback((_) => _deal());
+    final NetLink? net = _l.net;
+    if (net != null) {
+      _viewer = net.mySeat;
+      _revealed = true;
+      final NetInbox inbox = NetInbox(_onNet);
+      _inbox = inbox;
+      net.listen(inbox.add,
+          onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _deal());
+    }
   }
 
   @override
   void dispose() {
+    _inbox?.close();
     _botTimer?.cancel();
     _catchTimer?.cancel();
     _finishTimer?.cancel();
@@ -156,6 +270,8 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
   bool _isBot(int seat) => _l.vsBot && seat != 0;
 
   String _name(int seat) {
+    final String? online = _l.netName(seat);
+    if (online != null) return online;
     if (seat == 0) {
       final String n = _l.playerName.trim();
       return n.isEmpty ? _tx('شما', 'You') : n;
@@ -354,6 +470,7 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
 
   void _afterChange() {
     if (!mounted) return;
+    if (_l.online) _autoOut();
     _consume();
     setState(() {});
     if (_game.isOver) {
@@ -365,10 +482,12 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
     if (!_dealt) return;
     _maybeBotCatchesHuman();
     final int cur = _game.current;
+    _l.net?.turnSeat = cur;
     if (_isBot(cur)) {
       _scheduleBot();
       return;
     }
+    if (_l.online) return;
     if (!_l.vsBot && cur != _viewer) {
       setState(() {
         _viewer = cur;
@@ -383,11 +502,13 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
     _finished = true;
     final int w = _game.winner ?? 0;
     final int pts = _game.scoreFor(w);
-    final bool iWon = w == 0;
+    final bool iWon = w == _l.mySeat;
     _l.onFinish(GameResult(
       outcome: iWon ? GameOutcome.win : GameOutcome.loss,
       score: iWon ? pts : 0,
       opponentScore: iWon ? 0 : pts,
+      winnerSeats: <int>[w],
+      scores: <int>[for (int p = 0; p < _game.playerCount; p++) p == w ? pts : 0],
       summaryFa: '${_name(w)} همه کارت‌ها را زمین گذاشت و ${_num(pts)} امتیاز گرفت.',
       summaryEn: '${_name(w)} emptied their hand and scored $pts points.',
     ));
@@ -472,7 +593,8 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
       _revealed &&
       _pickingWild == null &&
       _game.current == _viewer &&
-      !_isBot(_viewer);
+      !_isBot(_viewer) &&
+      !_isRemote(_viewer);
 
   void _tapCard(UnoCard c) {
     if (!_canAct) return;
@@ -489,7 +611,8 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
       setState(() => _pickingWild = c);
       return;
     }
-    _game.play(_viewer, c.id);
+    final String h = _hash();
+    if (_game.play(_viewer, c.id)) _send(<String, dynamic>{'a': 'play', 'c': c.id, 'h': h});
     _afterChange();
   }
 
@@ -497,28 +620,42 @@ class _UnoGameViewState extends State<UnoGameView> with TickerProviderStateMixin
     final UnoCard? c = _pickingWild;
     setState(() => _pickingWild = null);
     if (c == null) return;
-    _game.play(_viewer, c.id, chosenColor: color);
+    final String h = _hash();
+    if (_game.play(_viewer, c.id, chosenColor: color)) {
+      _send(<String, dynamic>{'a': 'play', 'c': c.id, 'col': color.index, 'h': h});
+    }
     _afterChange();
   }
 
   void _tapDeck() {
     if (!_canAct || !_game.canDraw(_viewer)) return;
+    final String h = _hash();
     _game.draw(_viewer);
+    _send(<String, dynamic>{'a': 'draw', 'h': h});
     _afterChange();
   }
 
   void _pass() {
     if (!_canAct) return;
-    _game.pass(_viewer);
+    final String h = _hash();
+    if (_game.pass(_viewer)) _send(<String, dynamic>{'a': 'pass', 'h': h});
     _afterChange();
   }
 
   void _callNx() {
-    if (_game.callNx(_viewer)) _afterChange();
+    final String h = _hash();
+    if (_game.callNx(_viewer)) {
+      _send(<String, dynamic>{'a': 'nx', 'h': h});
+      _afterChange();
+    }
   }
 
   void _catch() {
-    if (_game.catchNx(_viewer)) _afterChange();
+    final String h = _hash();
+    if (_game.catchNx(_viewer)) {
+      _send(<String, dynamic>{'a': 'catch', 'h': h});
+      _afterChange();
+    }
   }
 
   List<UnoCard> _sortedHand(int seat) {

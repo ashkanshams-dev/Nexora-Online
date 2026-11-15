@@ -158,7 +158,7 @@ class _CarromViewState extends State<CarromView> with SingleTickerProviderStateM
                         child: LayoutBuilder(
                           builder: (BuildContext context, BoxConstraints cons) {
                             _c.viewSize = Size(cons.maxWidth, cons.maxHeight);
-                            return GestureDetector(
+                            final Widget board = GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onPanStart: (DragStartDetails d) => _c.onPanStart(d.localPosition),
                               onPanUpdate: (DragUpdateDetails d) => _c.onPanUpdate(d.localPosition),
@@ -169,6 +169,8 @@ class _CarromViewState extends State<CarromView> with SingleTickerProviderStateM
                                 painter: CrPainter(_c, _images),
                               ),
                             );
+                            // Online seat 1: board rotated so your baseline is at the bottom.
+                            return _c.flipped ? Transform.rotate(angle: math.pi, child: board) : board;
                           },
                         ),
                       ),
@@ -244,6 +246,8 @@ class _CrHud extends StatelessWidget {
       status = launch.tx('ربات فکر می‌کند…', 'Bot is thinking…');
     } else if (hud.phase == CrPhase.simulating) {
       status = launch.tx('…', '…');
+    } else if (launch.online) {
+      status = hud.turn == launch.mySeat ? launch.tx('نوبت شما', 'Your turn') : launch.tx('نوبت حریف', 'Opponent\'s turn');
     } else if (launch.vsBot) {
       status = hud.turn == 0 ? launch.tx('نوبت شما', 'Your turn') : launch.tx('نوبت ربات', 'Bot\'s turn');
     } else {
@@ -481,8 +485,10 @@ class _CrPlacementBar extends StatelessWidget {
                       child: Slider(
                         min: CrConfig.baseMinX,
                         max: CrConfig.baseMaxX,
-                        value: value,
-                        onChanged: enabled ? (double v) => c.setPlacement(v) : null,
+                        value: c.flipped ? CrConfig.baseMinX + CrConfig.baseMaxX - value : value,
+                        onChanged: enabled
+                            ? (double v) => c.setPlacement(c.flipped ? CrConfig.baseMinX + CrConfig.baseMaxX - v : v)
+                            : null,
                       ),
                     ),
                   ),
