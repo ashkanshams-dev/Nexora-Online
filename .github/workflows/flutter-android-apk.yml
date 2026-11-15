@@ -3,7 +3,7 @@ name: Flutter Android APK
 
 on:
   push:
-    branches: [flutter]
+    branches: [flutter, flutter-physics-v07b]
   workflow_dispatch:
     inputs:
       tag:
@@ -49,6 +49,8 @@ jobs:
           echo "version=${V}-b${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
       - name: Signing config
         run: |
+          # the sideload keystore is not committed to this public repo: make a throwaway one for CI builds
+          if [ ! -f "$NX_KS" ]; then mkdir -p "$(dirname "$NX_KS")"; keytool -genkeypair -v -keystore "$NX_KS" -alias "$NX_KS_ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$NX_KS_PASS" -keypass "$NX_KS_PASS" -dname "CN=Nexora CI"; fi
           printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$GITHUB_WORKSPACE/$NX_KS" "$NX_KS_PASS" "$NX_KS_ALIAS" "$NX_KS_PASS" > android/key.properties
       - run: flutter pub get
       - name: Analyze (errors only block)
@@ -118,10 +120,10 @@ jobs:
           cp dist/*-arm64.apk "pub/NEXORA-test-${GITHUB_SHA::7}-arm64.apk"
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: flutter-test
-          name: NEXORA Flutter test build (latest push)
+          tag_name: flutter-test-${{ github.ref_name }}
+          name: NEXORA Flutter test build (${{ github.ref_name }})
           prerelease: true
           make_latest: false
           body: |
-            Rolling test build from branch 'flutter'. Newest file = newest commit (${{ github.sha }}).
+            Rolling test build from branch '${{ github.ref_name }}'. Newest file = newest commit (${{ github.sha }}).
           files: pub/*.apk
