@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/online/cloud_profile_sync.dart';
+import '../core/online/invite_watcher.dart';
+import '../core/online/online_service.dart';
 import '../core/settings/app_settings.dart';
 import '../core/theme/nx_theme.dart';
 import 'router.dart';
@@ -17,17 +19,24 @@ class NexoraApp extends ConsumerStatefulWidget {
 
 class _NexoraAppState extends ConsumerState<NexoraApp> {
   late final GoRouter _router = buildRouter(ref);
+  final GlobalKey<ScaffoldMessengerState> _messenger = GlobalKey<ScaffoldMessengerState>();
+  late final InviteWatcher _invites =
+      InviteWatcher(ref, _messenger, (String game, String code) => _router.push('/online/$game?code=$code'));
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(cloudSyncProvider).start();
+      if (!mounted) return;
+      ref.read(cloudSyncProvider).start();
+      ref.read(onlineProvider).addListener(_invites.sync);
+      _invites.sync();
     });
   }
 
   @override
   void dispose() {
+    _invites.dispose();
     _router.dispose();
     super.dispose();
   }
@@ -47,6 +56,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig: _router,
+      scaffoldMessengerKey: _messenger,
       builder: (context, child) {
         final mq = MediaQuery.of(context);
         return MediaQuery(

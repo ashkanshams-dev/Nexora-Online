@@ -165,7 +165,11 @@ class _Records extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(NxSpace.md),
       children: [
-        const OnlineOnlyNotice(featureFa: 'رتبه‌بندی جهانی و مسابقه با بازیکنان واقعی', featureEn: 'Global rankings and matches with real players'),
+        FilledButton.icon(
+          onPressed: () => context.push('/leaderboard'),
+          icon: const Icon(Icons.leaderboard_rounded),
+          label: Text(context.tx('رتبه‌بندی جهانی (بازی‌های آنلاین)', 'Global rankings (online games)')),
+        ),
         const SizedBox(height: NxSpace.md),
         for (final g in kGames)
           Padding(

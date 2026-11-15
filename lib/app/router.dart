@@ -7,6 +7,8 @@ import '../core/settings/app_settings.dart';
 import '../core/storage/local_store.dart';
 import '../worlds/arcade/arcade_page.dart';
 import '../worlds/arcade/game_setup_page.dart';
+import '../worlds/arcade/online/leaderboard_page.dart';
+import '../worlds/arcade/online/online_lobby_page.dart';
 import '../worlds/hub/hub_page.dart';
 import '../worlds/journey/journey_page.dart';
 import '../worlds/nexora_exchange/exchange_page.dart';
@@ -58,6 +60,17 @@ GoRouter buildRouter(WidgetRef ref) {
           final id = state.pathParameters['id'] ?? '';
           return _warp(state, _WorldVisit(id: id, child: _worldPage(id)));
         },
+      ),
+      GoRoute(
+        path: '/online/:gameId',
+        builder: (context, state) => OnlineLobbyPage(
+          gameId: state.pathParameters['gameId'] ?? '',
+          joinCode: state.uri.queryParameters['code'],
+        ),
+      ),
+      GoRoute(
+        path: '/leaderboard',
+        builder: (context, state) => LeaderboardPage(initialGame: state.uri.queryParameters['game']),
       ),
       GoRoute(
         path: '/arcade/:gameId',
