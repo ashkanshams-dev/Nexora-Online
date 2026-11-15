@@ -1,5 +1,9 @@
 import 'package:flutter/widgets.dart';
 
+import 'net_link.dart';
+
+export 'net_link.dart';
+
 /// ===================== NEXORA GAME CONTRACT (STEP_16) =====================
 /// Every Arcade game is an independent module under lib/games/<id>/.
 ///  * Pure-Dart rules engine in lib/games/<id>/core/ (no Flutter/Flame imports,
@@ -19,6 +23,9 @@ enum GameMode {
 
   /// Pass-and-play / same-device multiplayer.
   local,
+
+  /// Online match: [GameLaunch.net] carries the move link, seats are global.
+  online,
 }
 
 enum BotDifficulty { easy, normal, hard }
@@ -39,6 +46,7 @@ class GameLaunch {
     this.playerCount = 2,
     this.skins = const {},
     this.seed,
+    this.net,
   });
 
   final String gameId;
@@ -64,7 +72,25 @@ class GameLaunch {
   /// Call exactly once at the end of the match.
   final void Function(GameResult result) onFinish;
 
+  /// Online link (null offline). Seats are global: [mySeat] is this phone.
+  final NetLink? net;
+
   bool get vsBot => mode == GameMode.vsBot;
+  bool get online => net != null;
+  int get mySeat => net?.mySeat ?? 0;
+
+  /// True when this phone controls [seat] by touch (local pass-and-play: every seat).
+  bool controlsSeat(int seat) => net == null ? true : seat == net!.mySeat;
+
+  /// True when [seat] is played by another phone.
+  bool isRemoteSeat(int seat) => net != null && seat != net!.mySeat;
+
+  /// Online name for a seat, or null offline.
+  String? netName(int seat) {
+    final NetLink? n = net;
+    if (n == null || seat < 0 || seat >= n.names.length) return null;
+    return n.names[seat];
+  }
   String tx(String fa, String en) => isFa ? fa : en;
 }
 
@@ -75,7 +101,13 @@ class GameResult {
     this.opponentScore = 0,
     this.summaryFa = '',
     this.summaryEn = '',
+    this.winnerSeats,
+    this.scores,
   });
+
+  /// Online: winning global seats (empty = draw) and per-seat scores, reported to the server.
+  final List<int>? winnerSeats;
+  final List<int>? scores;
 
   /// Outcome from the local player's (seat 0) perspective. In local
   /// pass-and-play report win if seat 0 won.
@@ -102,7 +134,11 @@ class GameInfo {
     required this.accent,
     this.supportsLocal = true,
     this.defaultPlayers = 2,
+    this.supportsOnline = false,
   });
+
+  /// Online multiplayer (lobby, rooms, matchmaking) is wired for this game.
+  final bool supportsOnline;
 
   final String id;
   final String nameFa;

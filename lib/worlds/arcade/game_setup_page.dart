@@ -8,6 +8,7 @@ import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/game_registry.dart';
 import 'game_host_page.dart';
+import 'online/online_lobby_page.dart';
 
 /// Pre-game screen: mode, difficulty, seats, rules.
 class GameSetupPage extends ConsumerStatefulWidget {
@@ -82,6 +83,11 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
                       label: Text(game.id == 'mafia'
                           ? context.tx('حالت راوی', 'Narrator')
                           : context.tx('دو نفره', 'Local'))),
+                  if (game.supportsOnline)
+                    ButtonSegment(
+                        value: GameMode.online,
+                        icon: const Icon(Icons.public_rounded),
+                        label: Text(context.tx('آنلاین', 'Online'))),
                 ],
                 selected: {_mode},
                 onSelectionChanged: (v) => setState(() => _mode = v.first),
@@ -101,7 +107,15 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
                   onSelectionChanged: (v) => setState(() => _difficulty = v.first),
                 ),
               ],
-              if (game.maxPlayers > 2) ...[
+              if (_mode == GameMode.online) ...[
+                const SizedBox(height: 12),
+                Text(
+                  context.tx('با بازیکنان واقعی: بازی سریع، اتاق خصوصی با کد، یا دعوت دوستان.',
+                      'Real players: quick match, private room by code, or invite friends.'),
+                  style: const TextStyle(color: NxColors.textDim, fontSize: 12),
+                ),
+              ],
+              if (game.maxPlayers > 2 && _mode != GameMode.online) ...[
                 const SizedBox(height: 14),
                 Row(children: [
                   Text(context.tx('تعداد بازیکن', 'Players'), style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -135,13 +149,15 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: game.accent, minimumSize: const Size.fromHeight(56)),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => GameHostPage(game: game, mode: _mode, difficulty: _difficulty, players: _players),
+              builder: (_) => _mode == GameMode.online
+                  ? OnlineLobbyPage(gameId: game.id)
+                  : GameHostPage(game: game, mode: _mode, difficulty: _difficulty, players: _players),
             )),
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: Text(context.tx('شروع بازی', 'Start match'), style: const TextStyle(fontSize: 17)),
+            icon: Icon(_mode == GameMode.online ? Icons.public_rounded : Icons.play_arrow_rounded),
+            label: Text(
+                _mode == GameMode.online ? context.tx('ورود به لابی آنلاین', 'Enter online lobby') : context.tx('شروع بازی', 'Start match'),
+                style: const TextStyle(fontSize: 17)),
           ),
-          const SizedBox(height: NxSpace.md),
-          const OnlineOnlyNotice(featureFa: 'بازی آنلاین، اتاق خصوصی و Matchmaking', featureEn: 'Online play, private rooms and matchmaking'),
         ],
       ),
     );

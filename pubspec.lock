@@ -249,10 +249,10 @@ packages:
     dependency: transitive
     description:
       name: flutter_webrtc
-      sha256: "23af761bb812e6f32c34263e62df48aaf26bb08582c8be8cc3170e2a018d1155"
+      sha256: b832dc76c0d1577f14aaf35e9c38d4ed7667cbc89c492b7bf4505d8d5f62e08b
       url: "https://pub.dev"
     source: hosted
-    version: "0.13.1+hotfix.1"
+    version: "0.12.12+hotfix.1"
   functions_client:
     dependency: transitive
     description:
@@ -369,10 +369,10 @@ packages:
     dependency: "direct main"
     description:
       name: livekit_client
-      sha256: "79154da165fedb72d04a6c53cd2cb435bbd9303e845d3c36d58397b5f7499e96"
+      sha256: "0cfb2f48eff7a93ea8927696dc6f218aebd2fcd1fcc1b1a7b2f53ff3597fdb52"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.3"
+    version: "2.3.6"
   logging:
     dependency: transitive
     description:
@@ -509,6 +509,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.6"
+  platform_detect:
+    dependency: transitive
+    description:
+      name: platform_detect
+      sha256: a62f99417fc4fa2d099ce0ccdbb1bd3977920f2a64292c326271f049d4bc3a4f
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   plugin_platform_interface:
     dependency: transitive
     description:
@@ -541,6 +549,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.0"
+  pub_semver:
+    dependency: transitive
+    description:
+      name: pub_semver
+      sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1"
   realtime_client:
     dependency: transitive
     description:
