@@ -28,9 +28,9 @@ class BmBallRenderer {
   /// Builds the texture (game.js ballTex) from the ball artwork.
   Future<void> setTexture(ui.Image src) async {
     final ui.PictureRecorder rec = ui.PictureRecorder();
-    final ui.Canvas c = ui.Canvas(rec);
-    c.drawRect(const ui.Rect.fromLTWH(0, 0, 256, 256), ui.Paint()..color = const ui.Color(0xFF10161F));
-    c.drawImageRect(src, ui.Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()), const ui.Rect.fromLTWH(0, 0, 256, 256),
+    final ui.Canvas cv = ui.Canvas(rec);
+    cv.drawRect(const ui.Rect.fromLTWH(0, 0, 256, 256), ui.Paint()..color = const ui.Color(0xFF10161F));
+    cv.drawImageRect(src, ui.Rect.fromLTWH(0, 0, src.width.toDouble(), src.height.toDouble()), const ui.Rect.fromLTWH(0, 0, 256, 256),
         ui.Paint()..filterQuality = ui.FilterQuality.high);
     final ui.Image im = await rec.endRecording().toImage(_ts, _ts);
     final ByteData? bd = await im.toByteData(format: ui.ImageByteFormat.rawRgba);

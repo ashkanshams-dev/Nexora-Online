@@ -51,8 +51,8 @@ class BmView {
   Offset toWorld(Offset p) => Offset((p.dx - ox) / s, (p.dy - oy) / s);
 }
 
-Color _c(int argb, [double a = 1]) => Color(argb).withValues(alpha: (Color(argb).a * a).clamp(0.0, 1.0));
-Color _rgba(int r, int g, int b, double a) => Color.fromRGBO(r, g, b, a.clamp(0.0, 1.0));
+Color _c(int argb, [double a = 1]) => Color(argb).withValues(alpha: (Color(argb).a * a).clamp(0.0, 1.0).toDouble());
+Color _rgba(int r, int g, int b, double a) => Color.fromRGBO(r, g, b, a.clamp(0.0, 1.0).toDouble());
 
 class BmPainter extends CustomPainter {
   BmPainter(this.e, this.im, this.view, this.now, this.dpr, this.fancy, {required Listenable repaint}) : super(repaint: repaint);
@@ -234,9 +234,9 @@ class BmPainter extends CustomPainter {
             R,
             Paint()
               ..shader = ui.Gradient.radial(c, R, <Color>[
-                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0)),
-                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0)),
-                _rgba(100, 130, 160, .15 * ga.clamp(0.0, 1.0)),
+                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0).toDouble()),
+                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0).toDouble()),
+                _rgba(100, 130, 160, .15 * ga.clamp(0.0, 1.0).toDouble()),
                 _rgba(40, 50, 65, 0)
               ], const <double>[0, .116, .4536, 1]));
       }
@@ -658,7 +658,7 @@ class BmPainter extends CustomPainter {
             ..strokeCap = StrokeCap.round
             ..strokeJoin = StrokeJoin.round
             ..strokeWidth = 4
-            ..color = col2.withValues(alpha: a.clamp(0.0, 1.0)));
+            ..color = col2.withValues(alpha: a.clamp(0.0, 1.0).toDouble()));
     }
     // wall bounce preview
     {
@@ -714,7 +714,7 @@ class BmPainter extends CustomPainter {
               ..blendMode = BlendMode.plus
               ..strokeWidth = 2.5
               ..strokeCap = StrokeCap.round
-              ..color = col2.withValues(alpha: (.5 + .4 * pu).clamp(0.0, 1.0)));
+              ..color = col2.withValues(alpha: (.5 + .4 * pu).clamp(0.0, 1.0).toDouble()));
       }
       canvas.drawCircle(
           e0,

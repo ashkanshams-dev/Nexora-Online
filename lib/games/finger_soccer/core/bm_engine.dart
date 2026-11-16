@@ -1216,7 +1216,7 @@ int bmHslColor(double h, double s, double l) {
     r = c;
     b = x;
   }
-  int q(double v) => ((v + m) * 255).round().clamp(0, 255);
+  int q(double v) => ((v + m) * 255).round().clamp(0, 255).toInt();
   return 0xFF000000 | (q(r) << 16) | (q(g) << 8) | q(b);
 }
 
