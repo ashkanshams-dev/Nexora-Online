@@ -73,8 +73,9 @@ No extra server: everything runs in the existing Supabase project (Postgres RPCs
 - **Formats** (2–64 players, automatic byes): single elimination (+3rd place), double elimination (grand final + reset),
   two legs (aggregate, optional single-leg final), round robin (single/double), groups → knockout (snake groups, configurable
   groups/advancers, A1-vs-other-group seeding), swiss (N rounds, no rematches while avoidable, rotating bye), custom (organizer adds
-  matches). Best-of per round kind (early / semis / final: Bo1/2/3/5). Knockout draws → golden-goal decider game (flag
-  `settings.golden_goal` on the game; the games do not read it yet, so the decider is a normal game); leagues award draw points.
+  matches). Best-of per round kind (early / semis / final: Bo1/2/3/5). Knockout draws: finger soccer (BERMUDA port) already ends ties
+  with its own golden goal; if any game still reports a draw, the server opens a decider game (`settings.golden_goal`) and after
+  4 extra games the better seed advances. Leagues award draw points.
 - **Registration**: open / approval / code / code+approval; 8-char codes (no 0/O/1/I) with max uses, expiry, revoke,
   requires-approval; deep link `nexora://t/<code>`; 5 wrong codes per 15 min per account. Min level / XP / rating, entry fee in
   coins and gems (escrowed in the tournament row + immutable `nx_t_ledger`), waitlist with automatic promotion, withdraw with
