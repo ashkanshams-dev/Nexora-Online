@@ -18,6 +18,7 @@ dependencies:
   supabase_flutter: ^2.15.4
   livekit_client: 2.3.6
   image_picker: 1.1.2
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +36,13 @@ flutter:
     - assets/games/backgammon/
     - assets/games/billiards/
     - assets/games/carrom/
+    - assets/games/bermuda/balls/
+    - assets/games/bermuda/fields/
+    - assets/games/bermuda/goals/
+    - assets/games/bermuda/sfx/
+    - assets/games/bermuda/teams/
+    - assets/games/bermuda/thumbs/
+    - assets/games/bermuda/ui/
     - assets/games/finger_soccer/
     - assets/games/finger_soccer/pucks/iso/
     - assets/games/finger_soccer/pucks/thumb/

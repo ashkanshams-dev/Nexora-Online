@@ -47,6 +47,7 @@ class GameLaunch {
     this.skins = const {},
     this.seed,
     this.net,
+    this.tournamentMatchId,
   });
 
   final String gameId;
@@ -74,6 +75,10 @@ class GameLaunch {
 
   /// Online link (null offline). Seats are global: [mySeat] is this phone.
   final NetLink? net;
+
+  /// Optional tournament match this game is played for (null for normal matches).
+  /// Games pass it back in [GameResult.tournamentMatchId].
+  final String? tournamentMatchId;
 
   bool get vsBot => mode == GameMode.vsBot;
   bool get online => net != null;
@@ -103,7 +108,15 @@ class GameResult {
     this.summaryEn = '',
     this.winnerSeats,
     this.scores,
+    this.tournamentMatchId,
   });
+
+  /// Tournament match id from [GameLaunch.tournamentMatchId] (null for normal matches).
+  final String? tournamentMatchId;
+
+  /// Goals / points of the local player and of the opponent (aliases of [score] / [opponentScore]).
+  int get goalsFor => score;
+  int get goalsAgainst => opponentScore;
 
   /// Online: winning global seats (empty = draw) and per-seat scores, reported to the server.
   final List<int>? winnerSeats;
