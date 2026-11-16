@@ -23,8 +23,11 @@ const int kBmMatchSeconds = 300;
 const double kBmOnlineTurnSeconds = 15;
 
 class BermudaView extends StatefulWidget {
-  const BermudaView({super.key, required this.launch});
+  const BermudaView({super.key, required this.launch, this.autoStart = false});
   final GameLaunch launch;
+
+  /// Offline only: skip the setup screen with the saved/default picks (used by tests).
+  final bool autoStart;
 
   @override
   State<BermudaView> createState() => _BermudaViewState();
@@ -96,6 +99,10 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
       final NetInbox inbox = NetInbox(_onNet);
       _inbox = inbox;
       net.listen(inbox.add, onReplayDone: () => inbox.add(const NetMove(seq: -1, seat: -1, kind: 'replayDone', data: <String, dynamic>{})));
+    } else if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && stage == 'setup') _startOffline();
+      });
     }
   }
 

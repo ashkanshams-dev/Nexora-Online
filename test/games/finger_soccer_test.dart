@@ -1,5 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nexora/games/core/game_contract.dart';
+import 'package:nexora/games/finger_soccer/ui/bm_view.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexora/games/finger_soccer/core/bm_engine.dart';
 
@@ -83,5 +89,34 @@ void main() {
     guest.applySnapshot(s);
     expect(guest.snapshot()['b'], s['b']);
     expect(guest.ct(guest.turn), host.ct(host.turn));
+  });
+
+  testWidgets('BERMUDA match vs bot renders and plays 20 s on a phone screen', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final List<GameResult> results = <GameResult>[];
+    final GameLaunch launch = GameLaunch(
+      gameId: 'finger_soccer',
+      mode: GameMode.vsBot,
+      difficulty: BotDifficulty.hard,
+      playerName: 'Tester',
+      isFa: false,
+      fancyEffects: true,
+      reducedMotion: false,
+      soundOn: false,
+      seed: 3,
+      onFinish: results.add,
+    );
+    await tester.pumpWidget(ProviderScope(child: MaterialApp(home: Scaffold(body: BermudaView(launch: launch, autoStart: true)))));
+    for (int i = 0; i < 20 * 60; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(tester.takeException(), isNull);
   });
 }
