@@ -46,7 +46,7 @@ class _Setup {
   }
 }
 
-class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin implements BmHooks {
+class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin, WidgetsBindingObserver implements BmHooks {
   late final BmEngine e = BmEngine(this);
   final BmImages im = BmImages();
   final BmView view = BmView();
@@ -91,6 +91,7 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
   void initState() {
     super.initState();
     _ticker = createTicker(_onTick)..start();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(audio.init());
     unawaited(_loadPrefs());
     final NetLink? net = launch.net;
@@ -113,6 +114,7 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
       my = _Setup(kBmTeams.any((BmTeam x) => x.id == t) ? t : 'club0', (p.getInt('bm.form') ?? 0).clamp(0, kBmForms.length - 1).toInt(),
           (p.getInt('bm.field') ?? 6).clamp(0, kBmFields.length - 1).toInt(), (p.getInt('bm.ball') ?? 0).clamp(0, NB - 1).toInt());
       _cat = math.max(0, kBmCats.indexWhere((List<Object> c) => c[0] == bmTeam(my.team).cat));
+      audio.announcer = p.getBool('bm.ann') ?? false; // goal announcer voice: off unless the player turns it on
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -471,6 +473,7 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
     final bool isOnline = online, bot = launch.vsBot;
     if (!isOnline) e.menuOpen = true;
     _paused = true;
+    unawaited(audio.crowd(false)); // game.js crowdSync: no crowd while the menu is open
     final String? act = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -480,6 +483,9 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
           ('continue', launch.tx('ادامه', 'Continue'), Icons.play_arrow_rounded),
           if (!isOnline && !bot) ('restart', launch.tx('شروع دوباره', 'Restart'), Icons.refresh_rounded),
           ('sound', launch.tx('صدا روشن/خاموش', 'Sound on/off'), Icons.volume_up_rounded),
+          ('ann',
+              audio.announcer ? launch.tx('گزارشگر گل: روشن', 'Goal announcer: on') : launch.tx('گزارشگر گل: خاموش', 'Goal announcer: off'),
+              Icons.record_voice_over_rounded),
           ('leave', launch.tx('خروج', 'Leave'), Icons.logout_rounded),
         ],
       ),
@@ -493,7 +499,10 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
         break;
       case 'sound':
         audio.setMuted(!audio.muted);
-        if (!audio.muted) unawaited(audio.crowd(true));
+        break;
+      case 'ann':
+        audio.announcer = !audio.announcer;
+        unawaited(SharedPreferences.getInstance().then((SharedPreferences p) => p.setBool('bm.ann', audio.announcer)).then((_) {}, onError: (Object _) {}));
         break;
       case 'leave':
         if (isOnline || bot) {
@@ -504,11 +513,31 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
         }
         break;
     }
+    _crowdSync();
+  }
+
+  /// game.js crowdSync(): crowd ambience only while a match runs, the menu is closed and the app is visible.
+  void _crowdSync() {
+    if (_disposed || !mounted) return;
+    final bool want = stage == 'match' && !_paused && !_reported && _finishIn <= 0 && _visible;
+    unawaited(audio.crowd(want));
+  }
+
+  bool _visible = true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // game.js musicSync/crowdSync stop on document.hidden
+    _visible = state == AppLifecycleState.resumed;
+    if (!_visible) unawaited(audio.music(false));
+    _crowdSync();
+    if (_visible && stage != 'match' && launch.soundOn && !_paused) unawaited(audio.music(true));
   }
 
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
     _goalAnim.dispose();
     _inbox?.close();
@@ -526,7 +555,7 @@ class _BermudaViewState extends State<BermudaView> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     if (stage != 'match') {
-      if (launch.soundOn && !_paused) unawaited(audio.music(true));
+      if (launch.soundOn && !_paused && _visible) unawaited(audio.music(true));
       return _setupScreen(context);
     }
     final double dpr = math.min(MediaQuery.devicePixelRatioOf(context), 1.75);
