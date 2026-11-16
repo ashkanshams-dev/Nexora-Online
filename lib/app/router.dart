@@ -5,6 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../core/profile/profile_service.dart';
 import '../core/settings/app_settings.dart';
 import '../core/storage/local_store.dart';
+import '../features/tournaments/ui/admin/tournament_manage_page.dart';
+import '../features/tournaments/ui/admin/tournament_wizard_page.dart';
+import '../features/tournaments/ui/tournament_detail_page.dart';
+import '../features/tournaments/ui/tournament_inbox_page.dart';
+import '../features/tournaments/ui/tournaments_page.dart';
 import '../worlds/arcade/arcade_page.dart';
 import '../worlds/arcade/game_setup_page.dart';
 import '../worlds/arcade/online/leaderboard_page.dart';
@@ -36,6 +41,18 @@ GoRouter buildRouter(WidgetRef ref) {
 
   return GoRouter(
     initialLocation: initial,
+    // Deep link nexora://t/<code> (Android may deliver only the path "/<code>").
+    redirect: (BuildContext context, GoRouterState state) {
+      final Uri u = state.uri;
+      if (u.scheme == 'nexora' && u.host == 't') {
+        return '/tournaments/join?code=${u.pathSegments.isNotEmpty ? u.pathSegments.first : ''}';
+      }
+      final RegExpMatch? m = RegExp(r'^/([A-HJ-NP-Za-hj-np-z2-9]{8})$').firstMatch(u.path);
+      if (m != null && u.path != '/settings' && u.path != '/journey') {
+        return '/tournaments/join?code=${m.group(1)!.toUpperCase()}';
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/journey',
@@ -82,6 +99,35 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(
         path: '/leaderboard',
         builder: (context, state) => LeaderboardPage(initialGame: state.uri.queryParameters['game']),
+      ),
+      GoRoute(
+        path: '/tournaments',
+        builder: (context, state) => TournamentsPage(game: state.uri.queryParameters['game']),
+      ),
+      GoRoute(path: '/tournaments/new', builder: (context, state) => const TournamentWizardPage()),
+      GoRoute(path: '/tournaments/inbox', builder: (context, state) => const TournamentInboxPage()),
+      GoRoute(
+        path: '/tournaments/join',
+        builder: (context, state) => TournamentsPage(joinCode: state.uri.queryParameters['code']),
+      ),
+      GoRoute(
+        path: '/t/:code',
+        builder: (context, state) => TournamentsPage(joinCode: state.pathParameters['code']),
+      ),
+      GoRoute(
+        path: '/tournaments/:id',
+        builder: (context, state) => TournamentDetailPage(
+          id: state.pathParameters['id'] ?? '',
+          focusMatch: state.uri.queryParameters['match'],
+        ),
+      ),
+      GoRoute(
+        path: '/tournaments/:id/manage',
+        builder: (context, state) => TournamentManagePage(id: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/tournaments/:id/edit',
+        builder: (context, state) => TournamentWizardPage(editId: state.pathParameters['id']),
       ),
       GoRoute(
         path: '/arcade/:gameId',

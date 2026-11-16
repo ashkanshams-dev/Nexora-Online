@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/assets/app_assets.dart';
 import '../../core/profile/profile_service.dart';
@@ -158,6 +159,15 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
                 _mode == GameMode.online ? context.tx('ورود به لابی آنلاین', 'Enter online lobby') : context.tx('شروع بازی', 'Start match'),
                 style: const TextStyle(fontSize: 17)),
           ),
+          if (game.supportsOnline && game.maxPlayers == 2 && game.id != 'mafia') ...[
+            const SizedBox(height: NxSpace.sm),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), foregroundColor: NxColors.gold),
+              onPressed: () => context.push('/tournaments?game=${game.id}'),
+              icon: const Icon(Icons.emoji_events_rounded),
+              label: Text(context.tx('تورنمنت‌های این بازی', 'Tournaments for this game')),
+            ),
+          ],
         ],
       ),
     );

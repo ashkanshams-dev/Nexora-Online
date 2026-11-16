@@ -94,6 +94,28 @@ class _GamesGrid extends StatelessWidget {
       ),
       SliverToBoxAdapter(
         child: Padding(
+          padding: const EdgeInsets.fromLTRB(NxSpace.md, 0, NxSpace.md, NxSpace.sm),
+          child: GlassPanel(
+            onTap: () => context.push('/tournaments'),
+            borderColor: NxColors.gold.withValues(alpha: 0.7),
+            tint: NxColors.gold.withValues(alpha: 0.08),
+            child: Row(children: [
+              const Icon(Icons.emoji_events_rounded, color: NxColors.gold, size: 30),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(context.tx('تورنمنت‌های آنلاین', 'Online tournaments'), style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(context.tx('حذفی، لیگ، گروهی و سوئیسی با جایزه', 'Knockout, league, groups and swiss with prizes'),
+                      style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
+                ]),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ]),
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(NxSpace.md, 0, NxSpace.md, NxSpace.lg),
           child: GlassPanel(
             onTap: () => context.push('/world/social_station'),

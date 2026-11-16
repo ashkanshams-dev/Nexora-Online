@@ -61,3 +61,42 @@ Schema: `supabase/migrations/20261115000200_nx_social.sql` (applied live). Only 
 - ORACLE voice (the notice stays; `oracle-chat` supports audio but needs the provider balance first).
 - No device testing possible from the build agent: SQL/RPC/RLS/Storage/Edge Functions verified live with guest accounts
   (test data removed); UI verified by analyzer + CI build.
+
+## Tournaments (M6) — `lib/features/tournaments` + `supabase/migrations/20261116000*_nx_tournaments*.sql`
+No extra server: everything runs in the existing Supabase project (Postgres RPCs + RLS + pg_cron + Realtime).
+- **Roles (RBAC in Postgres)**: admin (`nx_staff.role='admin'` or the shared `is_admin()`), organizer (`nx_staff.role='organizer'`),
+  per-tournament runner (`nx_t_staff`), player. Tables are read-only for clients (RLS); every write is a role-checked
+  SECURITY DEFINER RPC (`nx_t_save`, `nx_t_admin`, `nx_t_register`, `nx_t_join_code`, `nx_t_withdraw`, `nx_t_decide`,
+  `nx_t_remove_entry`, `nx_t_set_seed`, `nx_t_code_create/revoke`, `nx_t_ready`, `nx_t_report`, `nx_t_dispute`,
+  `nx_t_admin_match`, `nx_t_set_staff`, `nx_t_set_runner`, `nx_t_standings`, `nx_t_logs`). Engine functions `_nx_t_*` and
+  `nx_t_tick` are not executable by clients. Only admins can set fixed (minted) prizes.
+- **Formats** (2–64 players, automatic byes): single elimination (+3rd place), double elimination (grand final + reset),
+  two legs (aggregate, optional single-leg final), round robin (single/double), groups → knockout (snake groups, configurable
+  groups/advancers, A1-vs-other-group seeding), swiss (N rounds, no rematches while avoidable, rotating bye), custom (organizer adds
+  matches). Best-of per round kind (early / semis / final: Bo1/2/3/5). Knockout draws → golden-goal decider game (flag
+  `settings.golden_goal` on the game; the games do not read it yet, so the decider is a normal game); leagues award draw points.
+- **Registration**: open / approval / code / code+approval; 8-char codes (no 0/O/1/I) with max uses, expiry, revoke,
+  requires-approval; deep link `nexora://t/<code>`; 5 wrong codes per 15 min per account. Min level / XP / rating, entry fee in
+  coins and gems (escrowed in the tournament row + immutable `nx_t_ledger`), waitlist with automatic promotion, withdraw with
+  refund before registration closes, one registration per account.
+- **Scheduler**: pg_cron job `nx_t_tick` every minute: idempotent `nx_t_jobs` (open/close registration, draw, start, 10-minute
+  reminders), ready checks (default 5 min) → both ready creates the private room + online match through the same
+  `nx_rooms`/`nx_matches` the lobby uses (settings.tmatch), no-shows → walkover (double no-show: better seed in knockouts, void in
+  leagues), 60 s reconnect grace (`settings.grace_sec` in `SupabaseMatchLink`), result acceptance, finish + payout.
+- **Results**: only server-side. Forfeits are server facts; normal ends need both players' `nx_t_report` to agree (one report +
+  90 s silence, or the server row alone after 3 min, is accepted); disagreement → dispute; organizer fixes or replays with an
+  audit trail (`nx_t_audit`, append-only). Corrections re-seat downstream players if the next match has not started.
+- **Prizes**: fixed + pool % of entry fees − house fee %, split by place percentages (shared places split, remainder to the champion),
+  paid once in one transaction with idempotency keys (`payout:<t>:<user>:<currency>`). Cancel = full refund.
+- **Notifications**: `nx_t_notifications` (in-app inbox + Realtime banner) for approved/rejected/waitlist/promoted, drawn, starting
+  soon, match soon, match ready, result, advanced/eliminated, walkover, dispute, prize, time changed, cancelled, refund. No FCM in
+  this app → device notifications via flutter_local_notifications (shown when a notification arrives in the background, and the
+  10-minute reminders are scheduled on the device so they fire with the app closed).
+- **UI**: Tournaments (tabs registering/upcoming/live/finished/mine, filters, countdowns), detail (overview, prize pool, rules,
+  schedule local + UTC, register/code/withdraw, my next match with READY, live bracket with pan/zoom, league tables, matches,
+  players), inbox, organizer wizard (info → format → times → match rules → prizes → registration/codes → review/publish) and
+  manage panel (controls, approvals, players/seeds, codes, match tools, logs/jobs/ledger, staff). Entry points: Hub quick row
+  (Cups), Arcade, and the game setup page of every 1-vs-1 online game (incl. finger soccer).
+- Verified live against the project with guest accounts (SE/DE/two legs/RR/groups/swiss/custom paths, byes, golden-goal cap,
+  codes + rate limit, approvals, waitlist, refunds, cancel, payout maths, disputes, admin correction, forfeits, cron-driven run,
+  RLS from the REST API). Pure-Dart mirror + tests: `test/features/tournaments/bracket_test.dart`.

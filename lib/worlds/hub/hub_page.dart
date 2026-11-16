@@ -329,6 +329,7 @@ class _QuickRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items = <({IconData icon, String fa, String en, VoidCallback onTap, bool badge})>[
       (icon: Icons.sports_esports_rounded, fa: 'آرکید', en: 'Arcade', onTap: () => context.push('/world/nexora_arcade'), badge: false),
+      (icon: Icons.emoji_events_rounded, fa: 'تورنمنت', en: 'Cups', onTap: () => context.push('/tournaments'), badge: false),
       (icon: Icons.forum_rounded, fa: 'پیام', en: 'Chat', onTap: () => context.push('/world/orbit_network'), badge: false),
       (
         icon: Icons.card_giftcard_rounded,

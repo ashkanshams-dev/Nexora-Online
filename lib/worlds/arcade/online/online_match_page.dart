@@ -15,9 +15,13 @@ import '../../../games/game_registry.dart';
 /// Hosts one online match: opens the move link, builds the game in online mode,
 /// rebuilds + replays the log on reconnect/resync, reports the result and shows it.
 class OnlineMatchPage extends ConsumerStatefulWidget {
-  const OnlineMatchPage({super.key, required this.matchId, required this.gameId});
+  const OnlineMatchPage({super.key, required this.matchId, required this.gameId, this.tournamentMatchId});
   final String matchId;
   final String gameId;
+
+  /// Set when this game belongs to a tournament match: the result is also reported to the tournament
+  /// (nx_t_report — both players' reports must agree, otherwise it becomes a dispute).
+  final String? tournamentMatchId;
 
   @override
   ConsumerState<OnlineMatchPage> createState() => _OnlineMatchPageState();
@@ -121,6 +125,7 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage> with WidgetsB
     if (ref.read(settingsProvider).haptics) HapticFeedback.heavyImpact();
     if (l != null && report) {
       unawaited(l.report(_winnersFor(r, l), r.scores).then((_) => ref.read(cloudSyncProvider).refreshWallet()));
+      if (widget.tournamentMatchId != null) unawaited(_reportTournament(r, l));
     } else {
       unawaited(ref.read(cloudSyncProvider).refreshWallet());
     }
@@ -138,6 +143,39 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage> with WidgetsB
     Future<void>.delayed(Duration(milliseconds: report ? 900 : 200), () {
       if (mounted) setState(() => _result = r);
     });
+  }
+
+  /// Tournament: this phone's own report of the game (seat 0 = home). Retries a few times on bad network.
+  Future<void> _reportTournament(GameResult r, SupabaseMatchLink l) async {
+    final List<int> winners = _winnersFor(r, l);
+    final int winnerSeat = winners.length == 1 ? winners.first : -1;
+    final List<int> s = List<int>.filled(l.seatCount < 2 ? 2 : l.seatCount, 0);
+    final List<int>? scores = r.scores;
+    if (scores != null && scores.length >= 2) {
+      s[0] = scores[0];
+      s[1] = scores[1];
+    } else if (l.mySeat >= 0 && l.mySeat < 2) {
+      s[l.mySeat] = r.score;
+      s[1 - l.mySeat] = r.opponentScore;
+    }
+    // keep the report consistent with the winner (the server rejects contradictions)
+    if (winnerSeat == 0 && s[0] < s[1]) s[0] = s[1];
+    if (winnerSeat == 1 && s[1] < s[0]) s[1] = s[0];
+    if (winnerSeat == -1 && s[0] != s[1]) s[1] = s[0];
+    for (int attempt = 0; attempt < 4; attempt++) {
+      try {
+        await ref.read(onlineProvider).client?.rpc('nx_t_report', params: <String, dynamic>{
+          'p_game': widget.matchId,
+          'p_winner_seat': winnerSeat,
+          'p_s0': s[0],
+          'p_s1': s[1],
+        });
+        return;
+      } catch (e) {
+        debugPrint('tournament report failed (try $attempt): $e');
+        await Future<void>.delayed(Duration(seconds: 2 * (attempt + 1)));
+      }
+    }
   }
 
   Future<bool> _confirmLeave() async {
@@ -288,11 +326,20 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage> with WidgetsB
         const SizedBox(height: 10),
         Text('${context.tx('بازی آنلاین ثبت شد', 'Online match recorded')} · $reward 🪙',
             style: const TextStyle(color: NxColors.textDim)),
+        if (widget.tournamentMatchId != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(context.tx('نتیجه برای تورنمنت ارسال شد؛ با تأیید هر دو بازیکن ثبت می‌شود.',
+                'Result sent to the tournament; it counts once both players agree.'),
+                textAlign: TextAlign.center, style: const TextStyle(color: NxColors.gold, fontSize: 12)),
+          ),
         const SizedBox(height: 22),
         FilledButton.icon(
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.meeting_room_rounded),
-          label: Text(context.tx('بازگشت به اتاق (بازی دوباره)', 'Back to the room (rematch)')),
+          icon: Icon(widget.tournamentMatchId != null ? Icons.emoji_events_rounded : Icons.meeting_room_rounded),
+          label: Text(widget.tournamentMatchId != null
+              ? context.tx('بازگشت به تورنمنت', 'Back to the tournament')
+              : context.tx('بازگشت به اتاق (بازی دوباره)', 'Back to the room (rematch)')),
         ),
       ]),
     );

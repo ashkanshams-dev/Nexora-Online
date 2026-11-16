@@ -66,6 +66,50 @@ jobs:
           if ! grep -q "android.permission.INTERNET" $M; then
             sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.CAMERA"/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>\n    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-feature android:name="android.hardware.camera" android:required="false"/>\n    <application#' $M
           fi
+          # Tournaments: device notifications (flutter_local_notifications needs core library desugaring,
+          # its receivers for scheduled reminders, POST_NOTIFICATIONS) + deep link nexora://t/<code>.
+          python3 - <<'PY'
+          import glob, re
+          for f in glob.glob('android/app/build.gradle*'):
+              s = open(f).read()
+              if 'coreLibraryDesugaring' in s:
+                  continue
+              kts = f.endswith('.kts')
+              flag = 'isCoreLibraryDesugaringEnabled = true' if kts else 'coreLibraryDesugaringEnabled true'
+              s = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        ' + flag, s, count=1)
+              dep = ('coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")' if kts
+                     else "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'")
+              s += '\ndependencies {\n    ' + dep + '\n}\n'
+              open(f, 'w').write(s)
+              print('desugaring enabled in', f)
+          m = 'android/app/src/main/AndroidManifest.xml'
+          s = open(m).read()
+          if 'POST_NOTIFICATIONS' not in s:
+              s = s.replace('<application', '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
+                            '    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n    <application', 1)
+          if 'ScheduledNotificationReceiver' not in s:
+              s = s.replace('</application>',
+                  '    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n'
+                  '        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n'
+                  '            <intent-filter>\n'
+                  '                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n'
+                  '                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n'
+                  '                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n'
+                  '            </intent-filter>\n'
+                  '        </receiver>\n'
+                  '    </application>', 1)
+          if 'android:scheme="nexora"' not in s:
+              s = s.replace('</activity>',
+                  '    <meta-data android:name="flutter_deeplinking_enabled" android:value="true" />\n'
+                  '            <intent-filter>\n'
+                  '                <action android:name="android.intent.action.VIEW" />\n'
+                  '                <category android:name="android.intent.category.DEFAULT" />\n'
+                  '                <category android:name="android.intent.category.BROWSABLE" />\n'
+                  '                <data android:scheme="nexora" android:host="t" />\n'
+                  '            </intent-filter>\n'
+                  '        </activity>', 1)
+          open(m, 'w').write(s)
+          PY
           cat > android/app/proguard-rules.pro <<'PRO'
           -keep class org.webrtc.** { *; }
           -keep class io.livekit.** { *; }

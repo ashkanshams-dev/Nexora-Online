@@ -9,6 +9,7 @@ import '../core/online/invite_watcher.dart';
 import '../core/online/online_service.dart';
 import '../core/settings/app_settings.dart';
 import '../core/theme/nx_theme.dart';
+import '../features/tournaments/tournament_watcher.dart';
 import 'router.dart';
 
 class NexoraApp extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
   final GlobalKey<ScaffoldMessengerState> _messenger = GlobalKey<ScaffoldMessengerState>();
   late final InviteWatcher _invites =
       InviteWatcher(ref, _messenger, (String game, String code) => _router.push('/online/$game?code=$code'));
+  late final TournamentWatcher _tournaments = TournamentWatcher(ref, _messenger, (String route) => _router.push(route));
   late final CallWatcher _calls = CallWatcher(ref, _messenger, (String chat, String call, bool video, String title) {
     _router.push(Uri(path: '/call/$chat', queryParameters: <String, String>{
       'call': call,
@@ -41,6 +43,9 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
       _invites.sync();
       ref.read(onlineProvider).addListener(_calls.sync);
       _calls.sync();
+      _tournaments.start();
+      ref.read(onlineProvider).addListener(_tournaments.sync);
+      _tournaments.sync();
     });
   }
 
@@ -48,6 +53,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
   void dispose() {
     _invites.dispose();
     _calls.dispose();
+    _tournaments.dispose();
     _router.dispose();
     super.dispose();
   }

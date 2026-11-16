@@ -19,6 +19,8 @@ dependencies:
   livekit_client: 2.3.6
   image_picker: 1.1.2
   audioplayers: ^6.1.0
+  flutter_local_notifications: 17.2.4
+  timezone: ^0.9.4
 
 dev_dependencies:
   flutter_test:

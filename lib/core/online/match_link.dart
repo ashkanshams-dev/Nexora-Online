@@ -192,7 +192,9 @@ class SupabaseMatchLink extends ChangeNotifier implements NetLink {
     for (int s = 0; s < seatCount; s++) {
       if (s == mySeat || _forfeited.contains(s) || _connected.contains(s)) continue;
       final DateTime since = _absentSince.putIfAbsent(s, () => now);
-      final int limit = s == _turnSeat ? 40 : 90;
+      // Tournament games carry settings.grace_sec (60 s reconnect grace); lobby games keep 40 s / 90 s.
+      final int? grace = (settings['grace_sec'] as num?)?.toInt();
+      final int limit = grace ?? (s == _turnSeat ? 40 : 90);
       if (now.difference(since).inSeconds >= limit) {
         _absentSince.remove(s);
         unawaited(_forfeitSeat(s));
