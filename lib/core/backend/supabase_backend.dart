@@ -36,7 +36,7 @@ class SupabaseBackend extends BackendGateway {
   @override
   Future<Map<String, dynamic>?> submitMove(String gameId, String matchId, Map<String, dynamic> move) async {
     try {
-      final dynamic r = await _online.rpc('nx_push_move', <String, dynamic>{
+      final dynamic r = await _online.grpc('nx_push_move', <String, dynamic>{
         'p_match': matchId,
         'p_seq': move['seq'],
         'p_kind': move['kind'] ?? 'move',

@@ -13,6 +13,14 @@ Future<void> initOnline() async {
   try {
     await Supabase.initialize(url: OnlineConfig.supabaseUrl, anonKey: OnlineConfig.supabaseAnonKey);
     OnlineService._ready = true;
+    // Second client for the games project: no own auth, it sends the auth project's access token.
+    if (OnlineConfig.gamesEnabled) {
+      OnlineService._games = SupabaseClient(
+        OnlineConfig.gamesUrl,
+        OnlineConfig.gamesAnonKey,
+        accessToken: () async => Supabase.instance.client.auth.currentSession?.accessToken,
+      );
+    }
   } catch (e) {
     debugPrint('NEXORA online init failed: $e');
   }
@@ -28,12 +36,39 @@ class OnlineService extends ChangeNotifier {
     if (!_ready) return;
     _sub = client!.auth.onAuthStateChange.listen((AuthState s) {
       _status = s.session != null ? BackendStatus.online : BackendStatus.offline;
+      final String? tok = s.session?.accessToken;
+      if (_games != null) unawaited(_games!.realtime.setAuth(tok));
+      if (s.session != null &&
+          (s.event == AuthChangeEvent.signedIn || s.event == AuthChangeEvent.initialSession ||
+              s.event == AuthChangeEvent.userUpdated)) {
+        unawaited(gamesHello());
+      }
       notifyListeners();
     }, onError: (Object e) => debugPrint('auth stream: $e'));
     if (client!.auth.currentSession != null) _status = BackendStatus.online;
   }
 
   static bool _ready = false;
+  static SupabaseClient? _games;
+  String? _helloFor;
+
+  /// Games project client (rooms, matches, matchmaking, tournaments, leaderboards). Falls back to the auth client
+  /// in builds without the games config so offline/dev builds keep working.
+  SupabaseClient? get games => _ready ? (_games ?? Supabase.instance.client) : null;
+
+  /// Registers this player on the games project (creates the profile mirror row, asks for a fresh wallet snapshot).
+  /// Every games RPC needs the mirror row; called after each sign-in and before entering lobbies/tournaments.
+  Future<void> gamesHello({bool force = false}) async {
+    final SupabaseClient? g = _games;
+    final String? id = uid;
+    if (g == null || id == null || (!force && _helloFor == id)) return;
+    try {
+      await g.rpc('nx_g_hello');
+      _helloFor = id;
+    } catch (e) {
+      debugPrint('games hello: $e');
+    }
+  }
   StreamSubscription<AuthState>? _sub;
   BackendStatus _status = BackendStatus.offline;
   String? lastError;
@@ -147,6 +182,14 @@ class OnlineService extends ChangeNotifier {
       return true;
     });
     if (continueAsGuest) await ensureSession();
+  }
+
+  /// RPC on the games project.
+  Future<dynamic> grpc(String fn, [Map<String, dynamic>? params]) async {
+    final SupabaseClient? g = games;
+    if (g == null || client?.auth.currentSession == null) return null;
+    await gamesHello();
+    return g.rpc(fn, params: params);
   }
 
   /// Small helper for RPC calls that should never throw into the UI.

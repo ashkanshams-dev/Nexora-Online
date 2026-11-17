@@ -49,6 +49,7 @@ class _TournamentInboxPageState extends ConsumerState<TournamentInboxPage> {
   IconData _icon(String kind) => switch (kind) {
         'match_ready' || 'match_soon' => Icons.sports_esports_rounded,
         'starting_soon' ||
+        'checkin_open' ||
         'started' ||
         'time_changed' =>
           Icons.schedule_rounded,

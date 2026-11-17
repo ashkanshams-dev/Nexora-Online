@@ -34,7 +34,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   Future<void> _load() async {
     final OnlineService o = ref.read(onlineProvider);
     if (!o.isOnline) await o.ensureSession();
-    final SupabaseClient? c = o.client;
+    await o.gamesHello();
+    final SupabaseClient? c = o.games;
     if (c == null || !mounted) return;
     setState(() {
       _loading = true;

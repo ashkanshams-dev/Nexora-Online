@@ -56,7 +56,8 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   bool _inMatch = false;
   String? _lastMatchSeen;
 
-  SupabaseClient? get _c => ref.read(onlineProvider).client;
+  SupabaseClient? get _c => ref.read(onlineProvider).games; // games project
+  bool get _signedIn => ref.read(onlineProvider).client?.auth.currentSession != null;
   String? get _me => ref.read(onlineProvider).uid;
   GameInfo? get _game => gameById(widget.gameId);
 
@@ -71,6 +72,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   Future<void> _boot() async {
     final OnlineService o = ref.read(onlineProvider);
     if (!o.isOnline) await o.ensureSession();
+    await o.gamesHello();
     if (!mounted) return;
     if (widget.roomId != null) {
       await _guard(() async {
@@ -144,7 +146,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
 
   Future<void> _loadOpen() async {
     final SupabaseClient? c = _c;
-    if (c == null || c.auth.currentSession == null) return;
+    if (c == null || !_signedIn) return;
     try {
       final List<dynamic> rows = await c
           .from('nx_rooms')
@@ -360,7 +362,8 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
     if (c == null || _roomId == null) return;
     List<NxUser> friends = <NxUser>[];
     try {
-      friends = await SocialApi(c).friends();
+      final SupabaseClient? a = ref.read(onlineProvider).client;
+      if (a != null) friends = await SocialApi(a).friends();
     } catch (_) {}
     if (!mounted) return;
     final Set<String> inRoom = _seats.map((_Seat s) => s.userId).toSet();

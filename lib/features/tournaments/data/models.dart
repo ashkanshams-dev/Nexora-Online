@@ -114,6 +114,7 @@ class TEntry {
         paidGems = _i(r['paid_gems']),
         note = r['note'] as String?,
         createdAt = _t(r['created_at']),
+        checkedInAt = _t(r['checked_in_at']),
         username = '${_m(r['profiles'])['username'] ?? 'Pilot'}';
 
   final String tournamentId;
@@ -127,8 +128,10 @@ class TEntry {
   final int paidGems;
   final String? note;
   final DateTime? createdAt;
+  final DateTime? checkedInAt;
   final String username;
 
+  bool get checkedIn => checkedInAt != null;
   bool get active => status == 'approved' || status == 'pending' || status == 'waitlist';
 }
 

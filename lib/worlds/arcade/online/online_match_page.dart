@@ -57,14 +57,15 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
 
   Future<void> _open() async {
     final OnlineService o = ref.read(onlineProvider);
-    final client = o.client;
-    if (client == null) {
+    final client = o.games;
+    final String? uid = o.uid;
+    if (client == null || uid == null) {
       setState(() => _error = 'offline');
       return;
     }
     try {
       final SupabaseMatchLink link =
-          await SupabaseMatchLink.open(client, widget.matchId);
+          await SupabaseMatchLink.open(client, widget.matchId, uid: uid);
       if (!mounted) {
         link.dispose();
         return;
@@ -201,7 +202,7 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
       try {
         await ref
             .read(onlineProvider)
-            .client
+            .games
             ?.rpc('nx_t_report', params: <String, dynamic>{
           'p_game': widget.matchId,
           'p_winner_seat': winnerSeat,

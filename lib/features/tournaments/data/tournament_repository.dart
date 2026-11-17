@@ -21,18 +21,20 @@ class TournamentRepository {
   TournamentRepository(this._online);
   final OnlineService _online;
 
-  SupabaseClient? get _c => _online.client;
+  /// Tournaments live on the games project; user search + staff roles on the auth project.
+  SupabaseClient? get _c => _online.games;
   String? get uid => _online.uid;
   bool get available => _online.isOnline && _c != null;
 
   Future<SupabaseClient> _client() async {
     if (_c == null) throw StateError('offline');
     if (!_online.isOnline) await _online.ensureSession();
+    await _online.gamesHello();
     return _c!;
   }
 
   static const String _entrySelect =
-      'tournament_id, user_id, status, seed, group_no, rating, place, paid_coins, paid_gems, note, created_at, profiles(username)';
+      'tournament_id, user_id, status, seed, group_no, rating, place, paid_coins, paid_gems, note, created_at, checked_in_at, profiles(username)';
 
   Future<List<Tournament>> list() async {
     final SupabaseClient c = await _client();
@@ -114,7 +116,8 @@ class TournamentRepository {
   }
 
   Future<List<Map<String, dynamic>>> searchUsers(String q) async {
-    final SupabaseClient c = await _client();
+    await _client();
+    final SupabaseClient c = _online.client!;
     final List<dynamic> rows = await c.from('profiles').select('id, username').ilike('username', '%$q%').limit(20);
     return rows.map((dynamic r) => Map<String, dynamic>.from(r as Map)).toList();
   }
@@ -147,6 +150,20 @@ class TournamentRepository {
     }
     return (admin: false, organizer: false);
   }
+
+  /// Gems this manager may still put into fixed prizes (unlimited managers → very large number).
+  Future<int> gemBudgetLeft([String? exceptTournament]) async {
+    try {
+      final SupabaseClient c = await _client();
+      final dynamic r = await c.rpc('nx_t_gem_budget_left', params: <String, dynamic>{'p_except': exceptTournament});
+      return (r as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Check in for a tournament (window: 10 minutes before the start until the start).
+  Future<TResult> checkIn(String t) => _call('nx_t_checkin', <String, dynamic>{'p_t': t});
 
   Future<Map<String, dynamic>> logs(String t) async {
     final SupabaseClient c = await _client();
@@ -201,8 +218,15 @@ class TournamentRepository {
       _call('nx_t_admin_match', <String, dynamic>{'p_m': m, 'p_action': action, 'p': p});
   Future<TResult> setRunner(String t, String user, bool add) =>
       _call('nx_t_set_runner', <String, dynamic>{'p_t': t, 'p_user': user, 'p_add': add});
-  Future<TResult> setStaff(String user, String? role) =>
-      _call('nx_t_set_staff', <String, dynamic>{'p_user': user, 'p_role': role});
+  Future<TResult> setStaff(String user, String? role) async {
+    try {
+      final dynamic r = await _online.rpc('nx_t_set_staff', <String, dynamic>{'p_user': user, 'p_role': role});
+      final Map<String, dynamic> m = r is Map ? Map<String, dynamic>.from(r) : <String, dynamic>{};
+      return TResult(m['ok'] == true, m['error'] as String?, m);
+    } catch (e) {
+      return TResult(false, 'network', const <String, dynamic>{});
+    }
+  }
 
   /// Realtime changes of one tournament (matches, entries, the row itself). Returns a cancel function.
   VoidCallback watchTournament(String t, VoidCallback onChange) {
@@ -269,6 +293,10 @@ String tErrorText(String? code, bool fa) {
     'not_ready_time' => t('هنوز وقت آمادگی این بازی نرسیده', 'This match is not open yet'),
     'paused' => t('تورنمنت متوقف است', 'The tournament is paused'),
     'fee_locked' => t('بعد از پرداخت ورودیه‌ها، مبلغ ورودی قابل تغییر نیست', 'The entry fee is locked once players have paid'),
+    'gem_budget_exceeded' => t('از سقف جم مجاز بیشتر است', 'Over your gem prize budget'),
+    'checkin_not_open' => t('اعلام حضور از ۱۰ دقیقه قبل از شروع باز می‌شود', 'Check-in opens 10 minutes before the start'),
+    'checkin_closed' => t('زمان اعلام حضور تمام شده', 'Check-in is closed'),
+    'not_registered' => t('در این تورنمنت ثبت‌نام نکرده‌ای', 'You are not registered'),
     'fixed_prize_admin_only' => t('جایزه‌ی ثابت فقط توسط ادمین', 'Only an admin can set a fixed prize'),
     'bad_times' => t('ترتیب زمان‌ها درست نیست', 'The times are not in order'),
     'bad_distribution' => t('جمع درصد جوایز بیشتر از ۱۰۰ است', 'Prize percentages add up to more than 100'),

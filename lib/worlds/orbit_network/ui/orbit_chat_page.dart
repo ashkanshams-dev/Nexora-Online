@@ -151,7 +151,8 @@ class _OrbitChatPageState extends ConsumerState<OrbitChatPage> {
         final String? g = await showArcadeGamePicker(context);
         if (g == null) return;
         final OrbitChat? target = _ctrl.chatById(widget.chatId);
-        final client = ref.read(onlineProvider).client;
+        final client = ref.read(onlineProvider).games;
+        await ref.read(onlineProvider).gamesHello();
         if (target != null && target.online && client != null) {
           // A real private room; the card lets every member join it.
           try {

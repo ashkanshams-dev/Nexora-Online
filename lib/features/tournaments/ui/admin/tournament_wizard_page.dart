@@ -68,6 +68,11 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
   int _boSemi = 1;
   int _boFinal = 3;
   bool _finalOneLeg = false;
+  // Online match length: 3 / 5 / 7 minutes, or first to N goals (goal target > 0 wins over minutes).
+  int _matchMinutes = 5;
+  int _goalTarget = 0;
+  bool _checkin = true;
+  int _gemBudget = 0; // gems this manager may still mint into fixed prizes
   int _ptsWin = 3;
   int _ptsDraw = 1;
 
@@ -102,9 +107,11 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
     final ({bool admin, bool organizer}) role = await repo.myRole();
     Tournament? t;
     if (widget.editId != null) t = await repo.get(widget.editId!);
+    final int budget = await repo.gemBudgetLeft(widget.editId);
     if (!mounted) return;
     setState(() {
       _admin = role.admin;
+      _gemBudget = budget;
       if (t != null) _fill(t);
     });
   }
@@ -135,6 +142,9 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
     _boSemi = t.cfg('bo_semi', 1);
     _boFinal = t.cfg('bo_final', 1);
     _finalOneLeg = t.cfgB('final_one_leg', false);
+    _matchMinutes = t.cfg('match_minutes', 5);
+    _goalTarget = t.cfg('goal_target', 0);
+    _checkin = t.cfgB('checkin', true);
     _ptsWin = t.cfg('points_win', 3);
     _ptsDraw = t.cfg('points_draw', 1);
     final PrizeConfig pc = PrizeConfig.fromJson(t.prize);
@@ -194,6 +204,9 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
           'round_minutes': _roundMinutes,
           'max_game_minutes': _maxGameMinutes,
           'final_one_leg': _finalOneLeg,
+          'match_minutes': _goalTarget > 0 ? 0 : _matchMinutes,
+          'goal_target': _goalTarget,
+          'checkin': _checkin,
         },
         'prize': <String, dynamic>{
           'fixed_coins': _fixedCoins,
@@ -452,24 +465,10 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
         ),
       ]);
 
-  Widget _bo(String label, int value, ValueChanged<int> onChanged) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: <Widget>[
-          Expanded(child: Text(label)),
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: const <ButtonSegment<int>>[
-              ButtonSegment<int>(value: 1, label: Text('1')),
-              ButtonSegment<int>(value: 2, label: Text('2')),
-              ButtonSegment<int>(value: 3, label: Text('3')),
-              ButtonSegment<int>(value: 5, label: Text('5')),
-            ],
-            selected: <int>{value},
-            onSelectionChanged: (Set<int> v) =>
-                setState(() => onChanged(v.first)),
-          ),
-        ]),
-      );
+  /// Games per match: any N from 1 to 15 (first to N/2+1 wins; a tie after N games → golden-goal decider).
+  Widget _bo(String label, int value, ValueChanged<int> onChanged) =>
+      _stepper(label, value, 1, 15, onChanged,
+          suffix: context.tx(' بازی', ' g'));
 
   Future<void> _pick(DateTime current, ValueChanged<DateTime> onPicked) async {
     final DateTime now = DateTime.now();
@@ -678,6 +677,45 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
           _bo(context.tx('فینال', 'Final'), _boFinal, (int v) => _boFinal = v),
         ],
         const Divider(),
+        Text(context.tx('مدت هر بازی آنلاین', 'Online game length'),
+            style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 6, children: <Widget>[
+          for (final int m in const <int>[3, 5, 7])
+            ChoiceChip(
+              label: Text(context.tx('$m دقیقه', '$m min')),
+              selected: _goalTarget == 0 && _matchMinutes == m,
+              onSelected: (_) => setState(() {
+                _matchMinutes = m;
+                _goalTarget = 0;
+              }),
+            ),
+          ChoiceChip(
+            label: Text(context.tx('تا N گل', 'First to N goals')),
+            selected: _goalTarget > 0,
+            onSelected: (_) => setState(() => _goalTarget = _goalTarget > 0 ? _goalTarget : 3),
+          ),
+        ]),
+        if (_goalTarget > 0)
+          _stepper(context.tx('تعداد گل', 'Goals to win'), _goalTarget, 1, 20,
+              (int v) => _goalTarget = v),
+        const Divider(),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _checkin,
+          activeColor: tAccent(context),
+          title: Text(context.tx('حضور و غیاب ۱۰ دقیقه قبل از شروع', 'Check-in 10 minutes before the start')),
+          subtitle: Text(
+              context.tx('فقط بازیکن‌هایی که اعلام حضور کنند وارد قرعه‌کشی خودکار می‌شوند.',
+                  'Only players who check in enter the automatic draw.'),
+              style: const TextStyle(fontSize: 12)),
+          onChanged: (bool v) => setState(() => _checkin = v),
+        ),
+        Text(
+            context.tx('قبل از هر بازی آنلاین، هر بازیکن تیم و ترکیبش را انتخاب می‌کند.',
+                'Before every online game each player picks a team and formation.'),
+            style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
+        const Divider(),
         Text(
             context.tx('مساوی در حذفی ← بازی گل طلایی',
                 'Knockout draw → golden-goal decider'),
@@ -705,10 +743,19 @@ class _TournamentWizardPageState extends ConsumerState<TournamentWizardPage> {
           _stepper(context.tx('جایزه‌ی ثابت (جم)', 'Fixed prize (gems)'),
               _fixedGems, 0, 100000, (int v) => _fixedGems = v,
               step: 10),
+        ] else if (_gemBudget > 0 || _fixedGems > 0) ...<Widget>[
+          _stepper(context.tx('جایزه‌ی ثابت (جم)', 'Fixed prize (gems)'),
+              _fixedGems, 0, _gemBudget >= 1000000 ? 100000 : _gemBudget, (int v) => _fixedGems = v,
+              step: 10),
+          Text(
+              _gemBudget >= 1000000
+                  ? context.tx('سقف جم: نامحدود (تعیین‌شده توسط مدیر اصلی)', 'Gem budget: unlimited (set by the main admin)')
+                  : context.tx('سقف باقی‌مانده‌ی جم تو: $_gemBudget', 'Your remaining gem budget: $_gemBudget'),
+              style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
         ] else
           Text(
-              context.tx('جایزه‌ی ثابت فقط توسط ادمین تعیین می‌شود.',
-                  'Fixed prizes are set by admins only.'),
+              context.tx('جایزه‌ی ثابت فقط توسط ادمین یا مدیری با سقف جم تعیین می‌شود.',
+                  'Fixed prizes need an admin or a manager with a gem budget.'),
               style: const TextStyle(color: NxColors.textDim, fontSize: 12)),
         _stepper(
             context.tx('سهم ورودیه‌ها در جایزه', 'Entry fees into the pool'),

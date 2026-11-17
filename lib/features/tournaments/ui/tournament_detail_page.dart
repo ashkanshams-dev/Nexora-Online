@@ -259,6 +259,16 @@ class _TournamentDetailPageState extends ConsumerState<TournamentDetailPage>
     unawaited(_load());
   }
 
+  Future<void> _checkIn() async {
+    HapticFeedback.mediumImpact();
+    setState(() => _busy = true);
+    final TResult r = await _repo.checkIn(_t!.id);
+    if (mounted) setState(() => _busy = false);
+    await _toast(r,
+        okFa: 'حضورت ثبت شد', okEn: 'You are checked in');
+    unawaited(_load());
+  }
+
   Future<void> _ready(TMatch m) async {
     HapticFeedback.mediumImpact();
     setState(() => _busy = true);
@@ -656,6 +666,33 @@ class _TournamentDetailPageState extends ConsumerState<TournamentDetailPage>
               onPressed: _busy ? null : _withdraw,
               child: Text(context.tx('انصراف', 'Withdraw'))),
       ]);
+      // Check-in: opens 10 minutes before the start; only checked-in players enter the automatic draw.
+      if (me.status == 'approved' && t.cfgB('checkin', false) && (t.status == 'registering' || t.status == 'closed')) {
+        final DateTime opens = t.startAt.subtract(const Duration(minutes: 10));
+        final bool open = DateTime.now().toUtc().isAfter(opens.toUtc());
+        body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: <Widget>[
+          body,
+          const SizedBox(height: 10),
+          if (me.checkedIn)
+            Row(children: <Widget>[
+              const Icon(Icons.verified_rounded, color: NxColors.success),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(context.tx('حضورت ثبت شد — منتظر قرعه‌کشی', 'Checked in — waiting for the draw'),
+                      style: const TextStyle(fontWeight: FontWeight.w800, color: NxColors.success))),
+            ])
+          else
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                  backgroundColor: open ? NxColors.success : NxColors.glass, minimumSize: const Size.fromHeight(52)),
+              onPressed: _busy || !open ? null : _checkIn,
+              icon: const Icon(Icons.how_to_reg_rounded),
+              label: Text(open
+                  ? context.tx('اعلام حضور (الان)', 'Check in now')
+                  : context.tx('اعلام حضور از ${fmtWhen(opens.toUtc())}', 'Check-in opens ${fmtWhen(opens.toUtc())}')),
+            ),
+        ]);
+      }
     } else if (t.canRegister) {
       body = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

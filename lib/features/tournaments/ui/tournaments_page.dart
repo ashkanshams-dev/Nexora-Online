@@ -71,7 +71,7 @@ class _TournamentsPageState extends ConsumerState<TournamentsPage>
 
   void _subscribe() {
     if (_ch != null) return;
-    final SupabaseClient? c = ref.read(onlineProvider).client;
+    final SupabaseClient? c = ref.read(onlineProvider).games;
     if (c == null || !ref.read(onlineProvider).isOnline) return;
     _chClient = c;
     _ch = c

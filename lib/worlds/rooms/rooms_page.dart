@@ -49,8 +49,8 @@ class _RoomsPageState extends ConsumerState<RoomsPage> {
     if (!silent && mounted) setState(() => _loading = true);
     try {
       if (!o.isOnline) await o.ensureSession();
-      final SupabaseClient? c = o.client;
-      if (c == null || c.auth.currentSession == null) {
+      final SupabaseClient? c = o.games;
+      if (c == null || o.client?.auth.currentSession == null) {
         if (mounted) {
           setState(() {
             _loading = false;

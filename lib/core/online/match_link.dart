@@ -36,8 +36,8 @@ class SupabaseMatchLink extends ChangeNotifier implements NetLink {
     if (_status != 'playing') _end = _endFrom(m);
   }
 
-  static Future<SupabaseMatchLink> open(SupabaseClient c, String matchId) async {
-    final String uid = c.auth.currentUser!.id;
+  /// [c] = games-project client; [uid] = the signed-in user (from the auth project's session).
+  static Future<SupabaseMatchLink> open(SupabaseClient c, String matchId, {required String uid}) async {
     final Map<String, dynamic> m = await c.from('nx_matches').select().eq('id', matchId).single();
     final SupabaseMatchLink link = SupabaseMatchLink._(c, matchId, uid, m);
     link._connect();

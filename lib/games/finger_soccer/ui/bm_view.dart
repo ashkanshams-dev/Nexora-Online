@@ -317,13 +317,26 @@ class _BermudaViewState extends State<BermudaView>
           ],
           field: h.field,
           ball: h.ball,
-          limit: 0,
-          matchTime: kBmMatchSeconds,
+          // Tournament rules (server-set in nx_matches.settings): first to N goals, or 3/5/7 minutes.
+          // A golden-goal decider game is first to 1. Engine and physics are unchanged.
+          limit: _goalLimit(net.settings),
+          matchTime: _goalLimit(net.settings) > 0 ? 0 : _matchSeconds(net.settings),
           turnTime: kBmOnlineTurnSeconds,
           mirror: mySeat == 1,
           first: 0,
         ),
         quiet: quiet);
+  }
+
+  static int _goalLimit(Map<String, dynamic> st) {
+    if (st['golden_goal'] == true) return 1;
+    final int g = (st['goal_target'] as num?)?.toInt() ?? 0;
+    return g.clamp(0, 20);
+  }
+
+  static int _matchSeconds(Map<String, dynamic> st) {
+    final int m = (st['match_minutes'] as num?)?.toInt() ?? 0;
+    return (m == 3 || m == 5 || m == 7) ? m * 60 : kBmMatchSeconds;
   }
 
   void _begin(BmConfig c, {bool quiet = false}) {

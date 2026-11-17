@@ -28,7 +28,7 @@ class InviteWatcher {
     if (uid == _uid) return;
     _detach();
     _uid = uid;
-    final SupabaseClient? c = o.client;
+    final SupabaseClient? c = o.games;
     if (uid == null || c == null) return;
     _ch = c
         .channel('nxinv:$uid')
@@ -77,7 +77,7 @@ class InviteWatcher {
       action: SnackBarAction(
         label: fa ? 'ورود' : 'Join',
         onPressed: () {
-          final SupabaseClient? c = _ref.read(onlineProvider).client;
+          final SupabaseClient? c = _ref.read(onlineProvider).games;
           if (c != null && id >= 0) {
             unawaited(c.from('nx_invites').update(<String, dynamic>{'status': 'accepted'}).eq('id', id).then((_) {}, onError: (Object _) {}));
           }
@@ -89,7 +89,7 @@ class InviteWatcher {
 
   void _detach() {
     final RealtimeChannel? ch = _ch;
-    final SupabaseClient? c = _ref.read(onlineProvider).client;
+    final SupabaseClient? c = _ref.read(onlineProvider).games;
     if (ch != null && c != null) unawaited(c.removeChannel(ch));
     _ch = null;
   }
