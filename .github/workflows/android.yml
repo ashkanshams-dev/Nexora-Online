@@ -62,9 +62,17 @@ jobs:
           mkdir -p ~/.android
           if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
           if [ ! -f ~/.android/debug.keystore ]; then
-            echo "ERROR: NEXORA_KEYSTORE_B64 is not configured and the signing-key cache is unavailable." >&2
-            echo "Configure the same keystore used by the installed NEXORA APK before publishing another update." >&2
-            exit 1
+            if [ "${{ github.ref }}" = "refs/heads/redesign" ]; then
+              echo "ERROR: NEXORA_KEYSTORE_B64 is not configured and the signing-key cache is unavailable." >&2
+              echo "Configure the same keystore used by the installed NEXORA APK before publishing another update." >&2
+              exit 1
+            fi
+            echo "No release keystore on a check branch; generating an ephemeral debug key."
+            keytool -genkeypair -noprompt \
+              -keystore ~/.android/debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 \
+              -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
           if ! keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
             echo "ERROR: NEXORA_KEYSTORE_B64 is invalid or does not contain alias androiddebugkey." >&2
