@@ -120,3 +120,16 @@ No extra server: everything runs in the existing Supabase project (Postgres RPCs
 - Admin editor: Settings → «تنظیمات شخصیت اوراکل (مدیر)» (`/admin/oracle`, JSON editor; visible only when `nx_has_perm('oracle')`).
 - Tests: `test/worlds/oracle_persona_test.dart` (names incl. typos/Latin, Pedro/Denny/Mahyar separation, verbatim lines,
   stretched signature everywhere, cooldowns, no-repeat, reactions, greetings, tutorials, tour, brain integration).
+
+## Backend split — infrastructure (2026-11-17, applied live; app not switched yet)
+- Auth project: custom access token hook `nx_access_token_hook` enabled (claim `nx_perms`: `owner` | per-permission admins from
+  `nx_admin_perms` | `tournaments` for nx_staff | `unlimited_gems`; never fails a sign-in). Verified: sign-up still works, claim present.
+- Games project trusts auth JWTs (Third-Party Auth, ES256 JWKS) — verified `auth.uid()` = same user id there.
+- Wallet bridge (both directions, verified end-to-end with a temporary guest, then deleted): games `profiles` mirror + `nx_wallet_tx`
+  outbox → auth `nx_bridge_apply_batch` (idempotent by tx id, `nx_bridge_applied`) → snapshot back via `nx_mirror_put`;
+  auth-side profile changes of NEXORA players push snapshots (`nx_profiles_to_games` trigger). Service keys in Vault on both sides.
+  Files: `supabase/games/migrations/20261117100000_g_mirror_bridge.sql`, `supabase/migrations/20261117210000_nx_access_token_hook.sql`,
+  `supabase/migrations/20261117220000_nx_games_bridge.sql`.
+- Remaining for the split: port rooms/matches/matchmaking + the tournaments engine (~100 SQL functions) to the games project with
+  shims (`nx_perm` instead of nx_staff/is_admin), then switch the app's rooms/matches/tournaments calls to a second Supabase client
+  (`accessToken` = auth session) in one release.
