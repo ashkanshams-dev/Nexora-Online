@@ -68,14 +68,14 @@ class SupabaseBackend extends BackendGateway {
     }
   }
 
-  /// ORACLE remote replies through the existing `oracle-chat` Edge Function (key lives server-side).
+  /// ORACLE remote replies through the `nx-oracle` Edge Function (key lives server-side).
   @override
   Future<String?> oracleRemote(String prompt, {required String languageCode}) async {
     final Map<String, dynamic>? r = await oracleInvoke(<String, dynamic>{
       'messages': <Map<String, dynamic>>[
         <String, dynamic>{'role': 'user', 'content': prompt},
       ],
-      'ctx': <String, dynamic>{'app': 'NEXORA hub (Flutter); answer in text only', 'language': languageCode},
+      'ctx': <String, dynamic>{'mode': 'chat', 'lang': languageCode},
     });
     final Object? m = r?['message'];
     return m is Map ? m['content'] as String? : null;
@@ -85,7 +85,7 @@ class SupabaseBackend extends BackendGateway {
   Future<Map<String, dynamic>?> oracleInvoke(Map<String, dynamic> body) async {
     final SupabaseClient? c = _c;
     if (c == null || c.auth.currentSession == null) return null;
-    final FunctionResponse r = await c.functions.invoke('oracle-chat', body: body).timeout(const Duration(seconds: 25));
+    final FunctionResponse r = await c.functions.invoke('nx-oracle', body: body).timeout(const Duration(seconds: 40));
     final dynamic d = r.data;
     return d is Map ? Map<String, dynamic>.from(d) : null;
   }

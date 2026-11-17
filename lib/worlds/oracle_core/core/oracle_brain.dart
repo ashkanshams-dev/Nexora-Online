@@ -910,6 +910,7 @@ class RemoteOracleEngine implements OracleEngine {
 
   static const Set<String> remoteIntents = <String>{
     'fallback', 'offline_limit', 'joke', 'how_are_you', 'kind', 'who', 'cannot_send', 'rules_missing', 'recommend', 'greet',
+    'rules', 'tips', 'strategy', 'help',
   };
 
   void _remember(String role, String content) {
@@ -949,6 +950,8 @@ class RemoteOracleEngine implements OracleEngine {
       'app': 'NEXORA hub (Flutter): 7 worlds (Hub, Arcade with 9 games, Orbit Network messenger, Nova Gallery, '
           'Social Station, Personal Orbit, ORACLE Core). NOT the finger-football app: app tools are unavailable here, '
           'answer in plain text only, short, in the user\'s language.',
+      'mode': 'chat',
+      'lang': c.languageCode,
       'language': c.languageCode,
       'username': c.username,
       'level': c.level,

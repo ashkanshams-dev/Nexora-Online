@@ -8,6 +8,7 @@ import '../../core/settings/app_settings.dart';
 import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/game_registry.dart';
+import '../oracle_core/oracle_game_sheet.dart';
 
 /// Hosts any GameModule: exit button, pause-confirm, result screen, XP, rematch.
 class GameHostPage extends ConsumerStatefulWidget {
@@ -150,6 +151,19 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
                   final nav = Navigator.of(context);
                   if (await _confirmExit()) nav.pop();
                 },
+              ),
+            ),
+          ),
+          PositionedDirectional(
+            top: MediaQuery.paddingOf(context).top + 6,
+            end: 6,
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.35),
+              shape: const CircleBorder(),
+              child: IconButton(
+                tooltip: 'ORACLE',
+                icon: const Icon(Icons.smart_toy_rounded, color: Color(0xFF8FF3FF)),
+                onPressed: () => OracleGameSheet.show(context, widget.game),
               ),
             ),
           ),

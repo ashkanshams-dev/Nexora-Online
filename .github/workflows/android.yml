@@ -54,8 +54,12 @@ jobs:
           key: nxg-signing-key-v1
 
       - name: Create signing key (first run only)
+        env:
+          NEXORA_KEYSTORE_B64: ${{ secrets.NEXORA_KEYSTORE_B64 }}
         run: |
           mkdir -p ~/.android
+          # A repository secret, when set, pins the signing key forever (the Actions cache expires after 7 idle days).
+          if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
           if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
               -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=NEXORA,O=NEXORA,C=US"
@@ -87,8 +91,8 @@ jobs:
               kts = f.endswith('.kts')
               flag = 'isCoreLibraryDesugaringEnabled = true' if kts else 'coreLibraryDesugaringEnabled true'
               s = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        ' + flag, s, count=1)
-              dep = ('coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")' if kts
-                     else "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'")
+              dep = ('coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")' if kts
+                     else "coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'")
               s += '\ndependencies {\n    ' + dep + '\n}\n'
               open(f, 'w').write(s)
               print('desugaring enabled in', f)
