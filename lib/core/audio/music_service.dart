@@ -50,13 +50,18 @@ class MusicService with WidgetsBindingObserver {
     _sync();
   }
 
+  /// True while any game page is open (the corner ORACLE hides itself inside games).
+  final ValueNotifier<bool> inGameListenable = ValueNotifier<bool>(false);
+
   void enterGame() {
     _games++;
+    inGameListenable.value = _games > 0;
     _sync();
   }
 
   void exitGame() {
     if (_games > 0) _games--;
+    inGameListenable.value = _games > 0;
     _sync();
   }
 

@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - uses: subosito/flutter-action@v2
         with:
@@ -73,9 +73,14 @@ jobs:
           M=android/app/src/main/AndroidManifest.xml
           # Branding: app name + launcher icon
           sed -i 's/android:label="[^"]*"/android:label="NEXORA"/' $M
+          # Launcher icon (NEXORA N mark): legacy square + round + adaptive (API 26+) layers.
           for d in branding/mipmap-*; do
-            cp "$d/ic_launcher.png" "android/app/src/main/res/$(basename $d)/ic_launcher.png"
+            mkdir -p "android/app/src/main/res/$(basename $d)"
+            cp "$d"/* "android/app/src/main/res/$(basename $d)/"
           done
+          if ! grep -q 'android:roundIcon' $M; then
+            sed -i 's#android:icon="@mipmap/ic_launcher"#android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"#' $M
+          fi
           # Online: network + voice/video call permissions
           if ! grep -q "android.permission.INTERNET" $M; then
             sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <uses-permission android:name="android.permission.CAMERA"/>\n    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>\n    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>\n    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-feature android:name="android.hardware.camera" android:required="false"/>\n    <application#' $M
@@ -160,6 +165,8 @@ jobs:
               "      if (cur < 35) { a.compileSdk = 36; println(\"nx: compileSdk 36 for ${p.name} (was ${cur})\") }\n"
               "    }\n"
               "  } catch (e) { println(\"nx: compileSdk override skipped for ${p.name}: ${e.message}\") }\n"
+              "  // release lint of third-party plugins is not ours to fix and has crashed on JDK API gaps\n"
+              "  p.tasks.matching { it.name.startsWith('lintVital') }.configureEach { it.enabled = false }\n"
               "}\n")
           for f in glob.glob('android/build.gradle*'):
               g = open(f).read()

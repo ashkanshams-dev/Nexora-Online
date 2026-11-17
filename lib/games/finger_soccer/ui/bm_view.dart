@@ -182,7 +182,7 @@ class _BermudaViewState extends State<BermudaView>
 
   void _ensureBallRenderer() {
     final ui.Image? b = im.ball;
-    if (b == null || view.s <= 0) return;
+    if (b == null || view.s <= 0 || im.ballSheet != null) return;
     final double dpr =
         math.min(MediaQuery.maybeDevicePixelRatioOf(context) ?? 1, 1.75);
     final int n = math.max(
@@ -367,10 +367,24 @@ class _BermudaViewState extends State<BermudaView>
       }
       return;
     }
+    final anim = kBmAnimBalls[c.ball];
+    final ui.Image? sheet = anim == null ? null : await _img(anim.sheet);
+    if (!mounted || _disposed) {
+      for (final ui.Image? i in r) {
+        i?.dispose();
+      }
+      sheet?.dispose();
+      return;
+    }
     im.dispose();
     im.field = r[0];
     im.goal = r[1];
     im.ball = r[2];
+    if (anim != null && sheet != null) {
+      im.ballSheet = sheet;
+      im.ballFrames = anim.frames;
+      im.ballFrameMs = anim.frameMs;
+    }
     im.team[0] = r[3];
     im.team[1] = r[4];
   }

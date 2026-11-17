@@ -179,15 +179,6 @@ class _HubPageState extends ConsumerState<HubPage> {
               ],
             ),
           ),
-          Positioned.fill(
-            child: OracleMischief(
-              coinPoke: _coinPoke,
-              onCaught: () => setState(() {
-                _mood = OracleMood.laugh;
-                _line++;
-              }),
-            ),
-          ),
         ]),
       ),
     );

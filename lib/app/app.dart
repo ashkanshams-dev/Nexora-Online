@@ -9,6 +9,7 @@ import '../core/online/cloud_profile_sync.dart';
 import '../core/online/invite_watcher.dart';
 import '../core/online/online_service.dart';
 import '../core/settings/app_settings.dart';
+import '../core/ui2/oracle_buddy.dart';
 import '../core/update/app_updater.dart';
 import '../core/update/update_banner.dart';
 import '../core/theme/nx_theme.dart';
@@ -91,7 +92,16 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
             textScaler:
                 mq.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.3),
           ),
-          child: UpdateOverlay(child: child ?? const SizedBox.shrink()),
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => OracleBus.lastTouch = DateTime.now(),
+            child: UpdateOverlay(
+              child: Stack(children: <Widget>[
+                child ?? const SizedBox.shrink(),
+                Positioned.fill(child: OracleBuddy(router: _router)),
+              ]),
+            ),
+          ),
         );
       },
     );

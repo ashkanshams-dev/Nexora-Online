@@ -11,6 +11,11 @@ import 'bm_ball.dart';
 
 class BmImages {
   ui.Image? field, goal, ball;
+  // Animated sprite-sheet ball (kBmAnimBalls): frames advance with distance rolled + a slow idle spin.
+  ui.Image? ballSheet;
+  int ballFrames = 0;
+  int ballFrameMs = 120;
+  double animPhase = 0, animX = double.nan, animY = double.nan, animT = 0;
   final List<ui.Image?> team = <ui.Image?>[null, null];
   BmBallRenderer? ballR;
   // cached background (blurred cover + faded field), keyed by size/field
@@ -27,6 +32,9 @@ class BmImages {
     team[1]?.dispose();
     bg?.dispose();
     ballR?.dispose();
+    ballSheet?.dispose();
+    ballSheet = null;
+    ballFrames = 0;
     field = goal = ball = bg = null;
     team[0] = team[1] = null;
     ballR = null;
@@ -250,8 +258,24 @@ class BmPainter extends CustomPainter {
         canvas.scale(1 + st - sq, 1 - st * .55 + sq);
         canvas.rotate(-a);
       }
+      final ui.Image? sheet = im.ballSheet;
       final ui.Image? rendered = br?.image;
-      if (rendered != null) {
+      if (sheet != null && im.ballFrames > 0) {
+        // distance-driven roll (one frame per ~0.45 radius) + idle spin at a quarter of the GIF speed
+        if (!im.animX.isNaN) {
+          final double dx = b.x - im.animX, dy = b.y - im.animY;
+          im.animPhase += math.sqrt(dx * dx + dy * dy) / (b.r * .45);
+        }
+        if (im.animT > 0) im.animPhase += (t - im.animT).clamp(0, 100) / (im.ballFrameMs * 4);
+        im.animX = b.x;
+        im.animY = b.y;
+        im.animT = t;
+        final int fi = im.animPhase.floor() % im.ballFrames;
+        final double fw = sheet.width / im.ballFrames;
+        if (sv > 40) canvas.rotate(math.atan2(b.vy, b.vx) + math.pi / 2);
+        canvas.drawImageRect(sheet, Rect.fromLTWH(fi * fw, 0, fw, sheet.height.toDouble()), dst,
+            Paint()..filterQuality = FilterQuality.medium);
+      } else if (rendered != null) {
         canvas.drawImageRect(rendered, Rect.fromLTWH(0, 0, rendered.width.toDouble(), rendered.height.toDouble()), dst,
             Paint()..filterQuality = FilterQuality.medium);
       } else {

@@ -57,6 +57,8 @@ flutter:
     - assets/characters/oracle/
     - assets/characters/oracle/emotes/
     - assets/characters/oracle/poses/
+    - assets/characters/oracle/moods/
+    - assets/branding/
     - assets/games/backgammon/
     - assets/games/billiards/
     - assets/games/carrom/

@@ -26,6 +26,31 @@ class AppSettings extends ChangeNotifier {
     _haptics = _store.getBool(_kHaptics) ?? true;
     _journeySeen = _store.getBool(_kJourney) ?? false;
     _onboarded = _store.getBool(_kOnboarded) ?? false;
+    _oracleBuddy = _store.getBool(_kOracleBuddy) ?? true;
+    _oracleTalk = _store.getBool(_kOracleTalk) ?? true;
+  }
+
+  static const _kOracleBuddy = 'settings.oracle_buddy';
+  static const _kOracleTalk = 'settings.oracle_talk';
+  late bool _oracleBuddy;
+  late bool _oracleTalk;
+
+  /// The mischievous corner ORACLE outside games (off = hidden everywhere).
+  bool get oracleBuddy => _oracleBuddy;
+
+  /// Speech bubbles / teasing lines from the corner ORACLE (off = silent, animations only).
+  bool get oracleTalk => _oracleTalk;
+
+  set oracleBuddy(bool v) {
+    _oracleBuddy = v;
+    _store.setBool(_kOracleBuddy, v);
+    notifyListeners();
+  }
+
+  set oracleTalk(bool v) {
+    _oracleTalk = v;
+    _store.setBool(_kOracleTalk, v);
+    notifyListeners();
   }
 
   final LocalStore _store;

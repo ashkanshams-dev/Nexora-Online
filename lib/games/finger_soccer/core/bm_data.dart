@@ -107,7 +107,21 @@ const List<BmTrail> kBmTR = <BmTrail>[
 
 const List<String> kBmTRN = <String>["Bolt", "Prism", "Wave", "Starlight", "Smoke", "Rainbow", "Neon", "Yin", "Fire", "Blade", "Ghost", "Ember", "Plasma", "Copper Ghost", "Stardust", "Twilight", "Gold Flame", "Thunder", "Cobalt Neon", "Aurora", "Crimson Blade", "Teal Storm", "Royal Ember", "Gold Yin", "Red Smoke", "Gilded Star", "Noir Chrome", "Violet Strike", "Emerald Edge", "Royal Blue Gold", "Crimson Noir", "Blaze Orange", "Aqua Wave", "Sunset Pro", "Elite Cobalt", "Crown Luxury"];
 
-const List<String> kBmBallN = <String>["Bolt", "Prism", "Wave", "Starlight", "Classic", "Rainbow", "Neon", "Yin", "Fire", "Blade", "Ghost", "Ember", "Plasma", "Noir Copper", "Space Modern", "Purple Sky", "Black Lux", "Electron", "Cobalt Gold", "Aurora", "Crimson", "Teal Storm", "Royal Gold", "Gold Rush", "Classic Red", "Luxury", "Noir Chrome", "Violet Strike", "Emerald Edge", "Royal Blue Gold", "Crimson Noir", "Blaze Orange", "Aqua Wave", "Sunset Pro", "Elite Cobalt", "Crown Luxury"];
+const List<String> kBmBallN = <String>["Bolt", "Prism", "Wave", "Starlight", "Classic", "Rainbow", "Neon", "Yin", "Fire", "Blade", "Ghost", "Ember", "Plasma", "Noir Copper", "Space Modern", "Purple Sky", "Black Lux", "Electron", "Cobalt Gold", "Aurora", "Crimson", "Teal Storm", "Royal Gold", "Gold Rush", "Classic Red", "Luxury", "Noir Chrome", "Violet Strike", "Emerald Edge", "Royal Blue Gold", "Crimson Noir", "Blaze Orange", "Aqua Wave", "Sunset Pro", "Elite Cobalt", "Crown Luxury", "NX Spin", "NX Final"];
+
+/// Animated sprite-sheet balls (owner GIFs, frames side by side, 256 px each). Collision radius is unchanged:
+/// they are drawn at the same BR as every other ball.
+class BmAnimBall {
+  const BmAnimBall(this.sheet, this.frames, this.frameMs);
+  final String sheet;
+  final int frames;
+  final int frameMs;
+}
+
+const Map<int, BmAnimBall> kBmAnimBalls = <int, BmAnimBall>{
+  36: BmAnimBall('assets/games/finger_soccer/nx_ball_a.webp', 12, 130),
+  37: BmAnimBall('assets/games/finger_soccer/nx_ball_b.webp', 9, 120),
+};
 
 class BmFa {
   const BmFa(this.k, this.c, this.g);

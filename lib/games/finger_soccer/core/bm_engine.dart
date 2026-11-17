@@ -247,7 +247,7 @@ class BmEngine {
     final List<double> gi = kBmGS[f.gs]!;
     final double gw = 2 * f.g / (gi[3] - gi[2]);
     GGw = gw;
-    GGh = gw * gi[1] / gi[0];
+    GGh = gw * gi[1] / gi[0] * 1.02; // goal depth +2% (owner request)
     GGx = CX - f.g - gi[2] * gw;
     DEPTH = _mx(106, (GGh * .95).roundToDouble());
     GOALS = <BmGoal>[BmGoal(0, Ft, CX - f.g, CX + f.g, -1), BmGoal(1, Fb, CX - f.g, CX + f.g, 1)];
