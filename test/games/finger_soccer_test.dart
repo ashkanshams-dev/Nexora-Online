@@ -44,7 +44,7 @@ void main() {
     expect(PR, 63.8);
     expect(BR, 28.8);
     expect(STEP, 1 / 240);
-    expect(kBmFields.length, 29);
+    expect(kBmFields.length, 30);
     final BmFieldS f = kBmFields[0]; // forest
     expect(f.W, (1086 * FS).roundToDouble());
     expect(f.L, (195 * FS).roundToDouble());

@@ -132,6 +132,7 @@ class SettingsPage extends ConsumerWidget {
                   OracleTourStore.replayTick.value++;
                 },
               ),
+              const _AdminInviteTile(),
               const _OracleAdminTile(),
             ]),
           ),
@@ -228,6 +229,50 @@ class SettingsPage extends ConsumerWidget {
 
 }
 
+
+/// Any signed-in user can redeem the one-time code issued by the main admin.
+/// The server, not this widget, decides whether the code and account are valid.
+class _AdminInviteTile extends ConsumerWidget {
+  const _AdminInviteTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.vpn_key_rounded, color: Color(0xFF8FF3FF)),
+        title: Text(context.tx('ورود کد دعوت ادمین', 'Redeem admin invitation code')),
+        subtitle: Text(context.tx('کد را از مدیر اصلی بگیر', 'Use a code issued by the main admin')),
+        onTap: () async {
+          final TextEditingController code = TextEditingController();
+          final String? value = await showDialog<String>(
+            context: context,
+            builder: (BuildContext ctx) => AlertDialog(
+              title: Text(ctx.tx('کد دعوت ادمین', 'Admin invitation code')),
+              content: TextField(
+                controller: code,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(hintText: 'NX-XXXXXXXX'),
+              ),
+              actions: <Widget>[
+                TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tx('انصراف', 'Cancel'))),
+                FilledButton(onPressed: () => Navigator.pop(ctx, code.text), child: Text(ctx.tx('ثبت', 'Redeem'))),
+              ],
+            ),
+          );
+          code.dispose();
+          if (value == null || value.trim().isEmpty || !context.mounted) return;
+          final Map<String, dynamic> result = await AdminApi(ref.read(onlineProvider)).redeemAdminCode(value);
+          if (!context.mounted) return;
+          final bool fa = context.isFa;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(result['ok'] == true
+                ? (fa ? 'دسترسی ساخت تورنمنت فعال شد ✓' : 'Tournament-admin access enabled ✓')
+                : adminErrorText(result['error'] as String?, fa)),
+          ));
+          if (result['ok'] == true) await ref.read(adminAccessProvider).refresh();
+        },
+      );
+}
 
 /// Admin entries: the admin panel for any admin, the ORACLE form for the 'oracle' permission (server re-checks).
 class _OracleAdminTile extends ConsumerWidget {

@@ -130,6 +130,10 @@ class AdminApi {
   Future<Map<String, dynamic>> grant(String user, int coins, int gems, String? reason) => _auth(
       'nx_owner_grant', <String, dynamic>{'p_user': user, 'p_coins': coins, 'p_gems': gems, 'p_reason': reason});
   Future<Map<String, dynamic>> admins() => _auth('nx_admin_list');
+  /// Redeems an owner-issued, single-use tournament-admin invitation code.
+  /// The database validates expiry, account status, rate limits and ownership.
+  Future<Map<String, dynamic>> redeemAdminCode(String code) =>
+      _auth('nx_redeem_admin_code', <String, dynamic>{'p_code': code.trim()});
   Future<Map<String, dynamic>> setPerms(String user, List<String> perms, {bool unlimitedGems = false, int? gemBudget}) =>
       _auth('nx_admin_set_perms', <String, dynamic>{
         'p_user': user,
@@ -168,6 +172,10 @@ String adminErrorText(String? e, bool fa) => switch (e) {
       'owner_only_admins' => fa ? 'فقط مدیر اصلی «مدیریت ادمین‌ها» را می‌دهد' : 'Only the main admin grants admin management',
       'owner_only_unlimited' => fa ? 'جم نامحدود فقط با مدیر اصلی' : 'Only the main admin grants unlimited gems',
       'account_required' => fa ? 'کاربر باید حساب دائمی داشته باشد (نه مهمان)' : 'The user needs a full account (not a guest)',
+      'already_staff' => fa ? 'این حساب از قبل دسترسی مدیریتی دارد' : 'This account already has staff access',
+      'bad_code' => fa ? 'کد دعوت معتبر نیست' : 'Invalid admin invitation code',
+      'expired' => fa ? 'کد دعوت منقضی شده است' : 'This invitation code has expired',
+      'used' => fa ? 'کد دعوت قبلاً استفاده شده است' : 'This invitation code has already been used',
       'insufficient_balance' => fa ? 'موجودی کافی نیست' : 'Insufficient balance',
       'not_found' => fa ? 'پیدا نشد' : 'Not found',
       'tournament_room' => fa ? 'اتاق تورنمنت — از ابزار بازی‌های تورنمنت استفاده کن' : 'Tournament room — use the match tools',
