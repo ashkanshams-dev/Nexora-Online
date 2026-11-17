@@ -9,6 +9,8 @@ import '../core/online/cloud_profile_sync.dart';
 import '../core/online/invite_watcher.dart';
 import '../core/online/online_service.dart';
 import '../core/settings/app_settings.dart';
+import '../core/update/app_updater.dart';
+import '../core/update/update_banner.dart';
 import '../core/theme/nx_theme.dart';
 import '../features/tournaments/tournament_watcher.dart';
 import 'router.dart';
@@ -50,6 +52,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
       _tournaments.start();
       ref.read(onlineProvider).addListener(_tournaments.sync);
       _tournaments.sync();
+      AppUpdater.instance.start();
     });
   }
 
@@ -88,7 +91,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
             textScaler:
                 mq.textScaler.clamp(minScaleFactor: 0.85, maxScaleFactor: 1.3),
           ),
-          child: child ?? const SizedBox.shrink(),
+          child: UpdateOverlay(child: child ?? const SizedBox.shrink()),
         );
       },
     );

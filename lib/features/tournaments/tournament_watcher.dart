@@ -66,7 +66,6 @@ class TLocalNotifier {
         tz.TZDateTime.from(utc.toUtc(), tz.UTC),
         _details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
         payload: payload,
       );
     } catch (e) {
