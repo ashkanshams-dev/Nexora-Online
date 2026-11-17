@@ -26,6 +26,7 @@ class AppSettings extends ChangeNotifier {
     _haptics = _store.getBool(_kHaptics) ?? true;
     _journeySeen = _store.getBool(_kJourney) ?? false;
     _onboarded = _store.getBool(_kOnboarded) ?? false;
+    _authMode = _store.getString(_kAuthMode) ?? '';
     _oracleBuddy = _store.getBool(_kOracleBuddy) ?? true;
     _oracleTalk = _store.getBool(_kOracleTalk) ?? true;
   }
@@ -62,6 +63,7 @@ class AppSettings extends ChangeNotifier {
   static const _kHaptics = 'settings.haptics';
   static const _kJourney = 'settings.journey_seen';
   static const _kOnboarded = 'settings.onboarded';
+  static const _kAuthMode = 'settings.auth_mode';
   static const _kMusic = 'settings.music';
   static const _kMusicVol = 'settings.music_volume';
 
@@ -73,6 +75,7 @@ class AppSettings extends ChangeNotifier {
   late bool _haptics;
   late bool _journeySeen;
   late bool _onboarded;
+  late String _authMode;
   late bool _music;
   late double _musicVolume;
 
@@ -104,6 +107,18 @@ class AppSettings extends ChangeNotifier {
   bool get haptics => _haptics;
   bool get journeySeen => _journeySeen;
   bool get onboarded => _onboarded;
+
+  /// '', 'email' or 'guest'. Guest is deliberately local-only.
+  String get authMode => _authMode;
+
+  void setAuthMode(String mode) {
+    if (mode != 'email' && mode != 'guest' && mode.isNotEmpty) return;
+    _authMode = mode;
+    _store.setString(_kAuthMode, mode);
+    notifyListeners();
+  }
+
+  void clearAuthMode() => setAuthMode('');
 
   /// Effects budget helpers used by every world and game.
   bool get fancyEffects =>

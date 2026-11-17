@@ -83,7 +83,8 @@ class OnlineService extends ChangeNotifier {
   bool get isGuest => user?.isAnonymous ?? true;
   String? get email => user?.email;
 
-  /// Make sure there is a session; creates a guest account the first time.
+  /// Returns the existing authenticated session. Guest mode is local-only;
+  /// this method never creates a Supabase anonymous account.
   Future<bool> ensureSession() async {
     final SupabaseClient? c = client;
     if (c == null) return false;
@@ -91,18 +92,26 @@ class OnlineService extends ChangeNotifier {
       _status = BackendStatus.online;
       return true;
     }
-    _status = BackendStatus.connecting;
+    _status = BackendStatus.offline;
+    lastError = 'email_login_required';
     notifyListeners();
-    try {
-      await c.auth.signInAnonymously();
-      _status = BackendStatus.online;
-      lastError = null;
-    } catch (e) {
-      _status = BackendStatus.offline;
-      lastError = '$e';
-    }
-    notifyListeners();
-    return _status == BackendStatus.online;
+    return false;
+  }
+
+  Future<bool> sendEmailOtp(String email) async {
+    final bool? ok = await _run<bool>((SupabaseClient c) async {
+      await c.auth.signInWithOtp(email: email.trim(), shouldCreateUser: true);
+      return true;
+    });
+    return ok ?? false;
+  }
+
+  Future<bool> verifyEmailOtp(String email, String token) async {
+    final bool? ok = await _run<bool>((SupabaseClient c) async {
+      await c.auth.verifyOTP(email: email.trim(), token: token.trim(), type: OtpType.email);
+      return c.auth.currentSession != null;
+    });
+    return ok ?? false;
   }
 
   String _friendly(Object e) {
@@ -197,8 +206,8 @@ class OnlineService extends ChangeNotifier {
     return ok ?? false;
   }
 
-  /// Sign out, then continue as a fresh guest so online play keeps working.
-  Future<void> signOut({bool continueAsGuest = true}) async {
+  /// Sign out. Guest mode is local-only and never creates an anonymous session.
+  Future<void> signOut({bool continueAsGuest = false}) async {
     await _run<bool>((SupabaseClient c) async {
       await c.auth.signOut();
       return true;

@@ -39,14 +39,17 @@ class CloudProfileSync {
     _profile.onSaved = _scheduleUpload;
     _profile.onNameChanged = (String n) => unawaited(_pushName(n));
     _online.addListener(_onAuthChanged);
-    if (_profile.hasIdentity) unawaited(_online.ensureSession());
+    // Guest mode is local-only. An email-authenticated session is restored by
+    // Supabase itself; never create an anonymous session for a local profile.
+    if (_profile.hasIdentity && _online.user != null && !_online.isGuest) {
+      unawaited(_online.gamesHello());
+    }
     _onAuthChanged();
   }
 
   /// Called after onboarding creates the identity.
   Future<void> identityCreated() async {
-    if (!_online.configured) return;
-    await _online.ensureSession();
+    if (!_online.configured || _online.user == null || _online.isGuest) return;
     _onAuthChanged();
   }
 

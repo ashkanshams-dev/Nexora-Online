@@ -54,7 +54,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     await p.createIdentity(name: name, avatar: _avatar);
     final outcome = p.award('identity.created', xp: 50, coins: 0);
     ref.read(settingsProvider).markOnboarded();
-    unawaited(ref.read(cloudSyncProvider).identityCreated());
+    if (ref.read(settingsProvider).authMode == 'email') {
+      unawaited(ref.read(cloudSyncProvider).identityCreated());
+    }
     if (!mounted) return;
     await showAwardOutcome(context, outcome);
     if (mounted) context.go('/hub');
@@ -241,8 +243,12 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             Expanded(
               child: Text(
                 context.tx(
-                    'با ورود، یک حساب مهمان آنلاین برایت ساخته می‌شود. بعداً از تنظیمات ← حساب کاربری می‌توانی ایمیل و رمز ثبت کنی یا وارد حساب قبلی‌ات شوی.',
-                    'Entering creates an online guest account. Later, in Settings → Account, add email + password or sign in to an existing account.'),
+                    ref.read(settingsProvider).authMode == 'guest'
+                        ? 'حالت مهمان فقط آفلاین است؛ پیشرفت و هویت روی همین دستگاه می‌ماند و به سرور وصل نمی‌شود.'
+                        : 'ایمیل تو تأیید شده و هویتت به حساب آنلاین NEXORA متصل می‌شود.',
+                    ref.read(settingsProvider).authMode == 'guest'
+                        ? 'Guest mode is offline-only. Your identity and progress stay on this device and never connect to the server.'
+                        : 'Your email is verified and your identity will be connected to your NEXORA account.'),
                 style: const TextStyle(fontSize: 13),
               ),
             ),
