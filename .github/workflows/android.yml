@@ -47,6 +47,8 @@ jobs:
           cache: true
 
       # Same signing key on every build so a new APK installs over the previous one.
+      # The repository secret is the durable source of truth; Actions cache is only
+      # a convenience and must never silently rotate the app signing identity.
       - name: Restore signing key
         uses: actions/cache@v4
         with:
@@ -58,11 +60,15 @@ jobs:
           NEXORA_KEYSTORE_B64: ${{ secrets.NEXORA_KEYSTORE_B64 }}
         run: |
           mkdir -p ~/.android
-          # A repository secret, when set, pins the signing key forever (the Actions cache expires after 7 idle days).
           if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
           if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
-              -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=NEXORA,O=NEXORA,C=US"
+            echo "ERROR: NEXORA_KEYSTORE_B64 is not configured and the signing-key cache is unavailable." >&2
+            echo "Configure the same keystore used by the installed NEXORA APK before publishing another update." >&2
+            exit 1
+          fi
+          if ! keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
+            echo "ERROR: NEXORA_KEYSTORE_B64 is invalid or does not contain alias androiddebugkey." >&2
+            exit 1
           fi
 
       - name: Generate Android platform (if missing)

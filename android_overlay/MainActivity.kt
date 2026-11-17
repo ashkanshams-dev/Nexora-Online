@@ -25,8 +25,12 @@ class MainActivity : FlutterActivity() {
                             return@setMethodCallHandler
                         }
                         val uri = FileProvider.getUriForFile(this, "$packageName.nxupdate", File(path))
-                        val i = Intent(Intent.ACTION_VIEW)
+                        // Use the package-installer action explicitly. ACTION_VIEW can
+                        // open a generic viewer and surface a misleading "package
+                        // appears incompatible" message on some Android versions.
+                        val i = Intent(Intent.ACTION_INSTALL_PACKAGE)
                             .setDataAndType(uri, "application/vnd.android.package-archive")
+                            .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
                         startActivity(i)
                         result.success("started")
