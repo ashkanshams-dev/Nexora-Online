@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../profile/profile_service.dart';
 import '../settings/app_settings.dart';
 import 'nx2_assets.dart';
+import '../../worlds/oracle_core/persona/oracle_tour.dart';
 
 /// NX2 colour tokens: deep cosmic violet, neon magenta/cyan, gold for legendary.
 class Nx2 {
@@ -735,7 +736,9 @@ class Nx2Dock extends StatelessWidget {
     Widget item(Nx2Tab t, IconData icon, String fa, String en) {
       final bool on = t == current;
       return Expanded(
-        child: _Pressable(
+        child: OracleTourTarget(
+          id: 'dock.${t.name}',
+          child: _Pressable(
           onTap: () => nx2GoTab(context, t, current),
           child: Semantics(
             selected: on,
@@ -767,12 +770,15 @@ class Nx2Dock extends StatelessWidget {
             ]),
           ),
         ),
+        ),
       );
     }
 
     const double center = 92;
     final bool gameOn = current == Nx2Tab.games;
-    return SizedBox(
+    return OracleTourTarget(
+      id: 'dock',
+      child: SizedBox(
       height: 74 + bottom + 22,
       child: Stack(clipBehavior: Clip.none, children: <Widget>[
         Positioned(
@@ -819,7 +825,9 @@ class Nx2Dock extends StatelessWidget {
           left: 0,
           right: 0,
           child: Center(
-            child: _Pressable(
+            child: OracleTourTarget(
+              id: 'dock.games',
+              child: _Pressable(
               onTap: () => nx2GoTab(context, Nx2Tab.games, current),
               child: Semantics(
                 button: true,
@@ -852,9 +860,11 @@ class Nx2Dock extends StatelessWidget {
                 ),
               ),
             ),
+            ),
           ),
         ),
       ]),
+    ),
     );
   }
 }

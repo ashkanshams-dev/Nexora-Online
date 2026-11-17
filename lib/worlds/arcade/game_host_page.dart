@@ -9,6 +9,8 @@ import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/game_registry.dart';
 import '../oracle_core/oracle_game_sheet.dart';
+import '../oracle_core/persona/oracle_persona.dart';
+import '../oracle_core/persona/oracle_persona_widgets.dart';
 
 /// Hosts any GameModule: exit button, pause-confirm, result screen, XP, rematch.
 class GameHostPage extends ConsumerStatefulWidget {
@@ -45,6 +47,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
   GameResult? _result;
   AwardOutcome? _award;
   bool _finished = false;
+  String? _oracleLine;
 
   void _onFinish(GameResult r) {
     if (_finished) return;
@@ -64,6 +67,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
       vsBot: widget.mode == GameMode.vsBot,
     );
     if (ref.read(settingsProvider).haptics) HapticFeedback.heavyImpact();
+    _oracleLine = OraclePersona.instance.resultReaction(outcome: outcome, myScore: r.score, oppScore: r.opponentScore);
     // Let the game's own final animation breathe before the overlay.
     Future<void>.delayed(const Duration(milliseconds: 900), () {
       if (!mounted) return;
@@ -80,6 +84,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
       _result = null;
       _award = null;
       _finished = false;
+      _oracleLine = null;
     });
   }
 
@@ -167,6 +172,13 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
               ),
             ),
           ),
+          if (_result == null)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 58,
+              left: 0,
+              right: 0,
+              child: OracleTutorialBanner(key: ValueKey<String>('tut_${widget.game.id}_$_round'), gameId: widget.game.id),
+            ),
           if (_result != null)
             Positioned.fill(child: _resultOverlay(context, _result!, _award)),
         ]),
@@ -232,6 +244,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: NxColors.textDim)),
               ),
+            if (_oracleLine != null) OracleResultLine(text: _oracleLine!),
             if (a != null) ...[
               const SizedBox(height: 14),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [

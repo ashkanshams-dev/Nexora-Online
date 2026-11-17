@@ -26,4 +26,12 @@ void main() {
     expect(r?.tag, 'redesign-57');
     expect(AppUpdater.pickBest(list, 57), isNull);
   });
+
+  test('full (non-prerelease) redesign releases count too; notes are cleaned', () {
+    final Map<String, dynamic> full = rel('redesign-70', '<p align="center"><img src="x"/></p>\n## ✨ Hi\n\n\n\n- one\n<sub>vc=70 · abc</sub>');
+    full['prerelease'] = false;
+    final AppRelease? r = AppUpdater.pickBest(<dynamic>[full, rel('redesign-65', 'vc=65')], 60);
+    expect(r?.vc, 70);
+    expect(r?.notes, '## ✨ Hi\n\n- one');
+  });
 }

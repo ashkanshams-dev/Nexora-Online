@@ -12,6 +12,8 @@ import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../games/game_registry.dart';
+import '../../oracle_core/persona/oracle_persona.dart';
+import '../../oracle_core/persona/oracle_persona_widgets.dart';
 
 /// Hosts one online match: opens the move link, builds the game in online mode,
 /// rebuilds + replays the log on reconnect/resync, reports the result and shows it.
@@ -39,6 +41,7 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
   int _generation = 0;
   bool _finished = false;
   GameResult? _result;
+  String? _oracleLine;
   String? _resultNoteFa;
   String? _resultNoteEn;
   bool _recorded = false;
@@ -155,6 +158,10 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
     }
     if (!_recorded) {
       _recorded = true;
+      _oracleLine = OraclePersona.instance.resultReaction(
+          outcome: switch (r.outcome) { GameOutcome.win => 'win', GameOutcome.loss => 'loss', GameOutcome.draw => 'draw' },
+          myScore: r.score,
+          oppScore: r.opponentScore);
       final GameInfo? g = gameById(widget.gameId);
       ref.read(profileProvider).recordOnlineGame(
             gameId: widget.gameId,
@@ -318,6 +325,13 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
                 top: MediaQuery.paddingOf(context).top + 10,
                 end: 10,
                 child: _presenceBar(l)),
+          if (_result == null)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 58,
+              left: 0,
+              right: 0,
+              child: OracleTutorialBanner(gameId: widget.gameId),
+            ),
           if (_result != null)
             Positioned.fill(child: _overlay(context, _result!)),
         ]),
@@ -391,6 +405,7 @@ class _OnlineMatchPageState extends ConsumerState<OnlineMatchPage>
               textAlign: TextAlign.center,
               style: const TextStyle(color: NxColors.iceWhite)),
         ],
+        if (_oracleLine != null) OracleResultLine(text: _oracleLine!),
         const SizedBox(height: 10),
         Text(
             '${context.tx('بازی آنلاین ثبت شد', 'Online match recorded')} · $reward 🪙',

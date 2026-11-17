@@ -9,7 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 /// In-app updater for THIS app only (Flutter redesign line).
 ///
-/// Reads releases of ashkanshams-dev/Nexora-Online and keeps only prerelease tags `redesign-<n>`
+/// Reads releases of ashkanshams-dev/Nexora-Online and keeps only tags `redesign-<n>` (prerelease or full release)
 /// whose notes carry `vc=<versionCode>`. The React Native app's "latest" release is never read.
 /// The current versionCode is injected by CI (`--dart-define=APP_VC=<run number>`, same value as
 /// `--build-number`).
@@ -49,7 +49,17 @@ class AppUpdater extends ChangeNotifier {
 
   static final RegExp _vcRe = RegExp(r'vc\s*=\s*(\d+)');
 
-  /// Picks the highest versionCode among this app's prereleases.
+  /// Release body → plain notes for the update banner (no HTML, images or the vc= marker line).
+  @visibleForTesting
+  static String cleanNotes(String body) => body
+      .split('\n')
+      .where((String l) => !l.contains('vc='))
+      .map((String l) => l.replaceAll(RegExp(r'<[^>]*>'), '').replaceAll(RegExp(r'!\[[^\]]*\]\([^)]*\)'), '').trimRight())
+      .join('\n')
+      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+      .trim();
+
+  /// Picks the highest versionCode among this app's `redesign-*` releases (prerelease or full release; drafts skipped).
   @visibleForTesting
   static AppRelease? pickBest(List<dynamic> releases, int current) {
     AppRelease? best;
@@ -72,7 +82,7 @@ class AppUpdater extends ChangeNotifier {
             vc: vc,
             tag: tag,
             apkUrl: '${apk['browser_download_url']}',
-            notes: body.split('\n').where((String l) => !l.contains('vc=')).join('\n').trim(),
+            notes: cleanNotes(body),
             size: (apk['size'] as num?)?.toInt() ?? 0);
       }
     }

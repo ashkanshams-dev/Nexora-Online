@@ -5,6 +5,8 @@ import '../../core/backend/backend_gateway.dart';
 import '../../core/backend/supabase_backend.dart';
 import '../../core/ui2/oracle_mascot.dart';
 import '../../games/game_registry.dart';
+import 'persona/oracle_persona.dart';
+import 'persona/oracle_persona_store.dart';
 
 /// In-game ORACLE: rules, a hint, coaching and free questions about the current game (nx-oracle, mode=game).
 /// Offline / no session → the game's bundled rules text.
@@ -51,6 +53,7 @@ class _OracleGameSheetState extends ConsumerState<OracleGameSheet> {
             'game': widget.game.id,
             'lang': _fa ? 'fa' : 'en',
             if (widget.state != null) 'state': widget.state,
+            'persona': OraclePersona.instance.aiContext(q),
           },
         });
         final Object? m = r?['message'];
@@ -67,6 +70,21 @@ class _OracleGameSheetState extends ConsumerState<OracleGameSheet> {
     setState(() {
       _msgs.add(<String, String>{'role': 'assistant', 'content': answer!});
       _busy = false;
+    });
+  }
+
+  /// Replays ORACLE's funny tutorials for this game (local, always accurate to the real controls).
+  void _tutorials() {
+    final List<OracleTutorial> all = OraclePersona.instance.tutorials(widget.game.id);
+    setState(() {
+      if (all.isEmpty) {
+        _msgs.add(<String, String>{'role': 'assistant', 'content': widget.game.rulesFa});
+        return;
+      }
+      for (final OracleTutorial t in all) {
+        _msgs.add(<String, String>{'role': 'assistant', 'content': '${t.title}\n${t.line}\n${t.how}'});
+        OraclePersonaStore.markTutorial(t);
+      }
     });
   }
 
@@ -115,6 +133,16 @@ class _OracleGameSheetState extends ConsumerState<OracleGameSheet> {
           SizedBox(
             height: 44,
             child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: <Widget>[
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: ActionChip(
+                  label: Text(_fa ? 'آموزش ORACLE 😂' : 'ORACLE tutorial'),
+                  onPressed: _busy ? null : _tutorials,
+                  backgroundColor: const Color(0xFF3A1F63),
+                  labelStyle: const TextStyle(color: Color(0xFFFFD27A)),
+                  side: const BorderSide(color: Color(0x66FFC857)),
+                ),
+              ),
               for (final (String l, String q) in quick)
                 Padding(
                   padding: const EdgeInsetsDirectional.only(end: 8),

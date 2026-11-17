@@ -7,6 +7,8 @@ import '../../core/settings/app_settings.dart';
 import '../../core/storage/local_store.dart';
 import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
+import '../../core/online/online_service.dart';
+import '../oracle_core/persona/oracle_tour.dart';
 import 'account_page.dart';
 
 /// Settings (STEP_12, P13, P16, P27, P28).
@@ -117,6 +119,19 @@ class SettingsPage extends ConsumerWidget {
                 onChanged: s.oracleBuddy ? (v) => s.oracleTalk = v : null,
                 title: Text(context.tx('حرف زدن اوراکل', 'ORACLE speech bubbles')),
               ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.tour_rounded, color: Color(0xFF8FF3FF)),
+                title: Text(context.tx('دیدن دوباره‌ی تور اوراکل', 'Replay ORACLE tour')),
+                subtitle: Text(context.tx('راهنمای قدم‌به‌قدم هر بخش دوباره نشان داده می‌شود',
+                    'Every section shows its step-by-step guide again')),
+                onTap: () async {
+                  final client = ref.read(onlineProvider).client;
+                  await OracleTourStore.reset(client?.auth.currentUser?.id, client: client);
+                  OracleTourStore.replayTick.value++;
+                },
+              ),
+              const _OracleAdminTile(),
             ]),
           ),
           _section(context, context.tx('زبان', 'Language')),
@@ -210,4 +225,39 @@ class SettingsPage extends ConsumerWidget {
                 letterSpacing: 0.5)),
       );
 
+}
+
+
+/// Shown only to the owner / admins with the 'oracle' permission (checked server-side by nx_has_perm).
+class _OracleAdminTile extends ConsumerStatefulWidget {
+  const _OracleAdminTile();
+
+  @override
+  ConsumerState<_OracleAdminTile> createState() => _OracleAdminTileState();
+}
+
+class _OracleAdminTileState extends ConsumerState<_OracleAdminTile> {
+  bool _allowed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final client = ref.read(onlineProvider).client;
+    if (client?.auth.currentUser != null) {
+      client!.rpc('nx_has_perm', params: <String, dynamic>{'p': 'oracle'}).then((Object? v) {
+        if (mounted && v == true) setState(() => _allowed = true);
+      }).catchError((Object _) {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_allowed) return const SizedBox.shrink();
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.psychology_alt_rounded, color: Color(0xFFFFC857)),
+      title: Text(context.tx('تنظیمات شخصیت اوراکل (مدیر)', 'ORACLE personality config (admin)')),
+      onTap: () => context.push('/admin/oracle'),
+    );
+  }
 }

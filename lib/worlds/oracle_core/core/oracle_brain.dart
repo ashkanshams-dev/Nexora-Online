@@ -8,6 +8,7 @@ library;
 import 'oracle_knowledge.dart';
 import 'oracle_models.dart';
 import 'oracle_text.dart';
+import '../persona/oracle_persona.dart';
 
 export 'oracle_knowledge.dart';
 export 'oracle_models.dart';
@@ -183,7 +184,36 @@ class OracleBrain {
     return best;
   }
 
+  /// Personality layer (players, "{jan}" replies, wake calls) around the intent engine.
   OracleReply respond(String input, OracleContext ctx) {
+    final OraclePersona p = OraclePersona.instance;
+    if (ctx.username.isNotEmpty) p.displayName = ctx.username;
+    final String? wake = p.wakeReply(input);
+    if (wake != null) return OracleReply(textFa: wake, textEn: wake, pose: 'happy', intent: 'persona.wake');
+    final String? who = p.playerReply(input);
+    if (who != null) return OracleReply(textFa: who, textEn: who, pose: 'cheer', intent: 'persona.player');
+    final OracleReply r = _respondCore(input, ctx);
+    final String? jan = p.janReply(input);
+    if (r.intent == 'fallback') {
+      final String? unknown = p.unknownPlayerReply(input);
+      if (unknown != null) return OracleReply(textFa: unknown, textEn: unknown, pose: 'confused', intent: 'persona.unknown_player');
+      if (jan != null) return OracleReply(textFa: jan, textEn: jan, pose: 'happy', intent: 'persona.jan');
+      return r;
+    }
+    if (jan == null) return r;
+    return OracleReply(
+      textFa: '$jan\n${r.textFa}',
+      textEn: r.textEn,
+      actions: r.actions,
+      pose: r.pose,
+      intent: r.intent,
+      autoRun: r.autoRun,
+      followUpsFa: r.followUpsFa,
+      followUpsEn: r.followUpsEn,
+    );
+  }
+
+  OracleReply _respondCore(String input, OracleContext ctx) {
     final String t = normalizeOracleText(input);
     if (t.isEmpty) {
       return const OracleReply(
@@ -959,6 +989,7 @@ class RemoteOracleEngine implements OracleEngine {
       'coins': c.coins,
       'played': c.totalPlayed,
       'won': c.totalWon,
+      'persona': OraclePersona.instance.aiContext(input),
       ...appContext,
     };
     for (int round = 0; round < 2; round++) {

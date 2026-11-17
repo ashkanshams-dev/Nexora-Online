@@ -11,6 +11,11 @@ import '../backend/backend_gateway.dart';
 import '../backend/supabase_backend.dart';
 import '../settings/app_settings.dart';
 import '../storage/local_store.dart';
+import '../../worlds/oracle_core/persona/oracle_persona.dart';
+import '../../worlds/oracle_core/persona/oracle_persona_store.dart';
+import '../../worlds/oracle_core/persona/oracle_tour.dart';
+import '../online/online_service.dart';
+import '../profile/profile_service.dart';
 import 'oracle_lines.dart';
 
 /// App-wide events the corner ORACLE reacts to (wins, losses, purchases…).
@@ -71,6 +76,11 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
   DateTime _lastAct = DateTime.now();
   int _aiCounter = 0;
   bool _aiBusy = false;
+  // guided tour
+  String? _tourSection;
+  List<OracleTourStep> _tourSteps = const <OracleTourStep>[];
+  String _lastPath = '';
+  Timer? _tourTimer;
 
   bool get _fa => Localizations.maybeLocaleOf(context)?.languageCode != 'en';
 
@@ -85,20 +95,71 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
     _minimized = LocalStore.instance.getBool(_kMin) ?? false;
     _events = OracleBus.stream.listen(_onEvent);
     _tick = Timer.periodic(const Duration(seconds: 7), (_) => _onTick());
+    OraclePersonaStore.loadCached();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final int h = DateTime.now().hour;
-      _say(h >= 5 && h < 12
-          ? OracleTopic.greetMorning
-          : (h >= 23 || h < 5)
-              ? OracleTopic.greetNight
-              : OracleTopic.returnBack,
-          BuddyMood.wave);
+      final OnlineService o = ref.read(onlineProvider);
+      unawaited(OraclePersonaStore.refresh(o.client));
+      unawaited(OracleTourStore.pullCloud(o.client, o.client?.auth.currentUser?.id));
+      _loginGreeting();
+      _onRoute();
     });
+    widget.router?.routerDelegate.addListener(_onRoute);
+    OracleTourStore.replayTick.addListener(_onReplay);
+  }
+
+  String get _path {
+    try {
+      return widget.router?.routerDelegate.currentConfiguration.uri.path ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String? get _uid => ref.read(onlineProvider).client?.auth.currentUser?.id;
+
+  void _onRoute() {
+    final String p = _path;
+    if (p == _lastPath) return;
+    _lastPath = p;
+    _tourTimer?.cancel();
+    if (_tourSection != null && mounted) setState(() => _tourSection = null);
+    _tourTimer = Timer(const Duration(milliseconds: 1100), () => _maybeTour(p));
+  }
+
+  void _onReplay() {
+    _lastPath = '';
+    _onRoute();
+  }
+
+  void _maybeTour(String path, {String? section}) {
+    if (!mounted || MusicService.instance.inGame || path != _path) return;
+    final String? sec = section ?? OraclePersonaTour.sectionForPath(path);
+    if (sec == null || OracleTourStore.seen(_uid).contains(sec)) return;
+    final List<OracleTourStep> steps = OraclePersona.instance.tourSteps(sec);
+    if (steps.isEmpty) return;
+    setState(() {
+      _tourSection = sec;
+      _tourSteps = steps;
+      _bubble = null;
+    });
+  }
+
+  void _tourDone() {
+    final String? sec = _tourSection;
+    if (sec == null) return;
+    unawaited(OracleTourStore.markSeen(_uid, sec, client: ref.read(onlineProvider).client));
+    setState(() => _tourSection = null);
+    if (sec == 'home') {
+      Future<void>.delayed(const Duration(milliseconds: 350), () => _maybeTour(_path, section: 'dock'));
+    }
   }
 
   @override
   void dispose() {
+    widget.router?.routerDelegate.removeListener(_onRoute);
+    OracleTourStore.replayTick.removeListener(_onReplay);
+    _tourTimer?.cancel();
     _tick?.cancel();
     _bubbleTimer?.cancel();
     _moodTimer?.cancel();
@@ -157,7 +218,7 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
   }
 
   void _onTick() {
-    if (!mounted || _hiddenNow || _minimized) return;
+    if (!mounted || _hiddenNow || _minimized || _tourSection != null) return;
     final Duration idle = DateTime.now().difference(OracleBus.lastTouch);
     if (_needsApology) {
       if (_rng.nextInt(5) == 0) _show(OracleLines.pick(OracleTopic.sulk).of(_fa));
@@ -172,7 +233,7 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
       return;
     }
     if (idle > const Duration(seconds: 40) && _rng.nextInt(3) == 0) {
-      _say(OracleTopic.idle, BuddyMood.confused);
+      if (!_persona('idle', BuddyMood.confused)) _say(OracleTopic.idle, BuddyMood.confused);
       return;
     }
     // A random antic roughly every 35-60 s.
@@ -191,6 +252,9 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
       _say(OracleTopic.confused, BuddyMood.confused);
     } else if (r < 54) {
       _say(OracleTopic.shocked, BuddyMood.shocked, hold: const Duration(seconds: 3));
+    } else if (r < 78) {
+      const List<String> ctxs = <String>['enter', 'waiting', 'funny', 'tease', 'unexpected'];
+      if (!_persona(ctxs[_rng.nextInt(ctxs.length)], _rng.nextBool() ? BuddyMood.talk : BuddyMood.wink)) _tease();
     } else {
       _tease();
     }
@@ -213,7 +277,7 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
                     : 'Write one very short (max 14 words) witty, playful, kind teasing line for the player, with one emoji. Only the line.',
               }
             ],
-            'ctx': <String, dynamic>{'mode': 'chat', 'lang': _fa ? 'fa' : 'en'},
+            'ctx': <String, dynamic>{'mode': 'chat', 'lang': _fa ? 'fa' : 'en', 'persona': OraclePersona.instance.aiContext('')},
           });
           final Object? m = r?['message'];
           final String line = m is Map ? '${m['content'] ?? ''}'.trim() : '';
@@ -230,6 +294,37 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
       }
     }
     if (mounted) _say(OracleTopic.tease, _rng.nextBool() ? BuddyMood.talk : BuddyMood.wink, hold: const Duration(seconds: 6));
+  }
+
+  /// Random login greeting with the real display name (sometimes silent; the "Original" mix-up joke always admits it).
+  Future<void> _loginGreeting() async {
+    final String name = ref.read(profileProvider).username;
+    final List<String> lines = OraclePersona.instance.loginGreeting(name);
+    if (lines.isEmpty) {
+      final int h = DateTime.now().hour;
+      if (_rng.nextBool()) {
+        _say(h >= 5 && h < 12 ? OracleTopic.greetMorning : (h >= 23 || h < 5) ? OracleTopic.greetNight : OracleTopic.returnBack,
+            BuddyMood.wave);
+      }
+      return;
+    }
+    for (int i = 0; i < lines.length; i++) {
+      if (!mounted || _hiddenNow) return;
+      _setMood(i == 0 ? BuddyMood.excited : i == lines.length - 1 ? BuddyMood.laugh : BuddyMood.shocked,
+          hold: const Duration(milliseconds: 3600));
+      _show(lines[i], d: const Duration(milliseconds: 3600));
+      _lastAct = DateTime.now();
+      await Future<void>.delayed(const Duration(milliseconds: 3300));
+    }
+  }
+
+  /// A persona line for [context] (cooldowns + no-repeat inside the persona engine). Returns false when silent.
+  bool _persona(String context, BuddyMood m) {
+    final String? l = OraclePersona.instance.spontaneous(context);
+    if (l == null) return false;
+    _setMood(m, hold: const Duration(seconds: 5));
+    _show(l);
+    return true;
   }
 
   void _goSulk() {
@@ -274,7 +369,11 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
     return ValueListenableBuilder<bool>(
       valueListenable: MusicService.instance.inGameListenable,
       builder: (BuildContext context, bool inGame, _) {
-        if (inGame || !s.oracleBuddy) return const SizedBox.shrink();
+        if (inGame) return const SizedBox.shrink();
+        if (_tourSection != null) {
+          return OracleTourOverlay(key: ValueKey<String>(_tourSection!), steps: _tourSteps, onDone: _tourDone);
+        }
+        if (!s.oracleBuddy) return const SizedBox.shrink();
         final Size sz = MediaQuery.sizeOf(context);
         final EdgeInsets pad = MediaQuery.paddingOf(context);
         final double w = _minimized ? 46 : 86;

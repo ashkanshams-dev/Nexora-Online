@@ -101,3 +101,22 @@ No extra server: everything runs in the existing Supabase project (Postgres RPCs
 - Verified live against the project with guest accounts (SE/DE/two legs/RR/groups/swiss/custom paths, byes, golden-goal cap,
   codes + rate limit, approvals, waitlist, refunds, cancel, payout maths, disputes, admin correction, forfeits, cron-driven run,
   RLS from the REST API). Pure-Dart mirror + tests: `test/features/tournaments/bracket_test.dart`.
+
+## ORACLE personality (redesign, 2026-11-17) — `lib/worlds/oracle_core/persona/`
+- `oracle_persona_data.dart`: default JSON config (39 players + aliases, verbatim lines, login greetings, spontaneous lines,
+  result reactions, funny tutorials per game mechanic, guided-tour texts, `{jan}` replies, frequencies/cooldowns, category switches).
+  `{jan}` renders the stretched signature «جاااااااااان» (8–13 ا, 10 by default); any short signature «جان» in admin text is upgraded.
+- `oracle_persona.dart` (pure Dart): name NLU (normalisation, ZWNJ, ی/ي ک/ك, letter squeeze, Persian suffixes, Latin aliases,
+  Levenshtein for long names, ambiguity for shared first names), cooldown manager, no-repeat shuffle bag, login greetings
+  (never claims another player logged in), spontaneous lines, reactions from real results, tutorials, tour steps, AI context.
+- Wired into: offline brain (`respond` → players / wake / jan replies / unknown names), corner buddy (login greeting,
+  spontaneous lines, guided tour overlay on route changes), game result screens (offline + online), tutorial banner at game start,
+  in-game ORACLE sheet ("آموزش ORACLE" replay + persona context), `nx-oracle` (persona rules + verified profiles from the server config).
+- Guided tour: `oracle_tour.dart` — spotlight coach marks (`OracleTourTarget` on dock items), once per section per account
+  (LocalStore + `nx_profiles.tour_seen` via `nx_tour_seen_set`), replay from Settings.
+- Server: `supabase/migrations/20261117200000_nx_oracle_persona.sql` (applied live): `nx_oracle_persona` (public read, seeded with
+  the defaults), `nx_oracle_persona_save` (owner or `oracle` permission via `nx_has_perm`, audited in `nx_owner_audit`),
+  `nx_admin_perms` (per-permission admins, used by the admin panel milestone), `nx_tour_seen_set`.
+- Admin editor: Settings → «تنظیمات شخصیت اوراکل (مدیر)» (`/admin/oracle`, JSON editor; visible only when `nx_has_perm('oracle')`).
+- Tests: `test/worlds/oracle_persona_test.dart` (names incl. typos/Latin, Pedro/Denny/Mahyar separation, verbatim lines,
+  stretched signature everywhere, cooldowns, no-repeat, reactions, greetings, tutorials, tour, brain integration).

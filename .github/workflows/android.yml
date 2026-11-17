@@ -265,19 +265,35 @@ jobs:
           path: out/*
           retention-days: 30
 
+      # A push whose commit message contains [release] publishes a full release (not a prerelease) with
+      # docs/RELEASE_NOTES.md as its body; every other push publishes a prerelease. Never "latest" (RN app updater).
+      - name: Release body
+        if: env.PUBLISH == 'true'
+        env:
+          FULL: ${{ contains(github.event.head_commit.message, '[release]') }}
+        run: |
+          if [ "$FULL" = "true" ] && [ -f docs/RELEASE_NOTES.md ]; then
+            cp docs/RELEASE_NOTES.md out/body.md
+            echo "PRERELEASE=false" >> $GITHUB_ENV
+            echo "RELEASE_NAME=NEXORA Redesign · build ${{ github.run_number }} · ORACLE" >> $GITHUB_ENV
+          else
+            printf '%s\n' "NEXORA redesign (Flutter) build #${{ github.run_number }} from ${{ github.sha }}." \
+              "Install NEXORA-redesign-arm64-v8a.apk on most phones (armeabi-v7a for older 32-bit phones), or the universal APK." \
+              "Signed with the CI install key (not a Play Store upload key)." > out/body.md
+            echo "PRERELEASE=true" >> $GITHUB_ENV
+            echo "RELEASE_NAME=NEXORA ${{ env.RELEASE_TAG }} (build ${{ github.run_number }})" >> $GITHUB_ENV
+          fi
+          printf '\n<sub>vc=%s · %s</sub>\n' "${{ github.run_number }}" "${{ github.sha }}" >> out/body.md
+
       - name: Publish release
         if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: NEXORA ${{ env.RELEASE_TAG }} (build ${{ github.run_number }})
+          name: ${{ env.RELEASE_NAME }}
           target_commitish: ${{ github.sha }}
-          body: |
-            NEXORA redesign (Flutter) build #${{ github.run_number }} from ${{ github.sha }}.
-            vc=${{ github.run_number }}
-            Install NEXORA-redesign-arm64-v8a.apk on most phones (armeabi-v7a for older 32-bit phones), or the universal APK.
-            Signed with the CI install key (not a Play Store upload key).
-          prerelease: true
+          body_path: out/body.md
+          prerelease: ${{ env.PRERELEASE }}
           make_latest: false
           files: |
             out/*.apk

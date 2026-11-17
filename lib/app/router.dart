@@ -20,6 +20,7 @@ import '../worlds/nexora_exchange/exchange_page.dart';
 import '../worlds/nova_gallery/nova_gallery_page.dart';
 import '../worlds/onboarding/onboarding_page.dart';
 import '../worlds/oracle_core/oracle_core_page.dart';
+import '../worlds/oracle_core/persona/oracle_config_page.dart';
 import '../worlds/orbit_network/orbit_network_page.dart';
 import '../worlds/orbit_network/ui/orbit_call_page.dart';
 import '../worlds/personal_orbit/personal_orbit_page.dart';
@@ -69,6 +70,7 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(path: '/social', pageBuilder: (context, state) => _warp(state, const SocialHubPage())),
       GoRoute(path: '/rewards', pageBuilder: (context, state) => _warp(state, const RewardsPage())),
       GoRoute(path: '/settings', builder: (context, state) => const SettingsPage()),
+      GoRoute(path: '/admin/oracle', builder: (context, state) => const OracleConfigPage()),
       GoRoute(path: '/account', builder: (context, state) => const AccountPage()),
       GoRoute(
         path: '/oracle',

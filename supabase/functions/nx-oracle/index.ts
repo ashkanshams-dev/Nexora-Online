@@ -49,13 +49,62 @@ const GAME_RULES: Record<string, string> = {
   carrom: "Carrom: strike the striker to pocket your coins; the queen must be covered.",
 };
 
-function systemPrompt(ctx: Record<string, unknown>, name: string): string {
+// ---------------------------------------------------------------- persona (admin config in nx_oracle_persona)
+const JAN = "جاااااااااان";
+function norm(s: string): string {
+  return s
+    .replace(/[يىئ]/g, "ی").replace(/ك/g, "ک").replace(/[ةۀ]/g, "ه").replace(/[أإآٱ]/g, "ا").replace(/ؤ/g, "و")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[\u200C\u200D\u200B\u200E\u200F\u00A0]/g, " ")
+    .replace(/[.,!?;:()\[\]{}«»،؛؟"'`~\-_/\\|@#$%^&*+=<>…]/g, " ")
+    .toLowerCase().replace(/(.)\1{2,}/g, "$1").replace(/\s+/g, "").trim();
+}
+type Player = { id: string; name: string; aliases?: string[]; lines?: string[]; traits?: string; disabled?: boolean };
+let personaCache: { at: number; data: any } | null = null;
+async function loadPersona(admin: any): Promise<any> {
+  if (personaCache && Date.now() - personaCache.at < 120e3) return personaCache.data;
+  const { data } = await admin.from("nx_oracle_persona").select("data").eq("id", 1).maybeSingle();
+  personaCache = { at: Date.now(), data: data?.data ?? {} };
+  return personaCache.data;
+}
+function personaBlock(cfg: any, lastUser: string, ctx: Record<string, unknown>): string {
+  const players: Player[] = Array.isArray(cfg?.players) ? cfg.players : [];
+  const text = norm(lastUser);
+  const hinted = new Set<string>(
+    Array.isArray((ctx.persona as any)?.players) ? (ctx.persona as any).players.map((p: any) => String(p?.id ?? "")) : [],
+  );
+  const matched: Player[] = [];
+  for (const p of players) {
+    if (p.disabled || !p.name) continue;
+    const keys = [p.name, ...(p.aliases ?? [])].map(norm).filter((k) => k.length >= 2);
+    if (hinted.has(p.id) || keys.some((k) => text.includes(k))) matched.push(p);
+  }
+  // Client hints may only select players that exist in the server config (their lines come from the server, never the client).
+  const known = players.filter((p) => !p.disabled && p.name).map((p) => p.name).join("، ");
+  let s =
+    ` PERSONALITY: you are cute, funny, playful, a bit sarcastic and sometimes unpredictable, never a plain chatbot; ` +
+    `natural colloquial Persian. Your signature catchphrase is ALWAYS the stretched "${JAN}!" (never the short "جان!"); ` +
+    `you may stretch it a little more or less, but use it only occasionally (not in every reply, never at the start of every sentence). ` +
+    `Tease kindly, only about verified facts (real results/stats given to you). Never invent facts about people. ` +
+    `Never claim that another player is online or logged in. ` +
+    (known ? `Players you know by name: ${known}. For any other name say honestly that you don't know them well yet. ` : "");
+  if (matched.length) {
+    s += `Verified profiles of players mentioned now (use these lines, you may quote them verbatim, do not add new facts): ` +
+      JSON.stringify(matched.slice(0, 4).map((p) => ({ name: p.name, lines: (p.lines ?? []).slice(0, 4), traits: p.traits ?? "" })))
+        .replace(/\{jan\}/g, JAN) + ". ";
+  }
+  const sess = (ctx.persona as any)?.session;
+  if (sess && typeof sess === "object") s += `This session: ${JSON.stringify(sess).slice(0, 200)}. `;
+  return s;
+}
+
+function systemPrompt(ctx: Record<string, unknown>, name: string, persona = ""): string {
   const lang = String(ctx.lang ?? "fa");
   const base =
     `You are ORACLE, the friendly holographic robot guide of NEXORA, a cosmic gaming + social app. ` +
     `Speak ${lang === "fa" ? "Persian (Farsi) unless the user writes in another language" : "the user's language"}. ` +
     `Be warm, concise (max ~120 words unless asked for more), playful but accurate. You can chat about any topic. ` +
-    `Never ask for passwords or payment details. The player's name is ${name}.`;
+    `Never ask for passwords or payment details. The player's name is ${name}.` + persona;
   if (ctx.mode === "game") {
     const g = String(ctx.game ?? "");
     return base +
@@ -93,7 +142,11 @@ Deno.serve(async (req) => {
   if (!qerr && typeof count === "number" && count > DAILY_LIMIT) return json({ error: "daily_limit" }, 429);
 
   const { data: prof } = await admin.from("profiles").select("username").eq("id", u.user.id).maybeSingle();
-  const sys = systemPrompt(ctx, prof?.username ?? "Pilot");
+  const lastUser = [...msgs].reverse().find((m: any) => m.role === "user")?.content ?? "";
+  let persona = "";
+  try { persona = personaBlock(await loadPersona(admin), lastUser, ctx); } catch { /* defaults below */ }
+  if (!persona) persona = personaBlock({}, lastUser, ctx);
+  const sys = systemPrompt(ctx, prof?.username ?? "Pilot", persona);
   const { data: keys, error: kerr } = await admin.rpc("nx_ai_keys");
   if (kerr || !Array.isArray(keys) || !keys.length) return json({ error: "oracle_not_configured" }, 503);
 
