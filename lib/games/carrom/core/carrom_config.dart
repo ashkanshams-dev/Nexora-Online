@@ -47,7 +47,8 @@ class CrConfig {
   static const int coinsPerSide = 9;
   static const int queenBonus = 3;
   static const int maxTurns = 160;
-  static const double turnSeconds = 30;
+  /// Must match the server-authoritative online turn deadline.
+  static const double turnSeconds = 10;
 
   /// UI only (not part of the deterministic contract).
   static const double maxPull = 210;

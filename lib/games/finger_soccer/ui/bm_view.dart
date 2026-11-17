@@ -21,7 +21,7 @@ const String _a = 'assets/games/bermuda/';
 
 /// Online match settings (config.js MATCH_SECONDS / TURN_SECONDS).
 const int kBmMatchSeconds = 300;
-const double kBmOnlineTurnSeconds = 15;
+const double kBmOnlineTurnSeconds = 10;
 
 class BermudaView extends StatefulWidget {
   const BermudaView({super.key, required this.launch, this.autoStart = false});
@@ -237,8 +237,9 @@ class _BermudaViewState extends State<BermudaView>
           'a': 'shot',
           'cid': data['cid'],
           'vx': data['vx'],
-          'vy': data['vy']
-        });
+          'vy': data['vy'],
+          'power': data['power'],
+        }, kind: 'move');
         break;
       case 'settled':
         net?.send(<String, dynamic>{
@@ -255,7 +256,7 @@ class _BermudaViewState extends State<BermudaView>
         });
         break;
       case 'timeout':
-        net?.send(<String, dynamic>{'a': 'timeout', 'seat': data['team']});
+        net?.send(<String, dynamic>{'a': 'timeout', 'seat': data['team']}, kind: 'timeout');
         break;
       case 'turn':
         if (net != null) net.turnSeat = data['turn'] as int;

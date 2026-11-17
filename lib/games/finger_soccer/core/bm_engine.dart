@@ -100,10 +100,12 @@ class BmTrailPt {
 }
 
 class BmBody {
-  BmBody(this.x, this.y, this.team, this.r, this.m) : im = 1 / m;
+  BmBody(this.x, this.y, this.team, this.r, this.m, {this.power = 0}) : im = 1 / m;
   double x, y, vx = 0, vy = 0;
   final double r, m, im;
   final int team;
+  /// Per-piece strike rating. 0 is reserved for the ball; player pieces are 1..10.
+  int power;
   double spin = 0, ang = 0, sq = 0, boost = 0;
   final List<double> R = <double>[1, 0, 0, 0, 1, 0, 0, 0, 1];
   int rv = 0;
@@ -253,7 +255,8 @@ class BmEngine {
     GOALS = <BmGoal>[BmGoal(0, Ft, CX - f.g, CX + f.g, -1), BmGoal(1, Fb, CX - f.g, CX + f.g, 1)];
   }
 
-  BmBody mk(double x, double y, int team, double r, double m) => BmBody(x, y, team, r, m);
+  BmBody mk(double x, double y, int team, double r, double m) =>
+      BmBody(x, y, team, r, m, power: team == 2 ? 0 : 1 + rnd.nextInt(10));
 
   void reset(int k) {
     bodies = <BmBody>[];
@@ -719,10 +722,15 @@ class BmEngine {
   }
 
   void fire(BmBody b, double dx, double dy, double l) {
-    final double p = _mn(l, LMAX) / LMAX, v = (260 + 1085 * math.pow(p, .8).toDouble()) * K * 1.32, vx = dx / l * v, vy = dy / l * v;
+    final double p = _mn(l, LMAX) / LMAX;
+    // Rating is physical: 1 => 0.65x impulse, 5 => 1.05x, 10 => 1.55x.
+    // It is applied before launch, not merely displayed in the UI.
+    final double strike = .55 + b.power * .1;
+    final double v = (260 + 1085 * math.pow(p, .8).toDouble()) * K * 1.32 * strike;
+    final double vx = dx / l * v, vy = dy / l * v;
     launch(b, vx, vy, false);
     final int sg = mirror ? -1 : 1;
-    hooks.emit('shot', <String, dynamic>{'cid': b.cid, 'vx': vx * sg, 'vy': vy * sg, 'team': ct(b.team)});
+    hooks.emit('shot', <String, dynamic>{'cid': b.cid, 'vx': vx * sg, 'vy': vy * sg, 'team': ct(b.team), 'power': b.power});
   }
 
   void finishTurn(bool emitSnap) {
@@ -782,6 +790,8 @@ class BmEngine {
       if (o.cid == cid) b = o;
     }
     if (b == null) return;
+    final int? power = (m['power'] as num?)?.toInt();
+    if (power != null && power >= 1 && power <= 10) b.power = power;
     final int sg = mirror ? -1 : 1;
     launch(b, (m['vx'] as num).toDouble() * sg, (m['vy'] as num).toDouble() * sg, true);
   }
@@ -831,12 +841,8 @@ class BmEngine {
       tleft -= dt;
       if (tleft <= 0) {
         if (mode == 'online') {
-          if (turn == 0) {
-            hooks.emit('timeout', <String, dynamic>{'team': ct(0)});
-            skipTurn();
-          } else if (tleft < -4) {
-            skipTurn();
-          }
+          hooks.emit('timeout', <String, dynamic>{'team': ct(turn)});
+          skipTurn();
         } else {
           skipTurn();
         }

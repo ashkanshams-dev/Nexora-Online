@@ -320,7 +320,7 @@ class CrController extends ChangeNotifier {
 
   final ValueNotifier<CrHudData> hud = ValueNotifier<CrHudData>(const CrHudData(
     turn: 0,
-    timeLeft: 30,
+    timeLeft: 10,
     pocketed0: 0,
     pocketed1: 0,
     queenCoveredBy: -1,
@@ -516,9 +516,9 @@ class CrController extends ChangeNotifier {
       timeLeft -= dt;
       final NetLink net = launch.net!;
       if (match.turn == mySeat && timeLeft <= 0) {
-        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber});
+        net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber}, kind: 'timeout');
         _doPass();
-      } else if (match.turn != mySeat && timeLeft <= -8 && net.isAuthority) {
+      } else if (match.turn != mySeat && timeLeft <= 0 && net.isAuthority) {
         net.send(<String, dynamic>{'a': 'pass', 'tn': match.turnNumber},
             kind: 'timeout', asSeat: match.turn);
         _doPass();
