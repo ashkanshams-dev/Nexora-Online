@@ -45,7 +45,7 @@ void main() {
     expect(BR, 28.8);
     expect(STEP, 1 / 240);
     expect(kBmFields.length, 30);
-    final BmFieldS f = kBmFields[0]; // forest
+    final BmFieldS f = kBmFields.firstWhere((BmFieldS x) => x.id == 'forest');
     expect(f.W, (1086 * FS).roundToDouble());
     expect(f.L, (195 * FS).roundToDouble());
     expect(f.g, 169);
