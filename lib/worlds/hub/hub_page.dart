@@ -350,7 +350,7 @@ class _MenuGrid extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Nx2Panel(
         gems: true,
-        padding: const EdgeInsets.fromLTRB(6, 14, 6, 10),
+        padding: const EdgeInsets.fromLTRB(8, 15, 8, 12),
         child: Column(children: <Widget>[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -362,20 +362,21 @@ class _MenuGrid extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           LayoutBuilder(builder: (BuildContext context, BoxConstraints c) {
-            final double cell = c.maxWidth / 4;
+            final double cell = (c.maxWidth - 16) / 4;
             return Wrap(
+              spacing: 0,
               children: <Widget>[
                 for (final _MenuItem it in items)
                   SizedBox(
                     width: cell,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                       child: Nx2Tile(
                         asset: it.asset,
                         label: context.tx(it.fa, it.en),
                         onTap: it.onTap,
                         badge: it.badge,
-                        size: (cell - 12).clamp(56.0, 84.0),
+                        size: (cell - 8).clamp(56.0, 78.0),
                       ),
                     ),
                   ),

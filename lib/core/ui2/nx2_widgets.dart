@@ -724,8 +724,8 @@ void nx2GoTab(BuildContext context, Nx2Tab tab, Nx2Tab? current) {
   }
 }
 
-/// Bottom dock: CHAT+MEDIA, ORACLE | big raised GAME button | SHOP, TOURNAMENTS, REWARDS & PACKS.
-/// The GAME button sits in the exact centre; each side shares its half of the bar.
+/// Bottom dock: three balanced destinations on each side of the raised GAME action.
+/// Keeping six equal cells prevents long labels from colliding on narrow phones.
 class Nx2Dock extends StatelessWidget {
   const Nx2Dock({super.key, required this.current});
   final Nx2Tab? current;
@@ -779,20 +779,20 @@ class Nx2Dock extends StatelessWidget {
       );
     }
 
-    // Keep the centre action prominent without stealing the width needed by
-    // the five surrounding destinations on narrow phones.
-    const double center = 78;
+    // The centre action is raised, but its footprint is bounded so it cannot
+    // push the surrounding destinations into each other.
+    const double center = 70;
     final bool gameOn = current == Nx2Tab.games;
     return OracleTourTarget(
       id: 'dock',
       child: SizedBox(
-      height: 68 + bottom + 18,
+      height: 78 + bottom + 18,
       child: Stack(clipBehavior: Clip.none, children: <Widget>[
         Positioned(
           left: 6,
           right: 6,
           bottom: bottom + 4,
-          height: 68,
+          height: 76,
           child: Stack(fit: StackFit.expand, children: <Widget>[
             Image.asset(Nx2Assets.framesDock,
                 fit: BoxFit.fill, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
@@ -806,20 +806,21 @@ class Nx2Dock extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: <Color>[Color(0xE02A1468), Color(0xF00C0529)])),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
                 child: Row(children: <Widget>[
                   Expanded(
                     child: Row(children: <Widget>[
                       item(Nx2Tab.social, Icons.perm_media_rounded, 'چت و رسانه', 'Chat+Media'),
                       item(Nx2Tab.oracle, Icons.auto_awesome_rounded, 'اوراکل', 'ORACLE'),
+                      item(Nx2Tab.tournaments, Icons.emoji_events_rounded, 'تورنمنت', 'Tournaments'),
                     ]),
                   ),
-                  const SizedBox(width: center - 4),
+                  const SizedBox(width: center - 2),
                   Expanded(
                     child: Row(children: <Widget>[
                       item(Nx2Tab.shop, Icons.storefront_rounded, 'فروشگاه', 'Shop'),
-                      item(Nx2Tab.tournaments, Icons.emoji_events_rounded, 'تورنمنت', 'Tournaments'),
                       item(Nx2Tab.rewards, Icons.card_giftcard_rounded, 'جایزه و پک', 'Rewards'),
+                      item(Nx2Tab.profile, Icons.person_rounded, 'پروفایل', 'Profile'),
                     ]),
                   ),
                 ]),
@@ -828,7 +829,7 @@ class Nx2Dock extends StatelessWidget {
           ]),
         ),
         Positioned(
-          bottom: bottom + 20,
+          bottom: bottom + 21,
           left: 0,
           right: 0,
           child: Center(
@@ -844,8 +845,8 @@ class Nx2Dock extends StatelessWidget {
                   height: center,
                   child: Stack(alignment: Alignment.center, children: <Widget>[
                     Container(
-                      width: 58,
-                      height: 58,
+                      width: 54,
+                      height: 54,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const RadialGradient(colors: <Color>[Color(0xFF7B3CFF), Color(0xFF1A0A4A)]),
@@ -857,11 +858,11 @@ class Nx2Dock extends StatelessWidget {
                     Image.asset(Nx2Assets.framesRingGold,
                         width: center, height: center, cacheWidth: 220, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                     Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                      const Icon(Icons.sports_esports_rounded, size: 27, color: Colors.white,
+                      const Icon(Icons.sports_esports_rounded, size: 24, color: Colors.white,
                           shadows: <Shadow>[Shadow(color: Nx2.cyan, blurRadius: 12)]),
                       Text(context.tx('بازی', 'GAME'),
                           style: const TextStyle(
-                              fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white)),
+                              fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.7, color: Colors.white)),
                     ]),
                   ]),
                 ),
