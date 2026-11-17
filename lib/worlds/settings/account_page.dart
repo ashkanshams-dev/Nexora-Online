@@ -391,7 +391,15 @@ class _AccountPageState extends ConsumerState<AccountPage> {
                           ],
                         ),
                       );
-                      if (sure == true) await o.signOut();
+                      if (sure == true) {
+                        await o.signOut();
+                        if (!context.mounted) return;
+                        // Guest mode is local-only. Persisting "email" here
+                        // would make the next launch look like a broken
+                        // authenticated session until the user visits Auth.
+                        ref.read(settingsProvider).clearAuthMode();
+                        context.go('/auth');
+                      }
                     },
             ),
           ],

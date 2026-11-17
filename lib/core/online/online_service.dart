@@ -35,6 +35,13 @@ class OnlineService extends ChangeNotifier {
   OnlineService() {
     if (!_ready) return;
     _sub = client!.auth.onAuthStateChange.listen((AuthState s) {
+      // A new account must never inherit the previous account's games mirror
+      // handshake. This matters after sign-out/sign-in without killing the app.
+      final String? nextUid = s.session?.user.id;
+      if (nextUid != _lastAuthUid) {
+        _helloFor = null;
+        _lastAuthUid = nextUid;
+      }
       _status = s.session != null ? BackendStatus.online : BackendStatus.offline;
       final String? tok = s.session?.accessToken;
       if (_games != null) unawaited(_games!.realtime.setAuth(tok));
@@ -45,12 +52,16 @@ class OnlineService extends ChangeNotifier {
       }
       notifyListeners();
     }, onError: (Object e) => debugPrint('auth stream: $e'));
-    if (client!.auth.currentSession != null) _status = BackendStatus.online;
+    if (client!.auth.currentSession != null) {
+      _status = BackendStatus.online;
+      _lastAuthUid = client!.auth.currentUser?.id;
+    }
   }
 
   static bool _ready = false;
   static SupabaseClient? _games;
   String? _helloFor;
+  String? _lastAuthUid;
 
   /// Games project client (rooms, matches, matchmaking, tournaments, leaderboards). Falls back to the auth client
   /// in builds without the games config so offline/dev builds keep working.
@@ -208,10 +219,20 @@ class OnlineService extends ChangeNotifier {
 
   /// Sign out. Guest mode is local-only and never creates an anonymous session.
   Future<void> signOut({bool continueAsGuest = false}) async {
-    await _run<bool>((SupabaseClient c) async {
+    final bool? signedOut = await _run<bool>((SupabaseClient c) async {
       await c.auth.signOut();
       return true;
     });
+    if (signedOut == true) {
+      // Keep the in-memory state correct even if the auth stream is delivered
+      // a frame later. The router and all online watchers can react instantly.
+      _helloFor = null;
+      _lastAuthUid = null;
+      _status = BackendStatus.offline;
+      notifyListeners();
+    }
+    // Guest mode is deliberately local-only. There is no anonymous Supabase
+    // session to restore here; the caller changes its local auth mode instead.
     if (continueAsGuest) await ensureSession();
   }
 
