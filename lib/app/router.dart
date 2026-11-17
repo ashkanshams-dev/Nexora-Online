@@ -5,6 +5,9 @@ import '../core/ui2/page_turn.dart';
 
 import '../core/profile/profile_service.dart';
 import '../core/storage/local_store.dart';
+import '../features/admin/admin_access.dart';
+import '../features/admin/admin_page.dart';
+import '../features/admin/force_password_page.dart';
 import '../features/tournaments/ui/admin/tournament_manage_page.dart';
 import '../features/tournaments/ui/admin/tournament_wizard_page.dart';
 import '../features/tournaments/ui/tournament_detail_page.dart';
@@ -45,8 +48,14 @@ GoRouter buildRouter(WidgetRef ref) {
   return GoRouter(
     initialLocation: initial,
     // Deep link nexora://t/<code> (Android may deliver only the path "/<code>").
+    refreshListenable: ref.read(adminAccessProvider),
     redirect: (BuildContext context, GoRouterState state) {
       final Uri u = state.uri;
+      // Accounts that must change their password (the default main admin on first sign-in) go nowhere else first.
+      if (ref.read(adminAccessProvider).mustChangePassword &&
+          !<String>{'/force-password', '/intro', '/account'}.contains(u.path)) {
+        return '/force-password';
+      }
       if (u.scheme == 'nexora' && u.host == 't') {
         return '/tournaments/join?code=${u.pathSegments.isNotEmpty ? u.pathSegments.first : ''}';
       }
@@ -71,6 +80,8 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(path: '/rewards', pageBuilder: (context, state) => _warp(state, const RewardsPage())),
       GoRoute(path: '/settings', builder: (context, state) => const SettingsPage()),
       GoRoute(path: '/admin/oracle', builder: (context, state) => const OracleConfigPage()),
+      GoRoute(path: '/admin', builder: (context, state) => const AdminPage()),
+      GoRoute(path: '/force-password', builder: (context, state) => const ForcePasswordPage()),
       GoRoute(path: '/account', builder: (context, state) => const AccountPage()),
       GoRoute(
         path: '/oracle',

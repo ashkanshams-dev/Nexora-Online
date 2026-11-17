@@ -13,6 +13,7 @@ import '../core/ui2/oracle_buddy.dart';
 import '../core/update/app_updater.dart';
 import '../core/update/update_banner.dart';
 import '../core/theme/nx_theme.dart';
+import '../features/admin/announcement_watcher.dart';
 import '../features/tournaments/tournament_watcher.dart';
 import 'router.dart';
 
@@ -31,6 +32,7 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
       (String game, String code) => _router.push('/online/$game?code=$code'));
   late final TournamentWatcher _tournaments =
       TournamentWatcher(ref, _messenger, (String route) => _router.push(route));
+  late final AnnouncementWatcher _announcements = AnnouncementWatcher(ref, _messenger);
   late final CallWatcher _calls = CallWatcher(ref, _messenger,
       (String chat, String call, bool video, String title) {
     _router.push(Uri(path: '/call/$chat', queryParameters: <String, String>{
@@ -53,13 +55,17 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
       _tournaments.start();
       ref.read(onlineProvider).addListener(_tournaments.sync);
       _tournaments.sync();
+      ref.read(onlineProvider).addListener(_announcements.sync);
+      _announcements.sync();
       AppUpdater.instance.start();
     });
   }
 
+
   @override
   void dispose() {
     _invites.dispose();
+    _announcements.dispose();
     _calls.dispose();
     _tournaments.dispose();
     _router.dispose();

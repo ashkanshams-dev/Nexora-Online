@@ -133,10 +133,12 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     final OnlineService o = ref.read(onlineProvider);
     final String e = _email.text.trim();
     final String p = _pass.text;
-    if (!e.contains('@') || p.length < 6) {
-      setState(() => _info = context.tx(
-          'ایمیل معتبر و رمز حداقل ۶ کاراکتری لازم است.',
-          'A valid email and a 6+ character password are required.'));
+    // Sign in accepts an e-mail or a username (e.g. the main admin «admin»); registering needs an e-mail + 6+ chars.
+    if (_signInMode ? (e.isEmpty || p.isEmpty) : (!e.contains('@') || p.length < 6)) {
+      setState(() => _info = _signInMode
+          ? context.tx('ایمیل/نام کاربری و رمز را وارد کن.', 'Enter your email/username and password.')
+          : context.tx('ایمیل معتبر و رمز حداقل ۶ کاراکتری لازم است.',
+              'A valid email and a 6+ character password are required.'));
       return;
     }
     setState(() => _info = null);
@@ -301,7 +303,9 @@ class _AccountPageState extends ConsumerState<AccountPage> {
                       keyboardType: TextInputType.emailAddress,
                       textDirection: TextDirection.ltr,
                       decoration: InputDecoration(
-                          labelText: context.tx('ایمیل', 'Email'),
+                          labelText: _signInMode
+                              ? context.tx('ایمیل یا نام کاربری', 'Email or username')
+                              : context.tx('ایمیل', 'Email'),
                           prefixIcon:
                               const Icon(Icons.alternate_email_rounded)),
                     ),

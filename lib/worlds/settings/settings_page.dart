@@ -9,6 +9,7 @@ import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../core/online/online_service.dart';
 import '../oracle_core/persona/oracle_tour.dart';
+import '../../features/admin/admin_access.dart';
 import 'account_page.dart';
 
 /// Settings (STEP_12, P13, P16, P27, P28).
@@ -228,36 +229,28 @@ class SettingsPage extends ConsumerWidget {
 }
 
 
-/// Shown only to the owner / admins with the 'oracle' permission (checked server-side by nx_has_perm).
-class _OracleAdminTile extends ConsumerStatefulWidget {
+/// Admin entries: the admin panel for any admin, the ORACLE form for the 'oracle' permission (server re-checks).
+class _OracleAdminTile extends ConsumerWidget {
   const _OracleAdminTile();
 
   @override
-  ConsumerState<_OracleAdminTile> createState() => _OracleAdminTileState();
-}
-
-class _OracleAdminTileState extends ConsumerState<_OracleAdminTile> {
-  bool _allowed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final client = ref.read(onlineProvider).client;
-    if (client?.auth.currentUser != null) {
-      client!.rpc('nx_has_perm', params: <String, dynamic>{'p': 'oracle'}).then((Object? v) {
-        if (mounted && v == true) setState(() => _allowed = true);
-      }).catchError((Object _) {});
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_allowed) return const SizedBox.shrink();
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: const Icon(Icons.psychology_alt_rounded, color: Color(0xFFFFC857)),
-      title: Text(context.tx('تنظیمات شخصیت اوراکل (مدیر)', 'ORACLE personality config (admin)')),
-      onTap: () => context.push('/admin/oracle'),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AdminAccess a = ref.watch(adminAccessProvider);
+    if (!a.isAdmin) return const SizedBox.shrink();
+    return Column(children: <Widget>[
+      ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.admin_panel_settings_rounded, color: Color(0xFFFFC857)),
+        title: Text(a.owner ? context.tx('پنل مدیر اصلی', 'Main admin panel') : context.tx('پنل مدیریت', 'Admin panel')),
+        onTap: () => context.push('/admin'),
+      ),
+      if (a.can(AdminPerm.oracle))
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.psychology_alt_rounded, color: Color(0xFFFFC857)),
+          title: Text(context.tx('تنظیمات شخصیت اوراکل (مدیر)', 'ORACLE personality config (admin)')),
+          onTap: () => context.push('/admin/oracle'),
+        ),
+    ]);
   }
 }

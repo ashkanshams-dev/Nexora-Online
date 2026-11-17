@@ -159,9 +159,31 @@ class OnlineService extends ChangeNotifier {
     return ok ?? false;
   }
 
+  /// Username logins (no «@», e.g. the default main admin `admin`) map to an internal e-mail that never receives mail.
+  /// Their stored password is the typed one with a fixed prefix, so short admin passwords still satisfy the project's
+  /// 6-character minimum for real e-mail accounts (which is unchanged).
+  static const String internalDomain = 'users.nexora.invalid';
+  static bool isUsernameLogin(String id) => !id.trim().contains('@');
+  static String loginEmail(String id) =>
+      isUsernameLogin(id) ? '${id.trim().toLowerCase()}@$internalDomain' : id.trim();
+  static String loginPassword(String id, String password) => isUsernameLogin(id) ? 'nx#$password' : password;
+  bool get isInternalAccount => (email ?? '').endsWith('@$internalDomain');
+
   Future<bool> signInEmail(String email, String password) async {
     final bool? ok = await _run<bool>((SupabaseClient c) async {
-      await c.auth.signInWithPassword(email: email.trim(), password: password);
+      await c.auth.signInWithPassword(email: loginEmail(email), password: loginPassword(email, password));
+      return true;
+    });
+    return ok ?? false;
+  }
+
+  /// Change the signed-in account's password (same prefix rule for username accounts), then refresh the token so the
+  /// server-side "must change password" flag (cleared by a trigger on the password change) leaves the JWT claims too.
+  Future<bool> changePassword(String newPassword) async {
+    final bool? ok = await _run<bool>((SupabaseClient c) async {
+      final String pw = isInternalAccount ? 'nx#$newPassword' : newPassword;
+      await c.auth.updateUser(UserAttributes(password: pw));
+      await c.auth.refreshSession();
       return true;
     });
     return ok ?? false;
