@@ -336,11 +336,12 @@ ThemeData _buildTheme(NxThemeColors visual) {
 
 
 // ------------------------------------------------------------------ fonts (bundled, OFL)
-/// Latin + digits: Chakra Petch (HUD/game look). Persian falls back to Estedad (body) or Lalezar (headings).
+/// Latin + digits: Chakra Petch (HUD/game look). Persian uses Estedad for a
+/// consistent, readable shape across body text, buttons and headings.
 const String kNxFont = 'ChakraPetch';
 const List<String> kNxFontFallback = <String>['Estedad'];
 const String kNxFontHead = 'ChakraPetch';
-const List<String> kNxFontHeadFallback = <String>['Lalezar', 'Estedad'];
+const List<String> kNxFontHeadFallback = <String>['Estedad'];
 
 TextTheme nxGameTextTheme(TextTheme t) {
   TextStyle? body(TextStyle? s) => s?.copyWith(fontFamily: kNxFont, fontFamilyFallback: kNxFontFallback);

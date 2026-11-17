@@ -73,7 +73,7 @@ class _BermudaViewState extends State<BermudaView>
 
   // setup
   String stage = 'setup'; // setup | waiting | match
-  late _Setup my = _Setup('club0', 0, 6, 0);
+  late _Setup my = _Setup('club0', 0, 0, 0);
   int _cat = 0;
   BmConfig? cfg;
 
@@ -133,7 +133,7 @@ class _BermudaViewState extends State<BermudaView>
       my = _Setup(
           kBmTeams.any((BmTeam x) => x.id == t) ? t : 'club0',
           (p.getInt('bm.form') ?? 0).clamp(0, kBmForms.length - 1).toInt(),
-          (p.getInt('bm.field') ?? 6).clamp(0, kBmFields.length - 1).toInt(),
+          (p.getInt('bm.field') ?? 0).clamp(0, kBmFields.length - 1).toInt(),
           (p.getInt('bm.ball') ?? 0).clamp(0, NB - 1).toInt());
       _cat = math.max(0,
           kBmCats.indexWhere((List<Object> c) => c[0] == bmTeam(my.team).cat));

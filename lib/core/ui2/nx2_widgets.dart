@@ -759,14 +759,19 @@ class Nx2Dock extends StatelessWidget {
                           ? const LinearGradient(colors: <Color>[Nx2.cyan, Nx2.magenta])
                           : const LinearGradient(colors: <Color>[Color(0xFFB9A8E8), Color(0xFF8C7BC4)]))
                       .createShader(r),
-                  child: Icon(icon, size: 23, color: Colors.white),
+                  child: Icon(icon, size: 20, color: Colors.white),
                 ),
               ),
-              Text(context.tx(fa, en),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: on ? Nx2.text : Nx2.muted)),
+              SizedBox(
+                height: 16,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(context.tx(fa, en),
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 8.5, height: 1.05, fontWeight: FontWeight.w800, color: on ? Nx2.text : Nx2.muted)),
+                ),
+              ),
             ]),
           ),
         ),
@@ -774,18 +779,20 @@ class Nx2Dock extends StatelessWidget {
       );
     }
 
-    const double center = 92;
+    // Keep the centre action prominent without stealing the width needed by
+    // the five surrounding destinations on narrow phones.
+    const double center = 78;
     final bool gameOn = current == Nx2Tab.games;
     return OracleTourTarget(
       id: 'dock',
       child: SizedBox(
-      height: 74 + bottom + 22,
+      height: 68 + bottom + 18,
       child: Stack(clipBehavior: Clip.none, children: <Widget>[
         Positioned(
           left: 6,
           right: 6,
           bottom: bottom + 4,
-          height: 72,
+          height: 68,
           child: Stack(fit: StackFit.expand, children: <Widget>[
             Image.asset(Nx2Assets.framesDock,
                 fit: BoxFit.fill, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
@@ -799,7 +806,7 @@ class Nx2Dock extends StatelessWidget {
                       end: Alignment.bottomCenter,
                       colors: <Color>[Color(0xE02A1468), Color(0xF00C0529)])),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
                 child: Row(children: <Widget>[
                   Expanded(
                     child: Row(children: <Widget>[
@@ -807,7 +814,7 @@ class Nx2Dock extends StatelessWidget {
                       item(Nx2Tab.oracle, Icons.auto_awesome_rounded, 'اوراکل', 'ORACLE'),
                     ]),
                   ),
-                  const SizedBox(width: center - 8),
+                  const SizedBox(width: center - 4),
                   Expanded(
                     child: Row(children: <Widget>[
                       item(Nx2Tab.shop, Icons.storefront_rounded, 'فروشگاه', 'Shop'),
@@ -821,7 +828,7 @@ class Nx2Dock extends StatelessWidget {
           ]),
         ),
         Positioned(
-          bottom: bottom + 26,
+          bottom: bottom + 20,
           left: 0,
           right: 0,
           child: Center(
@@ -837,8 +844,8 @@ class Nx2Dock extends StatelessWidget {
                   height: center,
                   child: Stack(alignment: Alignment.center, children: <Widget>[
                     Container(
-                      width: 70,
-                      height: 70,
+                      width: 58,
+                      height: 58,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const RadialGradient(colors: <Color>[Color(0xFF7B3CFF), Color(0xFF1A0A4A)]),
@@ -848,13 +855,13 @@ class Nx2Dock extends StatelessWidget {
                       ),
                     ),
                     Image.asset(Nx2Assets.framesRingGold,
-                        width: center, height: center, cacheWidth: 260, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                        width: center, height: center, cacheWidth: 220, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
                     Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                      const Icon(Icons.sports_esports_rounded, size: 34, color: Colors.white,
+                      const Icon(Icons.sports_esports_rounded, size: 27, color: Colors.white,
                           shadows: <Shadow>[Shadow(color: Nx2.cyan, blurRadius: 12)]),
                       Text(context.tx('بازی', 'GAME'),
                           style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.2, color: Colors.white)),
+                              fontSize: 9.5, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white)),
                     ]),
                   ]),
                 ),

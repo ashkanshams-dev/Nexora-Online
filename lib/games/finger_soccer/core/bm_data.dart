@@ -9,6 +9,9 @@ class BmField {
 }
 
 const List<BmField> kBmFieldsRaw = <BmField>[
+  // Owner-provided default pitch (697x1280). Bounds match its red inner
+  // frame; kickoff matches the visible centre spot.
+  BmField('nexora_green', 'NEXORA Green', 697, 1280, 25, 672, 81, 1197, 640, 115, 'white'),
   BmField('forest', 'Forest', 1086, 1448, 195, 890, 127, 1311, 702, 130, 'wood'),
   BmField('ice', 'Ice', 1086, 1448, 190, 895, 134, 1308, 700, 132, 'ice'),
   BmField('ocean', 'Ocean', 1086, 1448, 191, 897, 108, 1313, 701, 132, 'blue'),

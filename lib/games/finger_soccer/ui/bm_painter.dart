@@ -43,6 +43,10 @@ class BmImages {
 
 /// Screen mapping of game.js build(): world -> screen = world * s + (ox, oy).
 class BmView {
+  /// Breathing room below the top scoreboard. The match HUD is painted above
+  /// the field, so the complete world (including the top goal) must move down
+  /// as one unit instead of moving only the goal artwork.
+  static const double topHudClearance = 20;
   double s = 1, ox = 0, oy = 0;
   Size size = Size.zero;
 
@@ -53,7 +57,9 @@ class BmView {
     if (W < 50 || H < 50) return;
     s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02;
     ox = W / 2 - e.CX * s;
-    oy = H / 2 - e.CY * s;
+    // Keep the scoreboard clear of the top goal while preserving the same
+    // world-to-screen mapping for rendering and pointer input.
+    oy = H / 2 - e.CY * s + topHudClearance;
   }
 
   Offset toWorld(Offset p) => Offset((p.dx - ox) / s, (p.dy - oy) / s);
@@ -425,6 +431,25 @@ class BmPainter extends CustomPainter {
       double l = math.sqrt(dx * dx + dy * dy);
       if (l == 0) l = 1;
       return <double>[-dy / l, dx / l];
+    }
+
+    // A low-contrast ground mark sits below the neon trail. It follows the
+    // ball's actual path, fades with the stored trail alpha, and reads like a
+    // speed/skid trace on the pitch instead of a floating laser effect.
+    for (int i = 1; i < n; i++) {
+      final BmTrailPt p = trail[i - 1], q = trail[i];
+      final double f = q.a.clamp(0.0, 1.0).toDouble();
+      final List<double> nn = nrm(i);
+      final double offset = BW * 0.42;
+      final Paint mark = Paint()
+        ..blendMode = BlendMode.multiply
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = BW * (0.70 + f * 0.85)
+        ..color = _rgba(16, 28, 12, 0.10 + f * 0.16);
+      canvas.drawLine(Offset(p.x + nn[0] * offset, p.y + nn[1] * offset),
+          Offset(q.x + nn[0] * offset, q.y + nn[1] * offset), mark);
+      canvas.drawLine(Offset(p.x - nn[0] * offset, p.y - nn[1] * offset),
+          Offset(q.x - nn[0] * offset, q.y - nn[1] * offset), mark);
     }
 
     void base(double w0, double a0) {
