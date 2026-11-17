@@ -799,7 +799,8 @@ class _BermudaViewState extends State<BermudaView>
       builder: (BuildContext context, int _, Widget? __) {
         final NxThemeColors visual = NxThemeColors.of(context);
         final double screenWidth = MediaQuery.sizeOf(context).width;
-        final double sw = math.max(0, math.min(screenWidth - 76, 500));
+        // A wide, shallow HUD gives names and scores room without covering the pitch.
+        final double sw = math.max(0, math.min(screenWidth - 28, 620));
         final bool aim = e.phase == 'aim';
         String clock = '';
         bool low = false;
@@ -818,8 +819,8 @@ class _BermudaViewState extends State<BermudaView>
           final bool on = aim && e.turn == t;
           final Color accent = t == 0 ? visual.accent : visual.accentSecondary;
           final Widget logo = Container(
-            width: 30,
-            height: 30,
+            width: 26,
+            height: 26,
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -870,7 +871,7 @@ class _BermudaViewState extends State<BermudaView>
                   '${e.score[t]}',
                   style: TextStyle(
                     color: on ? accent : visual.text,
-                    fontSize: 27,
+                    fontSize: 24,
                     height: .98,
                     fontWeight: FontWeight.w900,
                     fontFeatures: const <ui.FontFeature>[
@@ -887,7 +888,7 @@ class _BermudaViewState extends State<BermudaView>
           return Expanded(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 color: on ? accent.withValues(alpha: .13) : Colors.transparent,
                 borderRadius: BorderRadius.circular(14),
@@ -928,9 +929,9 @@ class _BermudaViewState extends State<BermudaView>
                     children: <Widget>[
                       team(0),
                       Container(
-                        width: 67,
+                        width: 74,
                         padding: const EdgeInsets.symmetric(
-                            vertical: 7, horizontal: 3),
+                            vertical: 4, horizontal: 5),
                         decoration: BoxDecoration(
                           color: visual.background.withValues(alpha: .76),
                           borderRadius: BorderRadius.circular(14),
@@ -946,7 +947,7 @@ class _BermudaViewState extends State<BermudaView>
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             Icon(Icons.timer_outlined,
-                                size: 13,
+                                size: 12,
                                 color: e.sd
                                     ? visual.accent
                                     : (low
@@ -964,7 +965,7 @@ class _BermudaViewState extends State<BermudaView>
                                       : (low
                                           ? const Color(0xFFFF8794)
                                           : visual.text),
-                                  fontSize: e.sd ? 10 : 16,
+                                  fontSize: e.sd ? 9 : 14,
                                   height: 1.05,
                                   fontWeight: FontWeight.w900,
                                   fontFeatures: const <ui.FontFeature>[

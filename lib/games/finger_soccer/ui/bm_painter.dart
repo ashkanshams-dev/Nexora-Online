@@ -90,7 +90,8 @@ class BmPainter extends CustomPainter {
     canvas.save();
     canvas.translate(view.ox + cx * s, view.oy + cy * s);
     canvas.scale(s);
-    if (fancy) _drawTrail(canvas, t);
+    // Keep only the restrained ground/wind trace; no neon projectile effects.
+    _drawTrail(canvas, t);
     if (e.phase == 'aim' && !e.menuOpen) {
       final double k = .5 + .5 * math.sin(t / 260);
       final List<int> c = e.turn != 0 ? <int>[255, 110, 110] : <int>[80, 170, 255];
@@ -109,7 +110,7 @@ class BmPainter extends CustomPainter {
         }
       }
     }
-    if (fancy) _pieceTrails(canvas);
+    // Player-piece trails are intentionally disabled; only the ball leaves a trace.
     // soft shadows (SPR.shadow)
     for (final BmBody b in e.bodies) {
       final double w = b.r * 2.6;
@@ -145,23 +146,9 @@ class BmPainter extends CustomPainter {
         }
       }
     }
-    if (fancy) _drawParts(canvas);
-    if (e.rings.isNotEmpty) {
-      for (final BmRing rg in e.rings) {
-        final double tt = 1 - rg.l / rg.m;
-        canvas.drawCircle(
-            Offset(rg.x, rg.y),
-            rg.r * (1 + tt * 3.2 * (.6 + rg.w)),
-            Paint()
-              ..blendMode = BlendMode.plus
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 6 * (1 - tt) + 1
-              ..color = _rgba(255, 255, 255, (1 - tt) * .8 * rg.w));
-      }
-    }
+    // Impact sparks, rings and the full-screen flash are removed by design.
     _aim(canvas, t);
     canvas.restore();
-    if (e.flash > 0) canvas.drawRect(Offset.zero & size, Paint()..color = _rgba(255, 230, 140, e.flash * .35));
   }
 
   // ------------------------------------------------------------ background (build())
@@ -236,24 +223,6 @@ class BmPainter extends CustomPainter {
       final double sv = math.sqrt(b.vx * b.vx + b.vy * b.vy), fast = math.min(1.0, sv / (1700 * K));
       final BmBallRenderer? br = im.ballR;
       if (br != null && br.ready) br.update(b.R, b.rv);
-      // halo (SPR.h0 / SPR.h1)
-      if (fancy) {
-        final double R = b.r * (2.15 + fast * .5);
-        final bool hot = fast > .55;
-        final double ga = hot ? (.18 + .22 * fast) / .4 : 1;
-        final Offset c = Offset(b.x, drawY);
-        final Color c0 = hot ? _rgba(255, 170, 70, .4) : _rgba(80, 155, 255, .26);
-        canvas.drawCircle(
-            c,
-            R,
-            Paint()
-              ..shader = ui.Gradient.radial(c, R, <Color>[
-                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0).toDouble()),
-                c0.withValues(alpha: c0.a * ga.clamp(0.0, 1.0).toDouble()),
-                _rgba(100, 130, 160, .15 * ga.clamp(0.0, 1.0).toDouble()),
-                _rgba(40, 50, 65, 0)
-              ], const <double>[0, .116, .4536, 1]));
-      }
       final double so = b.r * (.55 + .25 * fast);
       canvas.drawOval(Rect.fromCenter(center: Offset(b.x + so * .35, b.y + so), width: b.r * .86 * 2, height: b.r * .34 * 2),
           Paint()..color = _rgba(8, 14, 24, .42 * .8));
@@ -451,6 +420,10 @@ class BmPainter extends CustomPainter {
       canvas.drawLine(Offset(p.x - nn[0] * offset, p.y - nn[1] * offset),
           Offset(q.x - nn[0] * offset, q.y - nn[1] * offset), mark);
     }
+
+    // Deliberately stop here: only the low-alpha multiply trace remains.
+    // All neon, fire, sparkle and particle trail variants are disabled.
+    return;
 
     void base(double w0, double a0) {
       for (int i = 1; i < n; i++) {
