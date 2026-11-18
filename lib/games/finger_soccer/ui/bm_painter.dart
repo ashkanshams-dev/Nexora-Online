@@ -55,7 +55,7 @@ class BmView {
     final BmFieldS f = e.field;
     final double W = sz.width, H = sz.height;
     if (W < 50 || H < 50) return;
-    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02 * .9;
+    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02 * 1.14;
     ox = W / 2 - e.CX * s;
     // Keep the scoreboard clear of the top goal while preserving the same
     // world-to-screen mapping for rendering and pointer input.
@@ -78,8 +78,10 @@ class BmPainter extends CustomPainter {
   final double dpr;
   final bool fancy;
   // Geometry is scaled uniformly by BmView; physics and replay keep PR/BR.
-  static const double _playerRenderScale = 1;
-  static const double _ballRenderScale = 1;
+  // Calibrated from the supplied 720x1600 reference proportions.
+  static const double _playerRenderScale = .58;
+  static const double _ballRenderScale = .58;
+  static const double _goalRenderScale = .80;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -116,7 +118,8 @@ class BmPainter extends CustomPainter {
     // Player-piece trails are intentionally disabled; only the ball leaves a trace.
     // soft shadows (SPR.shadow)
     for (final BmBody b in e.bodies) {
-      final double w = b.r * 2.6;
+      final double renderR = b == e.ball ? b.r * _ballRenderScale : b.r * _playerRenderScale;
+      final double w = renderR * 2.6;
       final Offset c = Offset(b.x + 5, b.y + 11);
       canvas.drawCircle(
           c,
@@ -140,7 +143,7 @@ class BmPainter extends CustomPainter {
         final Paint p = Paint()..filterQuality = FilterQuality.medium;
         if (g.d > 0) {
           canvas.save();
-          canvas.translate(0, gy * 2 + e.GGh);
+          canvas.translate(0, gy * 2 + gh);
           canvas.scale(1, -1);
           canvas.drawImageRect(gi, src, dst, p);
           canvas.restore();
