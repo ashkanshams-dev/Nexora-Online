@@ -7,6 +7,7 @@ import 'package:livekit_client/livekit_client.dart';
 import '../../../core/backend/backend_gateway.dart';
 import '../../../core/backend/supabase_backend.dart';
 import '../../../core/online/online_config.dart';
+import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../core/widgets/nx_widgets.dart';
 import '../data/supabase_orbit_repository.dart';
@@ -122,7 +123,7 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
         });
       });
       _room = room;
-      await room.connect('${grant['url'] ?? OnlineConfig.liveKitUrl}', token);
+      await room.connect('${grant?['url'] ?? OnlineConfig.liveKitUrl}', token);
       if (_canPublish) {
         try {
           await room.localParticipant?.setMicrophoneEnabled(true);
