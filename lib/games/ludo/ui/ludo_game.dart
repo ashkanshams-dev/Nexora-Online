@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:nexora/games/core/game_contract.dart';
 
 import '../core/ludo_bot.dart';
 import '../core/ludo_rules.dart';
+import 'ludo_audio.dart';
 import 'ludo_board.dart';
 import 'ludo_die.dart';
 
@@ -32,6 +34,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
   late AnimationController _hopCtl;
   late AnimationController _pulseCtl;
   late AnimationController _flashCtl;
+  late final LudoAudio _audio;
 
   int? _dieValue;
   bool _rolling = false;
@@ -62,6 +65,8 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _audio = LudoAudio(enabled: _l.soundOn);
+    unawaited(_audio.init());
     final int seed = _l.seed ?? DateTime.now().microsecondsSinceEpoch;
     _engine = LudoEngine(playerCount: _l.playerCount, seed: seed);
     _captures = List<int>.filled(_n, 0);
@@ -229,6 +234,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
     _hopCtl.dispose();
     _pulseCtl.dispose();
     _flashCtl.dispose();
+    unawaited(_audio.dispose());
     super.dispose();
   }
 
@@ -323,6 +329,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
     }
     setState(() => _rolling = true);
+    unawaited(_audio.play('roll'));
     _haptic();
     await _rollCtl.forward(from: 0);
     if (!mounted) return;
@@ -333,6 +340,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       _dieValue = r.roll;
     });
     if (r.forfeited) {
+      unawaited(_audio.play('ui'));
       setState(() => _status(
           'سه شش پشت سر هم — نوبت سوخت!', 'Three sixes in a row — turn lost!'));
       await _wait(1300);
@@ -347,6 +355,7 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
       return;
     }
     if (r.moves.isEmpty) {
+      unawaited(_audio.play('ui'));
       setState(() => _status('حرکتی ممکن نیست', 'No possible move'));
       await _wait(900);
       _beginTurn();
@@ -416,7 +425,9 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
     if (!mounted) return;
     final Offset landing = path.last;
     final LudoPlayResult res = _engine.play(m);
+    unawaited(_audio.play('step', volume: 0.62));
     if (m.captures.isNotEmpty) {
+      unawaited(_audio.play('capture', volume: 0.86));
       _captures[m.seat] += m.captures.length;
       final List<_Flight> back = m.captures
           .map((LudoCapture c) => _Flight(c.seat, c.token, <Offset>[
@@ -438,12 +449,14 @@ class _LudoGameState extends State<LudoGame> with TickerProviderStateMixin {
     setState(() => _flights = <_Flight>[]);
     _busy = false;
     if (res.won) {
+      unawaited(_audio.play('finish', volume: 0.9));
       _gameOver(m.seat);
       return;
     }
     if (res.extraTurn) {
       setState(() {
         if (m.finishes) {
+          unawaited(_audio.play('home', volume: 0.9));
           _status(
               'مهره به خانه رسید — نوبت اضافه!', 'Token home — extra turn!');
         } else if (m.captures.isEmpty) {
