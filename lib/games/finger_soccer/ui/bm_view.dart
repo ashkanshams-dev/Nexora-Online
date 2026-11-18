@@ -21,7 +21,7 @@ const String _a = 'assets/games/bermuda/';
 
 /// Online match settings (config.js MATCH_SECONDS / TURN_SECONDS).
 const int kBmMatchSeconds = 300;
-const double kBmOnlineTurnSeconds = 10;
+const double kBmOnlineTurnSeconds = BM_ONLINE_TURN_SECONDS;
 
 class BermudaView extends StatefulWidget {
   const BermudaView({super.key, required this.launch, this.autoStart = false});

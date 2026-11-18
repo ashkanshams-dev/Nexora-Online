@@ -8,6 +8,14 @@ import 'bm_data.dart';
 
 // ---------------------------------------------------------------- constants (game.js line 4-6)
 const double K = 1.27, PR = 63.8, BR = 28.8, STEP = 1 / 240, RC = 70, LMAX = 320;
+/// Product tuning values are kept separate from the ported physics constants.
+/// This lets the presentation/gameplay requests be tested without retuning
+/// collision formulas or the ball's rotation model.
+const double BM_PLAYER_RADIUS_FACTOR = .90;
+const double BM_GOAL_WIDTH_FACTOR = .97;
+const double BM_SCENE_SPEED = 1.03;
+const double BM_ONLINE_TURN_SECONDS = 10;
+const double BM_PLAYER_RADIUS = PR * BM_PLAYER_RADIUS_FACTOR;
 const int NB = 36;
 /// Mini-soccer tuning (redesign-v1.1, owner request): ball mass 1.9 -> 1.805 (x0.95) and a kick factor on the
 /// ball's share of a disc->ball impulse so a disc striking the ball launches it exactly 5% faster than before
@@ -248,11 +256,12 @@ class BmEngine {
     KY = f.cs;
     final List<double> gi = kBmGS[f.gs]!;
     final double gw = 2 * f.g / (gi[3] - gi[2]);
-    GGw = gw;
+    GGw = gw * BM_GOAL_WIDTH_FACTOR;
     GGh = gw * gi[1] / gi[0] * 1.02; // goal depth +2% (owner request)
-    GGx = CX - f.g - gi[2] * gw;
+    GGx = CX - GGw / 2 - gi[2] * gw * BM_GOAL_WIDTH_FACTOR;
     DEPTH = _mx(106, (GGh * .95).roundToDouble());
-    GOALS = <BmGoal>[BmGoal(0, Ft, CX - f.g, CX + f.g, -1), BmGoal(1, Fb, CX - f.g, CX + f.g, 1)];
+    final double goalHalf = f.g * BM_GOAL_WIDTH_FACTOR;
+    GOALS = <BmGoal>[BmGoal(0, Ft, CX - goalHalf, CX + goalHalf, -1), BmGoal(1, Fb, CX - goalHalf, CX + goalHalf, 1)];
   }
 
   BmBody mk(double x, double y, int team, double r, double m) =>
@@ -270,12 +279,12 @@ class BmEngine {
       final List<List<double>> sl = bmSlots(form[cm]);
       for (int i = 0; i < sl.length; i++) {
         final double nx = sl[i][0], ny = sl[i][1];
-        double x = Fl + PR + 10 + nx * (Fw - 2 * (PR + 10)), y = cm != 0 ? Ft + ny * Fh : Fb - ny * Fh;
+        double x = Fl + BM_PLAYER_RADIUS + 10 + nx * (Fw - 2 * (BM_PLAYER_RADIUS + 10)), y = cm != 0 ? Ft + ny * Fh : Fb - ny * Fh;
         if (mirror) {
           x = 2 * CX - x;
           y = 2 * CY - y;
         }
-        final BmBody b = mk(x, y, ct(cm), PR, 5);
+        final BmBody b = mk(x, y, ct(cm), BM_PLAYER_RADIUS, 5);
         b.cid = cm * 20 + i;
         b.boost = 0;
         bodies.add(b);
@@ -1064,7 +1073,7 @@ class BmEngine {
       }
     }
     if (!menuOpen && bodies.isNotEmpty) {
-      if (mt > 0 && !sd && phase != 'over' && mleft > 0) mleft = _mx(0, mleft - dt);
+      if (mt > 0 && !sd && phase != 'over' && mleft > 0) mleft = _mx(0, mleft - dt * BM_SCENE_SPEED);
       double ts = 1;
       if (freeze > 0) {
         freeze -= dt;
@@ -1073,7 +1082,7 @@ class BmEngine {
         slow -= dt;
         ts = .32 + .68 * math.pow(1 - _mx(0, slow) / 1.1, 2).toDouble();
       }
-      acc += dt * ts;
+      acc += dt * ts * BM_SCENE_SPEED;
       int n = 0;
       if (phase != 'over') {
         while (acc >= STEP && n++ < 14) {
@@ -1110,7 +1119,7 @@ class BmEngine {
           }
         }
       }
-      fx(dt);
+      fx(dt * BM_SCENE_SPEED);
     }
     flash = _mx(0, flash - dt * 2);
     cam = _mx(0, cam - dt * 3.2);
@@ -1143,7 +1152,7 @@ class BmEngine {
     mirror = cfg.mirror;
     ai = cfg.ai ? 1 : -1;
     aiLvl = cfg.aiLvl;
-    tt = cfg.turnTime;
+    tt = cfg.mode == 'online' ? BM_ONLINE_TURN_SECONDS : cfg.turnTime;
     mt = cfg.matchTime;
     mleft = mt.toDouble();
     sd = false;

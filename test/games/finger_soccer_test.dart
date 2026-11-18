@@ -53,9 +53,35 @@ void main() {
     e.startMatch(_cfg());
     expect(e.bodies.length, 11);
     expect(e.ball!.r, BR);
+    expect(e.bodies.first.r, closeTo(BM_PLAYER_RADIUS, 1e-9));
     expect(e.ball!.m, closeTo(1.805, 1e-9));
     expect(e.bodies.first.m, 5);
-    expect(e.GOALS[0].x2 - e.GOALS[0].x1, 338);
+    expect(e.GOALS[0].x2 - e.GOALS[0].x1,
+        closeTo(338 * BM_GOAL_WIDTH_FACTOR, 1e-9));
+    expect(e.GGw, greaterThan(0));
+  });
+
+  test('online turn is always ten seconds and timeout advances exactly once', () {
+    final _Hooks h = _Hooks();
+    final BmEngine e = BmEngine(h, rng: math.Random(2));
+    e.startMatch(_cfg(mode: 'online'));
+    expect(e.tleft, BM_ONLINE_TURN_SECONDS);
+    expect(e.turn, 0);
+
+    for (int i = 0; i < 199; i++) {
+      e.frame(.05);
+    }
+    expect(e.turn, 0);
+    expect(e.phase, 'aim');
+    e.frame(.1);
+    expect(e.turn, 1);
+    expect(e.phase, 'aim');
+    expect(e.tleft, closeTo(BM_ONLINE_TURN_SECONDS, 1e-9));
+    expect(h.events.where((String event) => event == 'timeout').length, 1);
+
+    // A late duplicate timeout from the network must not flip the new turn.
+    e.remoteTimeout(<String, dynamic>{'seat': 0});
+    expect(e.turn, 1);
   });
 
   test('bot vs bot plays a long match without escaping the pitch', () {
