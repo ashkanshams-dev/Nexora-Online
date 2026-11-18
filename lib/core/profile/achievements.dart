@@ -1,3 +1,4 @@
+import '../../games/arcade_kit/arcade_meta.dart' show kArcadeIds;
 import 'profile_service.dart';
 
 /// Achievement rule (extensible: each world can add its own rule here).
@@ -39,6 +40,15 @@ bool _crystal(ProfileService p) => p.counter('nova.posts') >= 5;
 bool _orb(ProfileService p) => p.counter('shop.bought') >= 5;
 bool _silver(ProfileService p) => p.counter('orbit.sent') >= 20;
 bool _wings(ProfileService p) => p.stats.length >= 9;
+int _arcadeTried(ProfileService p) => kArcadeIds.where((String id) => (p.stats[id]?.played ?? 0) > 0).length;
+bool _arcadeRookie(ProfileService p) => _arcadeTried(p) >= 5;
+bool _arcadeAll(ProfileService p) => _arcadeTried(p) >= kArcadeIds.length;
+bool _arcadeGold(ProfileService p) => p.counter('arcade.medal.gold') >= 1;
+bool _arcadeDaily(ProfileService p) => p.counter('arcade.daily.done') >= 5;
+bool _racer(ProfileService p) => (p.stats['kart_racing']?.won ?? 0) >= 3;
+bool _grandmaster(ProfileService p) => (p.stats['chess_blitz']?.won ?? 0) >= 5;
+bool _survivor(ProfileService p) =>
+    (p.stats['obstacle_race']?.won ?? 0) + (p.stats['bomb_arena']?.won ?? 0) + (p.stats['stickman_arena']?.won ?? 0) >= 10;
 
 const kAchievements = <AchievementDef>[
   AchievementDef(id: 'identity', asset: 'badge_explorer', nameFa: 'اکتشافگر', nameEn: 'Explorer',
@@ -75,4 +85,20 @@ const kAchievements = <AchievementDef>[
       descFa: 'به سطح ۱۰ برس', descEn: 'Reach level 10', check: _summit, coinReward: 200),
   AchievementDef(id: 'legend', asset: 'badge_legend', nameFa: 'افسانه', nameEn: 'Legend',
       descFa: 'به سطح ۲۰ برس', descEn: 'Reach level 20', check: _legend, coinReward: 500),
+  // ---- NEXORA arcade (redesign-2) ----
+  AchievementDef(id: 'arcade_rookie', asset: 'badge_gamer', nameFa: 'تازه‌نفس آرکید', nameEn: 'Arcade Rookie',
+      descFa: '۵ بازی جدید آرکید را امتحان کن', descEn: 'Try 5 of the new arcade games', check: _arcadeRookie, coinReward: 120),
+  AchievementDef(id: 'arcade_all', asset: 'trophy_wings', nameFa: 'استاد آرکید', nameEn: 'Arcade Master',
+      descFa: 'هر ۲۰ بازی جدید را بازی کن', descEn: 'Play all 20 new arcade games', check: _arcadeAll, coinReward: 400),
+  AchievementDef(id: 'arcade_gold', asset: 'trophy_crown', nameFa: 'مدال طلا', nameEn: 'Gold Medal',
+      descFa: 'در یک بازی تک‌نفره مدال طلا بگیر', descEn: 'Earn a gold medal in a solo game', check: _arcadeGold, coinReward: 200),
+  AchievementDef(id: 'arcade_daily', asset: 'badge_daily', nameFa: 'چالش‌باز', nameEn: 'Challenger',
+      descFa: '۵ چالش روزانه را کامل کن', descEn: 'Complete 5 daily challenges', check: _arcadeDaily, coinReward: 200),
+  AchievementDef(id: 'racer', asset: 'badge_star_elite', nameFa: 'سلطان پیست', nameEn: 'Track King',
+      descFa: '۳ مسابقه‌ی کارت ببر', descEn: 'Win 3 kart races', check: _racer, coinReward: 150),
+  AchievementDef(id: 'grandmaster', asset: 'badge_legend', nameFa: 'استاد بزرگ', nameEn: 'Grandmaster',
+      descFa: '۵ شطرنج سرعتی ببر', descEn: 'Win 5 blitz chess games', check: _grandmaster, coinReward: 250),
+  AchievementDef(id: 'survivor', asset: 'badge_champion', nameFa: 'آخرین بازمانده', nameEn: 'Last One Standing',
+      descFa: '۱۰ برد در مسابقه‌ی موانع، میدان بمب یا استیکمن', descEn: '10 wins in Obstacle Race, Bomb Arena or Stickman',
+      check: _survivor, coinReward: 250),
 ];

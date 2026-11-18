@@ -1,0 +1,9 @@
+{
+  "game": "stack_tower",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "block": "block face texture (tinted)"
+  }
+}

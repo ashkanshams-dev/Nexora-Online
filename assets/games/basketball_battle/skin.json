@@ -1,0 +1,11 @@
+{
+  "game": "basketball_battle",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "ball": "basketball (round)",
+    "hoop": "hoop + backboard (front view)",
+    "court": "court background (portrait)"
+  }
+}

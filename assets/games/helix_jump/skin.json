@@ -1,0 +1,11 @@
+{
+  "game": "helix_jump",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "ball": "ball",
+    "slab": "safe slab texture",
+    "danger": "danger slab texture"
+  }
+}

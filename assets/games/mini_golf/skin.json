@@ -1,0 +1,13 @@
+{
+  "game": "mini_golf",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "ball": "golf ball (round)",
+    "hole": "cup/hole (round)",
+    "turf": "turf tile (seamless)",
+    "wall": "wall/bumper tile",
+    "flag": "flag"
+  }
+}

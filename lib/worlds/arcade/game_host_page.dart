@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,8 @@ import '../../core/profile/profile_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
+import '../../core/online/online_service.dart';
+import '../../games/arcade_kit/arcade_meta.dart';
 import '../../games/game_registry.dart';
 import '../oracle_core/oracle_game_sheet.dart';
 import '../oracle_core/persona/oracle_persona.dart';
@@ -20,8 +24,12 @@ class GameHostPage extends ConsumerStatefulWidget {
     required this.mode,
     required this.difficulty,
     required this.players,
+    this.daily = false,
   });
   final GameInfo game;
+
+  /// Daily challenge run (today's seed; arcade games only).
+  final bool daily;
   final GameMode mode;
   final BotDifficulty difficulty;
   final int players;
@@ -48,6 +56,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
   AwardOutcome? _award;
   bool _finished = false;
   String? _oracleLine;
+  ArcadeRecordResult? _arcade;
 
   void _onFinish(GameResult r) {
     if (_finished) return;
@@ -66,6 +75,15 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
       score: r.score,
       vsBot: widget.mode == GameMode.vsBot,
     );
+    if (kArcadeDefs.containsKey(widget.game.id)) {
+      final bool multi = !widget.game.solo;
+      _arcade = ArcadeRecords.record(widget.game.id, r.score,
+          profile: p, daily: widget.daily, dailyWon: multi ? r.outcome == GameOutcome.win : null);
+      if (widget.game.solo) {
+        unawaited(ArcadeOnline.submit(ref.read(onlineProvider), widget.game.id, r.score,
+            durationMs: r.durationMs ?? 0, daily: widget.daily));
+      }
+    }
     if (ref.read(settingsProvider).haptics) HapticFeedback.heavyImpact();
     _oracleLine = OraclePersona.instance.resultReaction(outcome: outcome, myScore: r.score, oppScore: r.opponentScore);
     // Let the game's own final animation breathe before the overlay.
@@ -85,6 +103,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
       _award = null;
       _finished = false;
       _oracleLine = null;
+      _arcade = null;
     });
   }
 
@@ -124,7 +143,8 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
       soundOn: s.sound && s.haptics,
       playerCount: widget.players,
       skins: Map<String, String>.from(p.equipped),
-      seed: DateTime.now().millisecondsSinceEpoch ^ _round,
+      seed: widget.daily ? ArcadeDaily.seed(widget.game.id) : DateTime.now().millisecondsSinceEpoch ^ _round,
+      daily: widget.daily,
       onFinish: _onFinish,
     );
     final Widget gameView = KeyedSubtree(
@@ -245,6 +265,7 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
                     style: const TextStyle(color: NxColors.textDim)),
               ),
             if (_oracleLine != null) OracleResultLine(text: _oracleLine!),
+            if (_arcade != null) _arcadeLine(context, _arcade!),
             if (a != null) ...[
               const SizedBox(height: 14),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -295,6 +316,30 @@ class _GameHostPageState extends ConsumerState<GameHostPage> {
           ]),
         ),
       ),
+    );
+  }
+
+  Widget _arcadeLine(BuildContext context, ArcadeRecordResult a) {
+    final List<Widget> chips = <Widget>[];
+    if (widget.game.solo && a.medal != ArcadeMedal.none) {
+      final (String fa, String en, Color c) = switch (a.medal) {
+        ArcadeMedal.gold => ('مدال طلا', 'Gold medal', const Color(0xFFFFD34E)),
+        ArcadeMedal.silver => ('مدال نقره', 'Silver medal', const Color(0xFFD7DEEA)),
+        _ => ('مدال برنز', 'Bronze medal', const Color(0xFFE09A5B)),
+      };
+      chips.add(NxPill(label: context.tx(fa, en), icon: Icons.military_tech_rounded, color: c));
+    }
+    if (widget.game.solo && a.newBest) {
+      chips.add(NxPill(label: context.tx('رکورد جدید', 'New best'), icon: Icons.trending_up_rounded, color: NxColors.gold));
+    }
+    if (a.dailyJustDone) {
+      chips.add(NxPill(label: context.tx('چالش روزانه +۸۰ XP', 'Daily challenge +80 XP'), icon: Icons.today_rounded,
+          color: NxColors.turquoise));
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(alignment: WrapAlignment.center, spacing: 6, runSpacing: 6, children: chips),
     );
   }
 }

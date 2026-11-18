@@ -11,6 +11,7 @@ import '../../nova_gallery/ui/nova_visuals.dart';
 import '../data/orbit_shared_inbox.dart';
 import '../models/arcade_refs.dart';
 import '../models/orbit_models.dart';
+import '../../../games/arcade_kit/arcade_icon.dart';
 
 String orbitTime(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
@@ -392,7 +393,7 @@ class OrbitInviteCard extends StatelessWidget {
               AppAssets.pedestal(g.id),
               cacheHeight: 220,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => Icon(Icons.sports_esports_rounded, size: 48, color: accent),
+              errorBuilder: (_, __, ___) => ArcadeMedallion(g.id),
             ),
           ),
         const SizedBox(height: 4),

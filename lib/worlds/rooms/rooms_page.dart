@@ -12,6 +12,7 @@ import '../../core/ui2/nx2_widgets.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/core/game_contract.dart';
 import '../../games/game_registry.dart';
+import '../../games/arcade_kit/arcade_icon.dart';
 
 /// ROOMS — opened by the big GAME button in the dock.
 ///  * Quick Play: pick a game -> real matchmaking (`nx_quick`) in that game's lobby.
@@ -275,7 +276,7 @@ class _GamePickerSheet extends StatelessWidget {
                         ),
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
                           Image.asset('assets/arcade/pedestals/${g.id}.webp',
-                              height: 52, errorBuilder: (_, __, ___) => Icon(Icons.sports_esports_rounded, color: g.accent)),
+                              height: 52, errorBuilder: (_, __, ___) => SizedBox(height: 52, child: ArcadeMedallion(g.id))),
                           const SizedBox(height: 4),
                           Text(context.tx(g.nameFa, g.nameEn),
                               maxLines: 1,

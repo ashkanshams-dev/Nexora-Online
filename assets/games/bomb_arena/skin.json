@@ -1,0 +1,19 @@
+{
+  "game": "bomb_arena",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "player_0": "bomber seat 1 (square, top-down)",
+    "player_1": "bomber seat 2",
+    "player_2": "bomber seat 3",
+    "player_3": "bomber seat 4",
+    "bomb": "bomb",
+    "crate": "destructible crate tile",
+    "wall": "solid wall tile",
+    "floor": "floor tile",
+    "pu_range": "power-up: range",
+    "pu_bomb": "power-up: +bomb",
+    "pu_speed": "power-up: speed"
+  }
+}

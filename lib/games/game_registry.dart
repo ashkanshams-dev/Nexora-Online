@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'arcade_registry.dart';
 import 'backgammon/backgammon_entry.dart';
 import 'billiards/billiards_entry.dart';
 import 'carrom/carrom_entry.dart';
@@ -171,6 +172,8 @@ final List<GameInfo> kGames = <GameInfo>[
     builder: buildMafiaGame,
     supportsOnline: true,
   ),
+  // redesign-2: 20 new arcade games, added alongside the nine above.
+  ...kArcadeGames,
 ];
 
 GameInfo? gameById(String id) {

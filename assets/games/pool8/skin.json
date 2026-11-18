@@ -1,0 +1,9 @@
+{
+  "game": "pool8",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "_note": "uses the Billiards table skins (assets/ui/nx2/boards/billiards_*.webp) and ball art of the classic game"
+  }
+}
