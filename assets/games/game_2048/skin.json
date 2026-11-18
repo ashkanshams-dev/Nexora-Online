@@ -1,0 +1,9 @@
+{
+  "game": "game_2048",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "tile": "tile background (square, tinted per value)"
+  }
+}

@@ -77,6 +77,26 @@ flutter:
     - assets/games/finger_soccer/pucks_PLACEHOLDER_LICENSED/thumb/
     - assets/games/finger_soccer/pucks_PLACEHOLDER_LICENSED/top/
     - assets/games/shared/discs/
+    - assets/games/kart_racing/
+    - assets/games/obstacle_race/
+    - assets/games/bomb_arena/
+    - assets/games/pool8/
+    - assets/games/mini_golf/
+    - assets/games/basketball_battle/
+    - assets/games/spy_mafia/
+    - assets/games/stickman_arena/
+    - assets/games/ludo_battle/
+    - assets/games/chess_blitz/
+    - assets/games/endless_runner/
+    - assets/games/tetris_rush/
+    - assets/games/helix_jump/
+    - assets/games/fruit_ninja/
+    - assets/games/geo_dash/
+    - assets/games/traffic_racer/
+    - assets/games/stack_tower/
+    - assets/games/bubble_shooter/
+    - assets/games/knife_hit/
+    - assets/games/game_2048/
     - assets/progression/achievements/
     - assets/progression/club_badges/
     - assets/ui/holo_frames/

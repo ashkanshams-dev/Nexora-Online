@@ -7,6 +7,7 @@ import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../core/ui2/nx2_assets.dart';
 import '../../../core/widgets/nx_widgets.dart';
+import '../../../games/arcade_kit/arcade_meta.dart';
 import '../../../games/game_registry.dart';
 
 /// Real global rankings: per-game rating (online matches) and overall XP.
@@ -23,6 +24,8 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
   List<Map<String, dynamic>> _rows = <Map<String, dynamic>>[];
   bool _loading = false;
   String? _error;
+  bool _daily = false;
+  bool get _solo => _game != null && kArcadeSoloIds.contains(_game);
 
   @override
   void initState() {
@@ -42,6 +45,12 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
       _error = null;
     });
     try {
+      if (_solo) {
+        final List<Map<String, dynamic>> top = await ArcadeOnline.top(o, _game!, daily: _daily);
+        if (!mounted) return;
+        setState(() => _rows = top);
+        return;
+      }
       final List<dynamic> rows = _game == null
           ? await c
               .from('nx_leaderboard_global')
@@ -97,7 +106,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                       Text(
                           _game == null
                               ? context.tx('رتبه بر پایه‌ی XP', 'Ranked by XP')
-                              : context.tx(
+                              : _solo
+                                  ? context.tx('بهترین امتیازها (تأیید سرور)', 'Top scores (server-verified)')
+                                  : context.tx(
                                   'رتبه و بردهای بازی', 'Game rating and wins'),
                           style: TextStyle(color: visual.muted, fontSize: 11)),
                     ]),
@@ -154,6 +165,22 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
             ],
           ),
         ),
+        if (_solo)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: NxSpace.md),
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: <ButtonSegment<bool>>[
+                ButtonSegment<bool>(value: false, label: Text(context.tx('همه‌ی دوران', 'All-time'))),
+                ButtonSegment<bool>(value: true, label: Text(context.tx('چالش امروز', "Today's challenge"))),
+              ],
+              selected: <bool>{_daily},
+              onSelectionChanged: (Set<bool> v) {
+                setState(() => _daily = v.first);
+                _load();
+              },
+            ),
+          ),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
@@ -254,7 +281,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                                                     fontWeight:
                                                         FontWeight.w800)),
                                             Text(
-                                              context.tx(
+                                              _solo
+                                                  ? context.tx('${r['plays'] ?? 1} اجرا', '${r['plays'] ?? 1} runs')
+                                                  : context.tx(
                                                   '${r['won'] ?? 0} برد از ${r['played'] ?? 0} بازی آنلاین',
                                                   '${r['won'] ?? 0} wins of ${r['played'] ?? 0} online games'),
                                               style: TextStyle(
@@ -266,7 +295,9 @@ class _LeaderboardPageState extends ConsumerState<LeaderboardPage> {
                                     Text(
                                       _game == null
                                           ? 'XP ${r['xp'] ?? 0}'
-                                          : '${r['rating'] ?? 1000}',
+                                          : _solo
+                                              ? '${r['score'] ?? 0}'
+                                              : '${r['rating'] ?? 1000}',
                                       style: TextStyle(
                                           fontWeight: FontWeight.w900,
                                           color: visual.accent),

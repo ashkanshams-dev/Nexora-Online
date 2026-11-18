@@ -1,0 +1,9 @@
+{
+  "game": "ludo_battle",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "_note": "uses the Ludo board art of the classic game; optional battle_bg for the frame"
+  }
+}

@@ -12,6 +12,7 @@ import '../../core/ui2/nx2_widgets.dart';
 import '../../core/ui2/oracle_mascot.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/game_registry.dart';
+import '../../games/arcade_kit/arcade_icon.dart';
 
 /// NEXORA ARCADE lobby (STEP_18): game pedestals, records, quick play.
 class ArcadePage extends ConsumerWidget {
@@ -50,6 +51,8 @@ class ArcadePage extends ConsumerWidget {
   }
 }
 
+int _groupOf(GameInfo g) => g.group != 0 ? g.group : (_kGameGroup[g.id] ?? 0);
+
 const Map<String, int> _kGameGroup = <String, int>{
   'finger_soccer': 1,
   'carrom': 1,
@@ -77,13 +80,15 @@ class _GamesGridState extends State<_GamesGrid> {
   Widget build(BuildContext context) {
     final ProfileService profile = widget.profile;
     final List<GameInfo> games = kGames
-        .where((GameInfo g) => _group == 0 || _kGameGroup[g.id] == _group)
+        .where((GameInfo g) => _group == 0 || _groupOf(g) == _group)
         .toList();
     final List<(String, String)> groups = <(String, String)>[
       ('همه', 'All'),
       ('ورزشی', 'Sports'),
       ('تخته‌ای', 'Board'),
       ('پارتی', 'Party'),
+      ('اکشن و مسابقه', 'Action & Racing'),
+      ('آرکید تک‌نفره', 'Solo Arcade'),
     ];
     return CustomScrollView(slivers: [
       SliverToBoxAdapter(
@@ -263,10 +268,15 @@ class _GameTile extends StatelessWidget {
                   child: Image.asset(AppAssets.pedestal(game.id),
                       cacheWidth: 360,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Icon(Icons.sports_esports,
-                          size: 60, color: game.accent)),
+                      errorBuilder: (_, __, ___) => ArcadeMedallion(game.id)),
                 ),
               ),
+              if (game.isNew)
+                const PositionedDirectional(
+                  top: 6,
+                  end: 6,
+                  child: NxPill(label: 'NEW', icon: Icons.auto_awesome_rounded, color: Nx2.gold),
+                ),
               if (game.supportsOnline)
                 const PositionedDirectional(
                   top: 6,
@@ -332,8 +342,7 @@ class _Records extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: GlassPanel(
               child: Row(children: [
-                Image.asset(AppAssets.pedestal(g.id),
-                    width: 46, cacheWidth: 140),
+                GamePedestal(g.id, size: 46, cacheWidth: 140),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

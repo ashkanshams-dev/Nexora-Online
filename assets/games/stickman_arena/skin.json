@@ -1,0 +1,10 @@
+{
+  "game": "stickman_arena",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "arena_bg": "arena background (landscape)",
+    "platform": "platform tile"
+  }
+}

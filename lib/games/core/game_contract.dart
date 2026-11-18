@@ -48,7 +48,11 @@ class GameLaunch {
     this.seed,
     this.net,
     this.tournamentMatchId,
+    this.daily = false,
   });
+
+  /// Daily challenge run: [seed] is today's shared seed (solo: score target, multiplayer: win vs Hard bots).
+  final bool daily;
 
   final String gameId;
   final GameMode mode;
@@ -109,7 +113,11 @@ class GameResult {
     this.winnerSeats,
     this.scores,
     this.tournamentMatchId,
+    this.durationMs,
   });
+
+  /// Length of the run (solo arcade games; used by the server-side score sanity check).
+  final int? durationMs;
 
   /// Tournament match id from [GameLaunch.tournamentMatchId] (null for normal matches).
   final String? tournamentMatchId;
@@ -148,7 +156,19 @@ class GameInfo {
     this.supportsLocal = true,
     this.defaultPlayers = 2,
     this.supportsOnline = false,
+    this.solo = false,
+    this.group = 0,
+    this.isNew = false,
   });
+
+  /// Single-player arcade game (quick start, daily challenge, global score board; no bots / rooms).
+  final bool solo;
+
+  /// Arcade lobby filter group: 1 sports, 2 board, 3 party, 4 action/racing, 5 solo arcade.
+  final int group;
+
+  /// Shown with a NEW ribbon in the lobby.
+  final bool isNew;
 
   /// Online multiplayer (lobby, rooms, matchmaking) is wired for this game.
   final bool supportsOnline;

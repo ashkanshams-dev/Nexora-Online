@@ -1,0 +1,14 @@
+{
+  "game": "obstacle_race",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "runner_0": "runner seat 1, side view, facing camera/up",
+    "runner_1": "runner seat 2",
+    "runner_2": "runner seat 3",
+    "runner_3": "runner seat 4",
+    "sweeper": "rotating sweeper arm",
+    "block": "falling block"
+  }
+}

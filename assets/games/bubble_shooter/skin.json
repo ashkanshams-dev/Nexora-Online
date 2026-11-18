@@ -1,0 +1,14 @@
+{
+  "game": "bubble_shooter",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "bubble_0": "bubble colour 1",
+    "bubble_1": "bubble colour 2",
+    "bubble_2": "bubble colour 3",
+    "bubble_3": "bubble colour 4",
+    "bubble_4": "bubble colour 5",
+    "bubble_5": "bubble colour 6"
+  }
+}

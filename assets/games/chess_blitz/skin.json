@@ -1,0 +1,21 @@
+{
+  "game": "chess_blitz",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "board": "board 8x8 (square)",
+    "wK": "white king",
+    "wQ": "white queen",
+    "wR": "white rook",
+    "wB": "white bishop",
+    "wN": "white knight",
+    "wP": "white pawn",
+    "bK": "black king",
+    "bQ": "black queen",
+    "bR": "black rook",
+    "bB": "black bishop",
+    "bN": "black knight",
+    "bP": "black pawn"
+  }
+}

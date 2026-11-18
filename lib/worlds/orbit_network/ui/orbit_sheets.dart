@@ -12,6 +12,7 @@ import '../models/arcade_refs.dart';
 import '../models/orbit_models.dart';
 import '../state/orbit_controller.dart';
 import 'orbit_bubbles.dart';
+import '../../../games/arcade_kit/arcade_icon.dart';
 
 /// Club badge ids usable as group/channel/community icons.
 const List<String> kOrbitBadges = <String>[
@@ -247,7 +248,7 @@ Future<String?> showArcadeGamePicker(BuildContext context) {
                     child: Image.asset(AppAssets.pedestal(g.id),
                         cacheWidth: 220,
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.sports_esports_rounded, size: 36)),
+                        errorBuilder: (_, __, ___) => ArcadeMedallion(g.id)),
                   ),
                   Text(gc.tx(g.nameFa, g.nameEn),
                       maxLines: 1,

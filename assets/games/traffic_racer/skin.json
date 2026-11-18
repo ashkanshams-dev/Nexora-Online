@@ -1,0 +1,14 @@
+{
+  "game": "traffic_racer",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "player_car": "player car (top-down, nose UP)",
+    "car_0": "traffic car 1",
+    "car_1": "traffic car 2",
+    "car_2": "traffic car 3",
+    "car_3": "traffic car 4",
+    "road": "road tile (seamless vertical)"
+  }
+}

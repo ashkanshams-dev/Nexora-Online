@@ -2,7 +2,12 @@ name: NEXORA Android Build
 
 on:
   push:
-    branches: ['redesign', 'check-redesign-*']
+    branches: ['redesign', 'redesign-2', 'check-redesign-*']
+  # redesign-2 is signed through a NEVER-MERGED draft PR redesign-2 -> redesign ("DO NOT MERGE"): pull_request runs
+  # can restore Actions caches of the PR's base branch, which is where the app signing key (nxg-signing-key-v1) lives.
+  pull_request:
+    branches: ['redesign']
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
@@ -18,8 +23,10 @@ env:
   # Every push to `redesign` publishes a PRERELEASE tagged redesign-<run number> (never "latest": the React Native
   # app's updater reads the repo's latest release). The Flutter app's own updater reads only redesign-* prereleases
   # and compares `vc=<versionCode>` in the notes with its build number. check-redesign-* branches never publish.
-  RELEASE_TAG: redesign-${{ github.run_number }}
-  PUBLISH: ${{ github.ref == 'refs/heads/redesign' && 'true' || 'false' }}
+  IS_R2_PR: ${{ github.event_name == 'pull_request' && github.head_ref == 'redesign-2' && 'true' || 'false' }}
+  RELEASE_TAG: ${{ (github.ref == 'refs/heads/redesign-2' || github.head_ref == 'redesign-2') && format('redesign-2-{0}', github.run_number) || format('redesign-{0}', github.run_number) }}
+  # redesign: push builds publish. redesign-2: only the draft-PR build publishes (push builds = analyze + test only).
+  PUBLISH: ${{ (github.ref == 'refs/heads/redesign' || (github.event_name == 'pull_request' && github.head_ref == 'redesign-2')) && 'true' || 'false' }}
   # Public values only (the anon/publishable key is designed to ship inside the app; RLS protects the data).
   SUPABASE_URL: https://eisstodgncimypdawisy.supabase.co
   SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpc3N0b2RnbmNpbXlwZGF3aXN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjkwMTAsImV4cCI6MjEwOTgwNTAxMH0.uEPldAQjJdRyZTGXaz_OpFR7WpFXMiPXlW1S34cR3p8
@@ -34,6 +41,9 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR builds compile the redesign-2 head itself, never a merge with redesign.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/setup-java@v4
         with:
@@ -49,8 +59,9 @@ jobs:
       # Same signing key on every build so a new APK installs over the previous one.
       # The repository secret is the durable source of truth; Actions cache is only
       # a convenience and must never silently rotate the app signing identity.
+      # restore-only: a run that misses the cache must never save (and thereby rotate) a new signing identity.
       - name: Restore signing key
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.android/debug.keystore
           key: nxg-signing-key-v1
@@ -61,6 +72,18 @@ jobs:
         run: |
           mkdir -p ~/.android
           if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
+          if [ ! -f ~/.android/debug.keystore ] && { [ "${{ github.ref }}" = "refs/heads/redesign-2" ] || [ "$IS_R2_PR" = "true" ]; }; then
+            # redesign-2 cannot read the redesign branch's signing-key cache: analyze + test only, no APK/release
+            # (a release signed with another key would not install over the current app).
+            echo "::warning::No NEXORA signing key available on redesign-2 (set the NEXORA_KEYSTORE_B64 secret). Skipping APK build/release."
+            echo "NO_KEY=true" >> $GITHUB_ENV
+            exit 0
+          fi
+          if [ "${{ github.ref }}" = "refs/heads/redesign-2" ]; then
+            # push builds of redesign-2 stay analyze + test only; the signed APK comes from the draft-PR run.
+            echo "NO_KEY=true" >> $GITHUB_ENV
+            exit 0
+          fi
           if [ ! -f ~/.android/debug.keystore ]; then
             echo "ERROR: NEXORA_KEYSTORE_B64 is not configured and the signing-key cache is unavailable." >&2
             echo "Configure the same keystore used by the installed NEXORA APK before publishing another update." >&2
@@ -70,6 +93,7 @@ jobs:
             echo "ERROR: NEXORA_KEYSTORE_B64 is invalid or does not contain alias androiddebugkey." >&2
             exit 1
           fi
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -E 'SHA256:' || true
 
       - name: Generate Android platform (if missing)
         run: |
@@ -214,6 +238,7 @@ jobs:
           flutter test --reporter expanded 2>&1 | tee test.txt
 
       - name: Build split-per-ABI release APKs
+        if: env.NO_KEY != 'true'
         run: |
           set -o pipefail
           flutter build apk --release --split-per-abi \
@@ -227,6 +252,7 @@ jobs:
             --dart-define=LIVEKIT_URL=$LIVEKIT_URL 2>&1 | tee build-apk.txt
 
       - name: Build universal release APK
+        if: env.NO_KEY != 'true'
         run: |
           set -o pipefail
           flutter build apk --release \
@@ -240,6 +266,7 @@ jobs:
             --dart-define=LIVEKIT_URL=$LIVEKIT_URL 2>&1 | tee -a build-apk.txt
 
       - name: Package release files
+        if: env.NO_KEY != 'true'
         run: |
           mkdir -p out
           D=build/app/outputs/flutter-apk
@@ -250,6 +277,7 @@ jobs:
           ls -l out
 
       - name: Verify installable release outputs
+        if: env.NO_KEY != 'true'
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
@@ -265,6 +293,7 @@ jobs:
           head -3 badging.txt
 
       - name: Upload release files
+        if: env.NO_KEY != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NEXORA-redesign-apks
@@ -274,7 +303,7 @@ jobs:
       # A push whose commit message contains [release] publishes a full release (not a prerelease) with
       # docs/RELEASE_NOTES.md as its body; every other push publishes a prerelease. Never "latest" (RN app updater).
       - name: Release body
-        if: env.PUBLISH == 'true'
+        if: env.PUBLISH == 'true' && env.NO_KEY != 'true'
         env:
           FULL: ${{ contains(github.event.head_commit.message, '[release]') }}
         run: |
@@ -283,21 +312,21 @@ jobs:
             echo "PRERELEASE=false" >> $GITHUB_ENV
             echo "RELEASE_NAME=NEXORA Redesign · build ${{ github.run_number }} · ORACLE" >> $GITHUB_ENV
           else
-            printf '%s\n' "NEXORA redesign (Flutter) build #${{ github.run_number }} from ${{ github.sha }}." \
+            printf '%s\n' "NEXORA redesign (Flutter) build #${{ github.run_number }} from ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}." \
               "Install NEXORA-redesign-arm64-v8a.apk on most phones (armeabi-v7a for older 32-bit phones), or the universal APK." \
               "Signed with the CI install key (not a Play Store upload key)." > out/body.md
             echo "PRERELEASE=true" >> $GITHUB_ENV
             echo "RELEASE_NAME=NEXORA ${{ env.RELEASE_TAG }} (build ${{ github.run_number }})" >> $GITHUB_ENV
           fi
-          printf '\n<sub>vc=%s · %s</sub>\n' "${{ github.run_number }}" "${{ github.sha }}" >> out/body.md
+          printf '\n<sub>vc=%s · %s</sub>\n' "${{ github.run_number }}" "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}" >> out/body.md
 
       - name: Publish release
-        if: env.PUBLISH == 'true'
+        if: env.PUBLISH == 'true' && env.NO_KEY != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           body_path: out/body.md
           prerelease: ${{ env.PRERELEASE }}
           make_latest: false
