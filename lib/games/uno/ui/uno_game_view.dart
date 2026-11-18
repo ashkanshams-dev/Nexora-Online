@@ -350,7 +350,7 @@ class _UnoGameViewState extends State<UnoGameView>
       math.min(84.0, MediaQuery.of(context).size.width / 4.8);
 
   void _haptic() {
-    if (_l.soundOn) HapticFeedback.selectionClick();
+    if (_l.hapticsOn) HapticFeedback.selectionClick();
   }
 
   // ------------------------------------------------------------- flights
@@ -507,13 +507,13 @@ class _UnoGameViewState extends State<UnoGameView>
         case UnoEventType.nxCall:
           notes.add(_tx('${_name(e.player)}: NX!', '${_name(e.player)}: NX!'));
           noteColor = NxColors.gold;
-          if (_l.soundOn) HapticFeedback.mediumImpact();
+          if (_l.hapticsOn) HapticFeedback.mediumImpact();
           break;
         case UnoEventType.nxCaught:
           notes.add(_tx('${_name(e.player)} NX نگفت! +۲ جریمه',
               '${_name(e.player)} forgot NX! +2 penalty'));
           noteColor = NxColors.danger;
-          if (_l.soundOn) HapticFeedback.heavyImpact();
+          if (_l.hapticsOn) HapticFeedback.heavyImpact();
           break;
         case UnoEventType.reshuffle:
           notes.add(_tx('دسته بُر خورد', 'Discard pile reshuffled'));

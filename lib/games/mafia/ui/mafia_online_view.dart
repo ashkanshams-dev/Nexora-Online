@@ -195,7 +195,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
     _apply(m);
     if (m.replay) return;
     if (_stage != before || _e.day != dayBefore) {
-      if (_l.soundOn) HapticFeedback.mediumImpact();
+      if (_l.hapticsOn) HapticFeedback.mediumImpact();
     }
     setState(() {});
     _checkOver();

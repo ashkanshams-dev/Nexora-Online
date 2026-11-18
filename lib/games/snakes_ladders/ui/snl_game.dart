@@ -234,7 +234,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
       Duration(milliseconds: _l.reducedMotion ? (ms * 0.6).round() : ms));
 
   void _haptic({bool heavy = false}) {
-    if (!_l.soundOn) return;
+    if (!_l.hapticsOn) return;
     if (heavy) {
       HapticFeedback.mediumImpact();
     } else {

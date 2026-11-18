@@ -42,6 +42,7 @@ class GameLaunch {
     required this.fancyEffects,
     required this.reducedMotion,
     required this.soundOn,
+    this.hapticsOn = true,
     required this.onFinish,
     this.playerCount = 2,
     this.skins = const {},
@@ -62,6 +63,9 @@ class GameLaunch {
   final bool fancyEffects;
   final bool reducedMotion;
   final bool soundOn;
+
+  /// Haptic feedback is independent from game audio.
+  final bool hapticsOn;
 
   /// Total seats (2..6 depending on the game). Seat 0 is always the local player.
   final int playerCount;

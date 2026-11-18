@@ -274,7 +274,7 @@ class _BilliardsGameState extends State<BilliardsGame>
 
   // ---------------------------------------------------------------- helpers
   void _haptic(int level) {
-    if (!_l.soundOn) return;
+    if (!_l.hapticsOn) return;
     final int now = DateTime.now().millisecondsSinceEpoch;
     if (level == 0 && now - _lastHapticMs < 90) return;
     _lastHapticMs = now;

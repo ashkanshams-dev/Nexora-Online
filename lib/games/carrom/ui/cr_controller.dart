@@ -418,7 +418,7 @@ class CrController extends ChangeNotifier {
     aiming = true;
     _panStart = toBoard(local);
     pull = Offset.zero;
-    if (launch.soundOn) HapticFeedback.selectionClick();
+    if (launch.hapticsOn) HapticFeedback.selectionClick();
   }
 
   void onPanUpdate(Offset local) {
@@ -469,7 +469,7 @@ class CrController extends ChangeNotifier {
     trail.clear();
     _stage = _BotStage.idle;
     _botShot = null;
-    if (launch.soundOn) HapticFeedback.mediumImpact();
+    if (launch.hapticsOn) HapticFeedback.mediumImpact();
     _pushHud();
   }
 
@@ -631,7 +631,7 @@ class CrController extends ChangeNotifier {
           size: 3 + 3 * k,
           life: 0.3 + 0.25 * k);
       if (s > 1300) fx.shake(2 + 6 * k);
-      if (launch.soundOn && _hapticCooldown <= 0 && s > 380) {
+      if (launch.hapticsOn && _hapticCooldown <= 0 && s > 380) {
         _hapticCooldown = 0.08;
         HapticFeedback.lightImpact();
       }
@@ -655,7 +655,7 @@ class CrController extends ChangeNotifier {
       fx.burst(p.dx, p.dy, count: 22, speed: 300, color: c, size: 6, life: 0.7);
       fx.burst(p.dx, p.dy,
           count: 10, speed: 200, color: kCrGold, size: 4, life: 0.6);
-      if (launch.soundOn) HapticFeedback.mediumImpact();
+      if (launch.hapticsOn) HapticFeedback.mediumImpact();
     }
   }
 
@@ -685,14 +685,14 @@ class CrController extends ChangeNotifier {
       _say('خطا! استرایکر افتاد — یک مهره برگشت',
           'Foul! Striker pocketed — a coin returns', kCrDanger);
       fx.doFlash(kCrDanger, 0.35);
-      if (launch.soundOn) HapticFeedback.heavyImpact();
+      if (launch.hapticsOn) HapticFeedback.heavyImpact();
     } else if (o.queenCovered) {
       _banner('ملکه پوشش داده شد!', 'Queen covered!', kCrGold);
       fx.doFlash(kCrGold, 0.45);
       fx.shake(8);
       fx.burst(CrConfig.centerX, CrConfig.centerY,
           count: 40, speed: 520, color: kCrGold, size: 7, life: 1.0);
-      if (launch.soundOn) HapticFeedback.heavyImpact();
+      if (launch.hapticsOn) HapticFeedback.heavyImpact();
     } else if (o.queenPending) {
       _say(
           'ملکه افتاد! حالا با یک مهره‌ی خودی پوشش بده',

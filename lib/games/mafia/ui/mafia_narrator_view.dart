@@ -101,7 +101,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   String _join(Iterable<String> xs) => xs.join(_fa ? '، ' : ', ');
 
   void _haptic() {
-    if (_l.soundOn) HapticFeedback.mediumImpact();
+    if (_l.hapticsOn) HapticFeedback.mediumImpact();
   }
 
   // ===================================================================== flow
@@ -256,7 +256,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
       if (!mounted || _paused) return;
       if (_secondsLeft <= 0) return;
       setState(() => _secondsLeft--);
-      if (_secondsLeft == 0 && _l.soundOn) HapticFeedback.heavyImpact();
+      if (_secondsLeft == 0 && _l.hapticsOn) HapticFeedback.heavyImpact();
     });
   }
 
@@ -282,7 +282,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
         _defendants.add(id);
       }
     });
-    if (_l.soundOn) HapticFeedback.selectionClick();
+    if (_l.hapticsOn) HapticFeedback.selectionClick();
   }
 
   void _startDefense() {
@@ -586,7 +586,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
             _peeking = true;
             _peekedOnce = true;
           });
-          if (_l.soundOn) HapticFeedback.selectionClick();
+          if (_l.hapticsOn) HapticFeedback.selectionClick();
         },
         onPointerUp: (PointerUpEvent _) => setState(() => _peeking = false),
         onPointerCancel: (PointerCancelEvent _) => setState(() => _peeking = false),
@@ -715,7 +715,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
         GestureDetector(
           onTap: () {
             setState(() => _sel = id);
-            if (_l.soundOn) HapticFeedback.selectionClick();
+            if (_l.hapticsOn) HapticFeedback.selectionClick();
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),

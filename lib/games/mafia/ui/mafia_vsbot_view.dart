@@ -100,7 +100,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
   }
 
   void _haptic() {
-    if (_l.soundOn) HapticFeedback.mediumImpact();
+    if (_l.hapticsOn) HapticFeedback.mediumImpact();
   }
 
   double _hue(int id) => id == MafiaMatch.humanId ? 265 : (_m.personas[id]?.hue ?? 200);
@@ -256,7 +256,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
         _voteFeed.add(en);
         if (en.value != null) _liveVotes[en.value!] = (_liveVotes[en.value!] ?? 0) + 1;
       });
-      if (en.value != null && _l.soundOn) HapticFeedback.selectionClick();
+      if (en.value != null && _l.hapticsOn) HapticFeedback.selectionClick();
       _after(420, () => step(i + 1));
     }
 
@@ -586,7 +586,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
             center: _centerHolo(),
             onTap: (int id) {
               setState(() => _selected = id);
-              if (_l.soundOn) HapticFeedback.selectionClick();
+              if (_l.hapticsOn) HapticFeedback.selectionClick();
             },
           ),
         ),

@@ -204,7 +204,7 @@ class _BermudaViewState extends State<BermudaView>
 
   @override
   void vib(List<int> pattern) {
-    if (!launch.soundOn) return;
+    if (!launch.hapticsOn) return;
     final int total = pattern.fold(0, (int a, int b) => a + b);
     if (total >= 100) {
       HapticFeedback.heavyImpact();

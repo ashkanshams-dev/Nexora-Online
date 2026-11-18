@@ -153,7 +153,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   int get _elapsedMs => (_clock.value * QuizEngine.timeLimitMs).round();
 
   void _haptic([bool heavy = false]) {
-    if (!_l.soundOn) return;
+    if (!_l.hapticsOn) return;
     if (heavy) {
       HapticFeedback.mediumImpact();
     } else {
