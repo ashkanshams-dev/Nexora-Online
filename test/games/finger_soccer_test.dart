@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexora/games/finger_soccer/core/bm_engine.dart';
+import 'package:nexora/games/finger_soccer/core/bm_data.dart';
 
 class _Hooks implements BmHooks {
   final List<String> events = <String>[];
@@ -148,5 +149,13 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 50));
     expect(tester.takeException(), isNull);
+  });
+
+  test('ANIX test ball uses all sixteen frames in sheet order', () {
+    final BmAnimBall? ball = kBmAnimBalls[38];
+    expect(ball, isNotNull);
+    expect(ball!.sheet, 'assets/games/finger_soccer/nx_ball_test_16.webp');
+    expect(ball.frames, 16);
+    expect(ball.frameMs, 100);
   });
 }
