@@ -47,6 +47,7 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
   double _endTimer = -1;
   String _banner = '';
   late final List<Offset> _tufts;
+  final List<Offset> _trees = <Offset>[];
 
   GameLaunch get l => widget.launch;
   int get me => l.mySeat;
@@ -65,6 +66,11 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
     );
     final math.Random r = math.Random(seed);
     _tufts = <Offset>[for (int i = 0; i < 260; i++) Offset(r.nextDouble() * 3600 - 1800, r.nextDouble() * 2600 - 1300)];
+    for (int i = 0; i < 400 && _trees.length < 110; i++) {
+      final V2 p = V2(r.nextDouble() * 3800 - 1900, r.nextDouble() * 2800 - 1400);
+      final int ni = race.track.nearest(p);
+      if (p.dist(race.track.at(ni)) > race.track.width / 2 + 110) _trees.add(Offset(p.x, p.y));
+    }
     unawaited(skin.load().then((_) => mounted ? setState(() {}) : null));
     final NetLink? n = l.net;
     if (n != null) {
@@ -232,7 +238,7 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
     canvas.save();
     // chase camera: kart near bottom third, facing up
     canvas.translate(size.width / 2 + sh.dx, size.height * 0.68 + sh.dy);
-    final double zoom = (size.width / 430).clamp(0.75, 1.4) * (1 - math.min(0.12, k.speed / 3800));
+    final double zoom = (size.width / 360).clamp(0.85, 1.6) * (1 - math.min(0.12, k.speed / 3800));
     canvas.scale(zoom);
     canvas.rotate(-k.heading - math.pi / 2);
     canvas.translate(-k.pos.x, -k.pos.y);
@@ -252,6 +258,7 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
     for (final Kart o in sorted) {
       _paintKart(canvas, o);
     }
+    _paintTrees(canvas, k.heading);
     for (final Missile m in race.missiles) {
       final Offset c = Offset(m.pos.x, m.pos.y);
       paintGlow(canvas, c, 26, const Color(0xFFFF6A2A), 0.7);
@@ -278,10 +285,15 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
 
   void _paintWorld(Canvas canvas) {
     final KartTrack t = race.track;
-    // grass texture
-    final Paint tuft = Paint()..color = const Color(0xFF2E8B3A);
+    // mowed-lawn stripes + grass tufts
+    final Paint stripe = Paint()..color = const Color(0xFF237A31);
+    for (double x = -2200; x < 2200; x += 240) {
+      canvas.drawRect(Rect.fromLTWH(x, -1700, 120, 3400), stripe);
+    }
+    final Paint tuft = Paint()..color = const Color(0xFF34A045);
     for (final Offset o in _tufts) {
-      canvas.drawCircle(o, 7, tuft);
+      canvas.drawCircle(o, 6, tuft);
+      canvas.drawCircle(o + const Offset(7, 3), 4, tuft);
     }
     final Path path = Path()..moveTo(t.at(0).x, t.at(0).y);
     for (int i = 1; i <= t.n; i++) {
@@ -363,6 +375,20 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
     canvas.restore();
   }
 
+  void _paintTrees(Canvas canvas, double heading) {
+    final Kart k = race.karts[me];
+    for (final Offset t in _trees) {
+      if ((t.dx - k.pos.x).abs() > 900 || (t.dy - k.pos.y).abs() > 900) continue;
+      final double h = 0.6 + ((t.dx * 7 + t.dy * 13).abs() % 40) / 100;
+      paintShadow(canvas, t + Offset(10 * h, 12 * h), 70 * h, 52 * h, 0.35);
+      for (int i = 0; i < 3; i++) {
+        final Offset o = t + Offset(math.cos(i * 2.1) * 12 * h, math.sin(i * 2.1) * 12 * h);
+        paintSphere(canvas, o, 22 * h, i.isEven ? const Color(0xFF1E7A2E) : const Color(0xFF2A9140), shadow: false, gloss: 0.35);
+      }
+      paintSphere(canvas, t, 18 * h, const Color(0xFF3DB352), shadow: false, gloss: 0.5);
+    }
+  }
+
   void _paintBox(Canvas canvas, Offset c) {
     canvas.save();
     canvas.translate(c.dx, c.dy + math.sin(time * 3 + c.dx) * 2);
@@ -375,7 +401,7 @@ class _KartGameState extends ArcadeLoopState<KartGame> {
           Paint()
             ..shader = ui.Gradient.sweep(Offset.zero, const <Color>[
               Color(0xFFFF4F9A), Color(0xFFFFD34E), Color(0xFF39E1FF), Color(0xFFB98CFF), Color(0xFFFF4F9A)
-            ]));
+            ], const <double>[0, 0.25, 0.5, 0.75, 1]));
       canvas.drawRRect(RRect.fromRectAndRadius(r.deflate(3), const Radius.circular(5)),
           Paint()..color = const Color(0x66FFFFFF));
       canvas.rotate(-time * 1.6);

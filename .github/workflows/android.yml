@@ -61,6 +61,13 @@ jobs:
         run: |
           mkdir -p ~/.android
           if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
+          if [ ! -f ~/.android/debug.keystore ] && [ "${{ github.ref }}" = "refs/heads/redesign-2" ]; then
+            # redesign-2 cannot read the redesign branch's signing-key cache: analyze + test only, no APK/release
+            # (a release signed with another key would not install over the current app).
+            echo "::warning::No NEXORA signing key available on redesign-2 (set the NEXORA_KEYSTORE_B64 secret). Skipping APK build/release."
+            echo "NO_KEY=true" >> $GITHUB_ENV
+            exit 0
+          fi
           if [ ! -f ~/.android/debug.keystore ]; then
             echo "ERROR: NEXORA_KEYSTORE_B64 is not configured and the signing-key cache is unavailable." >&2
             echo "Configure the same keystore used by the installed NEXORA APK before publishing another update." >&2
@@ -214,6 +221,7 @@ jobs:
           flutter test --reporter expanded 2>&1 | tee test.txt
 
       - name: Build split-per-ABI release APKs
+        if: env.NO_KEY != 'true'
         run: |
           set -o pipefail
           flutter build apk --release --split-per-abi \
@@ -227,6 +235,7 @@ jobs:
             --dart-define=LIVEKIT_URL=$LIVEKIT_URL 2>&1 | tee build-apk.txt
 
       - name: Build universal release APK
+        if: env.NO_KEY != 'true'
         run: |
           set -o pipefail
           flutter build apk --release \
@@ -240,6 +249,7 @@ jobs:
             --dart-define=LIVEKIT_URL=$LIVEKIT_URL 2>&1 | tee -a build-apk.txt
 
       - name: Package release files
+        if: env.NO_KEY != 'true'
         run: |
           mkdir -p out
           D=build/app/outputs/flutter-apk
@@ -250,6 +260,7 @@ jobs:
           ls -l out
 
       - name: Verify installable release outputs
+        if: env.NO_KEY != 'true'
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)
@@ -265,6 +276,7 @@ jobs:
           head -3 badging.txt
 
       - name: Upload release files
+        if: env.NO_KEY != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: NEXORA-redesign-apks
@@ -274,7 +286,7 @@ jobs:
       # A push whose commit message contains [release] publishes a full release (not a prerelease) with
       # docs/RELEASE_NOTES.md as its body; every other push publishes a prerelease. Never "latest" (RN app updater).
       - name: Release body
-        if: env.PUBLISH == 'true'
+        if: env.PUBLISH == 'true' && env.NO_KEY != 'true'
         env:
           FULL: ${{ contains(github.event.head_commit.message, '[release]') }}
         run: |
@@ -292,7 +304,7 @@ jobs:
           printf '\n<sub>vc=%s · %s</sub>\n' "${{ github.run_number }}" "${{ github.sha }}" >> out/body.md
 
       - name: Publish release
-        if: env.PUBLISH == 'true'
+        if: env.PUBLISH == 'true' && env.NO_KEY != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}

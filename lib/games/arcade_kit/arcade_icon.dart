@@ -119,7 +119,7 @@ class _MedallionPainter extends CustomPainter {
             const Color(0xFFFFE7A8),
             const Color(0xFF7A5420),
             const Color(0xFFFFF1C9),
-          ]));
+          ], const <double>[0, 0.25, 0.5, 0.75, 1]));
     // inner disc
     final double ir = r * 0.86;
     canvas.drawCircle(

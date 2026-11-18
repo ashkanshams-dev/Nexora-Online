@@ -295,27 +295,28 @@ void paintBlock(Canvas canvas, Rect r, Color base, {double radius = 6, double de
   final Color hi = h.withLightness((h.lightness + 0.18).clamp(0.0, 0.92)).toColor();
   final Color lo = h.withLightness((h.lightness - 0.22).clamp(0.02, 1.0)).toColor();
   if (shadow) {
-    canvas.drawRRect(RRect.fromRectAndRadius(r.shift(Offset(0, depth + 2)), Radius.circular(radius)),
+    canvas.drawRRect(RRect.fromRectAndRadius(r.shift(Offset(0, depth * 1.4)), Radius.circular(radius)),
         Paint()
           ..color = const Color(0x66000000)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, depth + 1));
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, depth.abs() + math.min(1, r.shortestSide * 0.05)));
   }
   if (glow > 0) {
-    canvas.drawRRect(RRect.fromRectAndRadius(r.inflate(2), Radius.circular(radius + 2)),
+    canvas.drawRRect(RRect.fromRectAndRadius(r.inflate(math.min(2, r.shortestSide * 0.06)), Radius.circular(radius)),
         Paint()
           ..color = base.withValues(alpha: 0.6 * glow)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * glow));
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, math.min(10, r.shortestSide * 0.3) * glow));
   }
   canvas.drawRRect(RRect.fromRectAndRadius(r.shift(Offset(0, depth)), Radius.circular(radius)), Paint()..color = lo);
   canvas.drawRRect(
       RRect.fromRectAndRadius(r, Radius.circular(radius)),
-      Paint()..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter, <Color>[hi, base]));
+      Paint()..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter, depth < 0 ? <Color>[base, hi] : <Color>[hi, base]));
+  final double hw = math.min(1.2, r.shortestSide * 0.04);
   canvas.drawRRect(
-      RRect.fromRectAndRadius(r.deflate(1.2), Radius.circular(math.max(0, radius - 1))),
+      RRect.fromRectAndRadius(r.deflate(hw), Radius.circular(math.max(0, radius - hw))),
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..shader = ui.Gradient.linear(r.topCenter, r.bottomCenter,
+        ..strokeWidth = hw
+        ..shader = ui.Gradient.linear(depth < 0 ? r.bottomCenter : r.topCenter, depth < 0 ? r.topCenter : r.bottomCenter,
             <Color>[const Color(0x88FFFFFF), const Color(0x00FFFFFF)]));
 }
 
