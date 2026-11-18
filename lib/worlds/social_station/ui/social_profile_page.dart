@@ -103,6 +103,44 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
     }
   }
 
+  Future<void> _showFollowRequests() async {
+    final r = _repo;
+    if (r == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext sheet) => FutureBuilder<List<SocialFollowRequest>>(
+        future: r.pendingFollowRequests(),
+        builder: (BuildContext _, AsyncSnapshot<List<SocialFollowRequest>> snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) return const SizedBox(height: 220, child: Center(child: CircularProgressIndicator()));
+          if (snapshot.hasError) return const SizedBox(height: 220, child: Center(child: Text('دریافت درخواست‌ها ناموفق بود')));
+          final requests = snapshot.data ?? <SocialFollowRequest>[];
+          return SafeArea(child: SizedBox(height: 480, child: Column(children: <Widget>[
+            const Padding(padding: EdgeInsets.all(16), child: Text('درخواست‌های دنبال‌کردن', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+            Expanded(child: requests.isEmpty
+                ? const Center(child: Text('درخواست جدیدی وجود ندارد'))
+                : ListView.builder(itemCount: requests.length, itemBuilder: (_, int i) {
+                    final request = requests[i];
+                    return ListTile(
+                      leading: request.avatarUrl == null ? const CircleAvatar(child: Icon(Icons.person)) : CircleAvatar(backgroundImage: NetworkImage(request.avatarUrl!)),
+                      title: Text(request.displayName.isEmpty ? request.username : request.displayName),
+                      subtitle: Text('@${request.username}'),
+                      trailing: Wrap(spacing: 4, children: <Widget>[
+                        IconButton(tooltip: 'قبول', icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: () async {
+                          try { await r.respondFollowRequest(request.requester, accept: true); if (sheet.mounted) Navigator.pop(sheet); if (mounted) _snack('درخواست پذیرفته شد'); } catch (_) { if (mounted) _snack('پذیرش درخواست ناموفق بود'); }
+                        }),
+                        IconButton(tooltip: 'رد', icon: const Icon(Icons.cancel, color: Colors.red), onPressed: () async {
+                          try { await r.respondFollowRequest(request.requester, accept: false); if (sheet.mounted) Navigator.pop(sheet); if (mounted) _snack('درخواست رد شد'); } catch (_) { if (mounted) _snack('رد درخواست ناموفق بود'); }
+                        }),
+                      ]),
+                    );
+                  })),
+          ])));
+        },
+      ),
+    );
+  }
+
   void _snack(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
@@ -111,6 +149,7 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
     final p = _profile;
     return Scaffold(
       appBar: AppBar(title: Text(p == null ? 'Profile' : '@${p.username}'), actions: <Widget>[
+        if (_mine && p != null) IconButton(onPressed: _showFollowRequests, tooltip: 'درخواست‌های دنبال‌کردن', icon: const Icon(Icons.person_add_alt_1_rounded)),
         if (_mine && p != null) IconButton(onPressed: _edit, icon: const Icon(Icons.edit_rounded)),
       ]),
       body: p == null ? Center(child: Text(_error ?? 'خطا')) : RefreshIndicator(

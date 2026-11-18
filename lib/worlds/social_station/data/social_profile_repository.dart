@@ -45,6 +45,20 @@ class SocialNotification {
   factory SocialNotification.fromJson(Map<String, dynamic> j) => SocialNotification(id: '${j['id']}', kind: '${j['kind']}', actor: j['actor'] as String?, createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0), read: j['read_at'] != null);
 }
 
+class SocialFollowRequest {
+  const SocialFollowRequest({required this.requester, required this.username, required this.displayName, this.avatarUrl, required this.createdAt});
+  final String requester, username, displayName;
+  final String? avatarUrl;
+  final DateTime createdAt;
+  factory SocialFollowRequest.fromJson(Map<String, dynamic> j) => SocialFollowRequest(
+        requester: '${j['requester']}',
+        username: '${j['username'] ?? ''}',
+        displayName: '${j['display_name'] ?? ''}',
+        avatarUrl: j['avatar_url'] as String?,
+        createdAt: DateTime.tryParse('${j['created_at'] ?? ''}')?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0),
+      );
+}
+
 class SocialProfileRepository {
   SocialProfileRepository(this.client);
   final SupabaseClient client;
@@ -71,6 +85,12 @@ class SocialProfileRepository {
     return SocialProfile.fromJson(Map<String, dynamic>.from(row as Map));
   }
 
+  Future<List<SocialFollowRequest>> pendingFollowRequests() async {
+    final dynamic result = await client.rpc('nx_social_pending_follow_requests');
+    final List<dynamic> rows = result is List ? result : <dynamic>[];
+    return rows.map((dynamic row) => SocialFollowRequest.fromJson(Map<String, dynamic>.from(row as Map))).toList();
+  }
+
   Future<List<SocialUser>> _usersFor(String relationColumn, String userId) async {
     final String filterColumn = relationColumn == 'follower' ? 'followee' : 'follower';
     final List<dynamic> relations = await client.from('follows').select(relationColumn).eq(filterColumn, userId).order('created_at', ascending: false).limit(100);
@@ -85,7 +105,7 @@ class SocialProfileRepository {
   Future<List<SocialUser>> following(String userId) => _usersFor('followee', userId);
 
   Future<List<SocialPost>> posts(String userId) async {
-    final List<dynamic> rows = await client.from('nx_posts').select('id, author, text, created_at').eq('author', userId).order('created_at', ascending: false).limit(50);
+    final List<dynamic> rows = await client.rpc('nx_social_posts', params: <String, dynamic>{'p_user': userId});
     return rows.map((dynamic row) => SocialPost.fromJson(Map<String, dynamic>.from(row as Map))).toList();
   }
 
