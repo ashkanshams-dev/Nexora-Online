@@ -43,14 +43,18 @@ class SupabaseSocialRepository implements SocialRepository {
 
   Future<Map<String, String>> _names(List<String> ids) async {
     if (ids.isEmpty) return <String, String>{};
-    final List<dynamic> rows = await c.from('profiles').select('id, username').inFilter('id', ids);
+    final List<dynamic> rows = await c.from('profiles').select('id, username').inFilter('id', ids).limit(500);
     return <String, String>{for (final dynamic r in rows) '${(r as Map)['id']}': '${r['username'] ?? 'Pilot'}'};
   }
 
   Future<List<Community>> _build(List<dynamic> rows) async {
     if (rows.isEmpty) return <Community>[];
     final List<String> ids = rows.map((dynamic r) => '${(r as Map)['id']}').toList();
-    final List<dynamic> mem = await c.from('nx_community_members').select().inFilter('community_id', ids);
+    final List<dynamic> mem = await c
+        .from('nx_community_members')
+        .select('community_id, user_id, role, joined_at')
+        .inFilter('community_id', ids)
+        .limit(500);
     final Map<String, String> names = await _names(mem.map((dynamic m) => '${(m as Map)['user_id']}').toSet().toList());
     final List<Community> out = <Community>[];
     for (final dynamic raw in rows) {
@@ -97,11 +101,11 @@ class SupabaseSocialRepository implements SocialRepository {
   Future<List<Community>> communities() async {
     final List<Community> offline = await local.communities();
     try {
-      final List<dynamic> mine = await c.from('nx_community_members').select('community_id').eq('user_id', me);
+      final List<dynamic> mine = await c.from('nx_community_members').select('community_id').eq('user_id', me).limit(100);
       final List<String> ids = mine.map((dynamic r) => '${(r as Map)['community_id']}').toList();
       _cache.clear();
       if (ids.isNotEmpty) {
-        final List<dynamic> rows = await c.from('nx_communities').select().inFilter('id', ids);
+        final List<dynamic> rows = await c.from('nx_communities').select().inFilter('id', ids).limit(100);
         await _build(rows);
       }
     } catch (_) {
@@ -115,7 +119,7 @@ class SupabaseSocialRepository implements SocialRepository {
   /// Public (non-private) communities I am not in yet, newest first, for discovery.
   Future<List<Community>> discover({String query = ''}) async {
     final String q = query.trim().replaceAll('%', '');
-    final List<dynamic> mine = await c.from('nx_community_members').select('community_id').eq('user_id', me);
+    final List<dynamic> mine = await c.from('nx_community_members').select('community_id').eq('user_id', me).limit(100);
     final Set<String> ids = mine.map((dynamic r) => '${(r as Map)['community_id']}').toSet();
     var req = c.from('nx_communities').select().neq('kind', 'private');
     if (q.isNotEmpty) req = req.ilike('name', '%$q%');
@@ -241,7 +245,8 @@ class SupabaseSocialRepository implements SocialRepository {
 
   Future<bool> kick(String id, String targetId) async {
     try {
-      await c.rpc('nx_community_kick', params: <String, dynamic>{'p_id': id, 'p_user': targetId});
+      await c.rpc('nx_community_kick',
+          params: <String, dynamic>{'p_id': id, 'p_user': targetId == explorerId ? me : targetId});
       return true;
     } catch (_) {
       return false;

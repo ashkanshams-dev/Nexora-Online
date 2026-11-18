@@ -81,6 +81,12 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
       return;
     }
     if (ref.read(socialControllerProvider).isOnline) {
+      final SocialController ctrl = ref.read(socialControllerProvider);
+      if (ctrl.lastError == 'social_join_failed') {
+        socialSnack(context, 'اتصال به سرور برای پیوستن ناموفق بود؛ دوباره تلاش کن.',
+            'The server could not complete the join. Try again.');
+        return;
+      }
       socialSnack(context, 'جامعه‌ای با این کد پیدا نشد.',
           'No community has this code.');
       return;

@@ -36,6 +36,7 @@ class SocialController extends ChangeNotifier {
   bool get isOnline => online != null;
   final DateTime Function() _clock;
   bool loading = true;
+  String? lastError;
   bool _disposed = false;
   List<Community> communities = <Community>[];
 
@@ -57,9 +58,15 @@ class SocialController extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    communities = await repo.communities();
-    loading = false;
-    _notify();
+    try {
+      communities = await repo.communities();
+      lastError = null;
+    } catch (_) {
+      lastError = 'social_refresh_failed';
+    } finally {
+      loading = false;
+      _notify();
+    }
   }
 
   Future<bool> _mutate(String communityId, bool Function(Community c) change) async {
@@ -138,7 +145,17 @@ class SocialController extends ChangeNotifier {
     return true;
   }
 
-  Future<Community?> findByCode(String code) => repo.byInviteCode(code);
+  Future<Community?> findByCode(String code) async {
+    try {
+      final Community? result = await repo.byInviteCode(code);
+      lastError = null;
+      return result;
+    } catch (_) {
+      lastError = 'social_join_failed';
+      _notify();
+      return null;
+    }
+  }
 
   /// Drops a community invite card into ORBIT NETWORK's shared inbox.
   Future<void> shareInviteToOrbit(Community c, String text) => OrbitSharedInbox(LocalStore.instance).add(SharedItem(
