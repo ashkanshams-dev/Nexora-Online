@@ -11,6 +11,7 @@ import 'package:nexora/games/core/game_contract.dart';
 
 import '../core/snl_rules.dart';
 import 'snl_board.dart';
+import 'snl_audio.dart';
 
 class SnlGame extends StatefulWidget {
   const SnlGame({super.key, required this.launch});
@@ -35,6 +36,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
   late AnimationController _pulseCtl;
   late AnimationController _ambientCtl;
   late AnimationController _burstCtl;
+  late SnlAudio _audio;
 
   /// Squares currently shown on screen per seat (lags the engine during moves).
   late List<int> _shown;
@@ -77,6 +79,8 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
     super.initState();
     final int seed = _l.seed ?? DateTime.now().microsecondsSinceEpoch;
     _engine = SnlEngine(playerCount: _l.playerCount, seed: seed);
+    _audio = SnlAudio(enabled: _l.soundOn);
+    _audio.init();
     _shown = List<int>.filled(_n, 0);
     _climbs = List<int>.filled(_n, 0);
     _bites = List<int>.filled(_n, 0);
@@ -197,6 +201,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
     _pulseCtl.dispose();
     _ambientCtl.dispose();
     _burstCtl.dispose();
+    _audio.dispose();
     super.dispose();
   }
 
@@ -240,6 +245,11 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
     } else {
       HapticFeedback.selectionClick();
     }
+  }
+
+  void _sfx(String event, {double volume = 0.8}) {
+    if (_l.soundOn != _audio.enabled) _audio.setEnabled(_l.soundOn);
+    _audio.play(event, volume: volume);
   }
 
   void _onHopTick() {
@@ -290,6 +300,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
       _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
     }
     setState(() => _rolling = true);
+    _sfx('roll', volume: 0.72);
     _haptic();
     await _rollCtl.forward(from: 0);
     if (!mounted) return;
@@ -339,8 +350,10 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
               _fancy ? SnlOverlayPainter.snakePhase(_ambientCtl.value) : 0);
       if (res.climbed) {
         _climbs[seat]++;
+        _sfx('ladder', volume: 0.9);
       } else {
         _bites[seat]++;
+        _sfx('snake', volume: 0.9);
       }
       setState(() {
         _shown[seat] = res.landed;
@@ -377,6 +390,9 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
       _glidePath = <Offset>[];
       _gliding = false;
     });
+    if (!res.climbed && !res.bitten && res.steps.isNotEmpty) {
+      _sfx('step', volume: 0.48);
+    }
     _busy = false;
 
     if (res.won) {
@@ -404,6 +420,7 @@ class _SnlGameState extends State<SnlGame> with TickerProviderStateMixin {
   void _gameOver(int winner) {
     if (_finished) return;
     _finished = true;
+    _sfx('finish', volume: 0.95);
     _haptic(heavy: true);
     _burstAt = SnlGeom.cell(kSnlGoal);
     _burstColor = const Color(0xFFFFC857);

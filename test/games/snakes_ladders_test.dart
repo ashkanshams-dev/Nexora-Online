@@ -1,7 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nexora/games/snakes_ladders/core/snl_rules.dart';
+import 'package:nexora/games/snakes_ladders/ui/snl_audio.dart';
 
 void main() {
+  test('audio contract covers every Snakes & Ladders game event', () {
+    expect(
+      SnlAudio.eventFiles.keys,
+      containsAll(<String>['ui', 'roll', 'step', 'ladder', 'snake', 'finish']),
+    );
+    expect(SnlAudio.assetDir, 'games/bermuda/sfx/');
+  });
+
   group('Snakes & Ladders rules', () {
     test('layout is valid', () {
       expect(SnlRules.isValidLayout(), isTrue);
