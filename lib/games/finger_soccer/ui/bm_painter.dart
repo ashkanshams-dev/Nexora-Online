@@ -143,7 +143,7 @@ class BmPainter extends CustomPainter {
         final Paint p = Paint()..filterQuality = FilterQuality.medium;
         if (g.d > 0) {
           canvas.save();
-          canvas.translate(0, gy * 2 + gh);
+          canvas.translate(0, gy * 2 + e.GGh);
           canvas.scale(1, -1);
           canvas.drawImageRect(gi, src, dst, p);
           canvas.restore();
