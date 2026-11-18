@@ -141,6 +141,17 @@ jobs:
                   '                <data android:scheme="nexora" android:host="t" />\n'
                   '            </intent-filter>\n'
                   '        </activity>', 1)
+          # Supabase e-mail links (sign-up confirmation, magic link, password reset): nexora://auth-callback?code=...
+          if 'android:host="auth-callback"' not in s:
+              s = s.replace('</activity>',
+                  '    <intent-filter>\n'
+                  '                <action android:name="android.intent.action.VIEW" />\n'
+                  '                <category android:name="android.intent.category.DEFAULT" />\n'
+                  '                <category android:name="android.intent.category.BROWSABLE" />\n'
+                  '                <data android:scheme="nexora" android:host="auth-callback" />\n'
+                  '            </intent-filter>\n'
+                  '        </activity>', 1)
+          assert 'android:host="auth-callback"' in s and 'android:host="t"' in s, 'deep link filters missing'
           open(m, 'w').write(s)
           PY
           # In-app updater: MainActivity with the nexora/updater channel, FileProvider, install permission.

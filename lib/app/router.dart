@@ -17,6 +17,8 @@ import '../worlds/arcade/arcade_page.dart';
 import '../worlds/arcade/game_setup_page.dart';
 import '../worlds/arcade/online/leaderboard_page.dart';
 import '../worlds/arcade/online/online_lobby_page.dart';
+import '../core/online/auth_link.dart';
+import '../worlds/auth/auth_callback_page.dart';
 import '../worlds/auth/auth_page.dart';
 import '../worlds/hub/hub_page.dart';
 import '../worlds/intro/intro_video_page.dart';
@@ -60,6 +62,10 @@ GoRouter buildRouter(WidgetRef ref) {
     refreshListenable: Listenable.merge(<Listenable>[settings, online, ref.read(adminAccessProvider)]),
     redirect: (BuildContext context, GoRouterState state) {
       final Uri u = state.uri;
+      // E-mail link nexora://auth-callback?code=... (sign-up confirmation, magic link, reset): finish it first,
+      // before any auth gate, on cold and warm start.
+      if (u.path == AuthLinks.route) return null;
+      if (AuthLinks.isCallback(u)) return AuthLinks.routeFor(u);
       final bool emailReady = settings.authMode == 'email' && online.user != null && !online.isGuest;
       final bool localGuest = settings.authMode == 'guest';
       if (!emailReady && !localGuest && u.path != '/auth') return '/auth';
@@ -92,6 +98,7 @@ GoRouter buildRouter(WidgetRef ref) {
     },
     routes: [
       GoRoute(path: '/auth', pageBuilder: (context, state) => _fade(state, const AuthPage())),
+      GoRoute(path: AuthLinks.route, pageBuilder: (context, state) => _fade(state, AuthCallbackPage(link: state.uri))),
       GoRoute(
         path: '/intro',
         pageBuilder: (context, state) => _fade(

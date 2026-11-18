@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../online/auth_link.dart';
 import '../online/online_service.dart';
 import 'backend_gateway.dart';
 
@@ -19,7 +20,11 @@ class SupabaseBackend extends BackendGateway {
     final SupabaseClient? c = _c;
     if (c == null) return false;
     try {
-      await c.auth.signInWithOtp(email: email.trim(), shouldCreateUser: true);
+      await c.auth.signInWithOtp(
+        email: email.trim(),
+        shouldCreateUser: true,
+        emailRedirectTo: AuthLinks.redirectUrl(AuthLinkFlow.magicLink),
+      );
       return true;
     } catch (_) {
       return false;

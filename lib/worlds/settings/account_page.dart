@@ -172,7 +172,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     }
     if (!mounted) return;
     setState(() => _info = ok
-        ? context.tx('انجام شد ✓', 'Done ✓')
+        ? (o.awaitingEmailConfirmation
+            ? context.tx('لینک تأیید به ایمیلت فرستاده شد. آن را روی همین گوشی باز کن تا حسابت فعال شود.',
+                'A confirmation link was sent to your email. Open it on this phone to activate your account.')
+            : context.tx('انجام شد ✓', 'Done ✓'))
         : nxAuthError(context, o.lastError));
     if (ok) {
       _pass.clear();

@@ -5,13 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../backend/backend_gateway.dart';
+import 'auth_link.dart';
 import 'online_config.dart';
 
 /// Initialise Supabase once at startup (no network needed: the session is restored from disk).
 Future<void> initOnline() async {
   if (!OnlineConfig.enabled) return;
   try {
-    await Supabase.initialize(url: OnlineConfig.supabaseUrl, anonKey: OnlineConfig.supabaseAnonKey);
+    // PKCE e-mail links come back as nexora://auth-callback?code=...; the app finishes them itself on the
+    // /auth/callback route (cold and warm start both go through Flutter deep linking → GoRouter), so the plugin's
+    // own app_links observer is off to avoid exchanging the same one-time code twice.
+    await Supabase.initialize(
+      url: OnlineConfig.supabaseUrl,
+      anonKey: OnlineConfig.supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce, detectSessionInUri: false),
+    );
     OnlineService._ready = true;
     // Second client for the games project: no own auth, it sends the auth project's access token.
     if (OnlineConfig.gamesEnabled) {
@@ -111,7 +119,11 @@ class OnlineService extends ChangeNotifier {
 
   Future<bool> sendEmailOtp(String email) async {
     final bool? ok = await _run<bool>((SupabaseClient c) async {
-      await c.auth.signInWithOtp(email: email.trim(), shouldCreateUser: true);
+      await c.auth.signInWithOtp(
+        email: email.trim(),
+        shouldCreateUser: true,
+        emailRedirectTo: AuthLinks.redirectUrl(AuthLinkFlow.magicLink),
+      );
       return true;
     });
     return ok ?? false;
@@ -161,18 +173,28 @@ class OnlineService extends ChangeNotifier {
     }
   }
 
+  /// True after [registerEmail] when Supabase sent a confirmation e-mail instead of signing in right away
+  /// (the account becomes usable once the link in that e-mail is opened on this phone).
+  bool awaitingEmailConfirmation = false;
+
   /// Guest → permanent account (same uid, all progress kept). Without a guest: new account.
   Future<bool> registerEmail(String email, String password, {String? username}) async {
+    awaitingEmailConfirmation = false;
     final bool? ok = await _run<bool>((SupabaseClient c) async {
       final User? u = c.auth.currentUser;
       if (u != null && u.isAnonymous) {
-        await c.auth.updateUser(UserAttributes(email: email.trim(), password: password));
+        await c.auth.updateUser(
+          UserAttributes(email: email.trim(), password: password),
+          emailRedirectTo: AuthLinks.redirectUrl(AuthLinkFlow.emailChange),
+        );
       } else {
-        await c.auth.signUp(
+        final AuthResponse r = await c.auth.signUp(
           email: email.trim(),
           password: password,
           data: username == null ? null : <String, dynamic>{'username': username},
+          emailRedirectTo: AuthLinks.redirectUrl(AuthLinkFlow.signup),
         );
+        awaitingEmailConfirmation = r.session == null;
       }
       return true;
     });
@@ -211,10 +233,59 @@ class OnlineService extends ChangeNotifier {
 
   Future<bool> resetPassword(String email) async {
     final bool? ok = await _run<bool>((SupabaseClient c) async {
-      await c.auth.resetPasswordForEmail(email.trim());
+      await c.auth.resetPasswordForEmail(
+        loginEmail(email),
+        redirectTo: AuthLinks.redirectUrl(AuthLinkFlow.recovery),
+      );
       return true;
     });
     return ok ?? false;
+  }
+
+  /// Finishes an e-mail link (sign-up confirmation, magic link, password reset, e-mail change) that came back as
+  /// `nexora://auth-callback?...`: exchanges the PKCE code (or stores implicit tokens) for a session.
+  Future<AuthLinkResult> completeAuthLink(AuthCallback cb) async {
+    final SupabaseClient? c = client;
+    if (c == null) return const AuthLinkResult(AuthLinkOutcome.notConfigured);
+    if (cb.isError) {
+      return AuthLinkResult(cb.isExpired ? AuthLinkOutcome.expired : AuthLinkOutcome.failed,
+          detail: cb.errorDescription ?? cb.errorCode ?? cb.error);
+    }
+    try {
+      if (cb.hasCode) {
+        await c.auth.exchangeCodeForSession(cb.code!);
+      } else if (cb.hasTokens) {
+        await c.auth.setSession(cb.refreshToken!);
+      } else {
+        return const AuthLinkResult(AuthLinkOutcome.invalid);
+      }
+    } on AuthException catch (e) {
+      // The link was used already, or opened on another phone / after a reinstall (no PKCE verifier here).
+      // For sign-up / e-mail change the address is already confirmed by Supabase before the redirect.
+      if (c.auth.currentSession != null && cb.flow != AuthLinkFlow.recovery) {
+        // A session already exists (e.g. the same link delivered twice): treat as done.
+        return AuthLinkResult(AuthLinkOutcome.signedIn, flow: cb.flow);
+      }
+      final String m = e.message.toLowerCase();
+      if (m.contains('verifier') || m.contains('invalid') || m.contains('expired') || m.contains('not found')) {
+        return AuthLinkResult(
+            cb.flow == AuthLinkFlow.signup || cb.flow == AuthLinkFlow.emailChange
+                ? AuthLinkOutcome.confirmedSignInNeeded
+                : AuthLinkOutcome.expired,
+            flow: cb.flow,
+            detail: e.message);
+      }
+      return AuthLinkResult(AuthLinkOutcome.failed, flow: cb.flow, detail: e.message);
+    } catch (e) {
+      return AuthLinkResult(AuthLinkOutcome.failed, flow: cb.flow, detail: _friendly(e));
+    }
+    if (c.auth.currentSession == null) return AuthLinkResult(AuthLinkOutcome.failed, flow: cb.flow);
+    awaitingEmailConfirmation = false;
+    _status = BackendStatus.online;
+    notifyListeners();
+    return AuthLinkResult(
+        cb.flow == AuthLinkFlow.recovery ? AuthLinkOutcome.recovery : AuthLinkOutcome.signedIn,
+        flow: cb.flow);
   }
 
   /// Sign out. Guest mode is local-only and never creates an anonymous session.
@@ -259,3 +330,26 @@ class OnlineService extends ChangeNotifier {
 }
 
 final onlineProvider = ChangeNotifierProvider<OnlineService>((ref) => OnlineService());
+
+enum AuthLinkOutcome {
+  /// Signed in (sign-up confirmed, magic link, e-mail change).
+  signedIn,
+
+  /// Signed in through a password-reset link: the user must choose a new password now.
+  recovery,
+
+  /// The e-mail is confirmed but this phone cannot finish the sign-in (link opened elsewhere): sign in with password.
+  confirmedSignInNeeded,
+  expired,
+  invalid,
+  failed,
+  notConfigured,
+}
+
+class AuthLinkResult {
+  const AuthLinkResult(this.outcome, {this.flow = AuthLinkFlow.unknown, this.detail});
+  final AuthLinkOutcome outcome;
+  final AuthLinkFlow flow;
+  final String? detail;
+  bool get signedIn => outcome == AuthLinkOutcome.signedIn || outcome == AuthLinkOutcome.recovery;
+}
