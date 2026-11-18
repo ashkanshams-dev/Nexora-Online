@@ -1,0 +1,14 @@
+{
+  "game": "endless_runner",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "runner": "runner (side view, facing right)",
+    "obstacle": "ground obstacle",
+    "bird": "flying obstacle",
+    "coin": "coin",
+    "bg_far": "far parallax layer (landscape, seamless)",
+    "bg_near": "near parallax layer"
+  }
+}

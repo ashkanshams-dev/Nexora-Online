@@ -12,6 +12,7 @@ import '../../core/ui2/nx2_widgets.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/core/game_contract.dart';
 import '../../games/game_registry.dart';
+import '../../games/arcade_kit/arcade_icon.dart';
 
 /// ROOMS — opened by the big GAME button in the dock.
 ///  * Quick Play: pick a game -> real matchmaking (`nx_quick`) in that game's lobby.
@@ -154,6 +155,14 @@ class _RoomsPageState extends ConsumerState<RoomsPage> {
             const SizedBox(height: 8),
             if (_loading && _rooms.isEmpty)
               const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
+            else if (_error != null && _rooms.isEmpty && ref.watch(onlineProvider).client?.auth.currentSession == null)
+              // Guests (local-only mode) have no session: say so instead of a misleading "server unreachable".
+              _Empty(
+                icon: Icons.person_off_rounded,
+                text: context.tx('برای اتاق‌های آنلاین با ایمیل وارد شو. بازی آفلاین و با ربات در «همه‌ی بازی‌ها» است.',
+                    'Sign in with email for online rooms. Offline and vs-bot games are under “All games”.'),
+                onRetry: _load,
+              )
             else if (_error != null && _rooms.isEmpty)
               _Empty(
                 icon: Icons.wifi_off_rounded,
@@ -275,7 +284,7 @@ class _GamePickerSheet extends StatelessWidget {
                         ),
                         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
                           Image.asset('assets/arcade/pedestals/${g.id}.webp',
-                              height: 52, errorBuilder: (_, __, ___) => Icon(Icons.sports_esports_rounded, color: g.accent)),
+                              height: 52, errorBuilder: (_, __, ___) => SizedBox(height: 52, child: ArcadeMedallion(g.id))),
                           const SizedBox(height: 4),
                           Text(context.tx(g.nameFa, g.nameEn),
                               maxLines: 1,

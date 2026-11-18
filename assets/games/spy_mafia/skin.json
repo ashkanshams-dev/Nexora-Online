@@ -1,0 +1,12 @@
+{
+  "game": "spy_mafia",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "card_back": "role card back (portrait)",
+    "spy": "spy role art",
+    "agent": "agent role art",
+    "loc_<n>": "location art per location index 0..11 (optional)"
+  }
+}

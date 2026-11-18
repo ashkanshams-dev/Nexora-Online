@@ -98,11 +98,63 @@ class OnlineService extends ChangeNotifier {
     return false;
   }
 
+  /// Deep link the e-mail's sign-in link opens (Android intent filter `nexora://login-callback`, added by CI).
+  /// supabase_flutter exchanges the `?code=` itself, so a user whose e-mail carries only a link (no 6-digit code,
+  /// e.g. while the project's Magic Link template lacks `{{ .Token }}`) can still sign in by tapping it on this phone.
+  /// The URL must be in Supabase → Authentication → URL Configuration → Redirect URLs, otherwise the server falls
+  /// back to the project's Site URL.
+  static const String emailRedirect = 'nexora://login-callback';
+
+  /// Last time a code was requested per e-mail (Supabase allows one request per address every 60 s).
+  static final Map<String, DateTime> _otpSentAt = <String, DateTime>{};
+  static const Duration otpCooldown = Duration(seconds: 60);
+
+  /// Only send metadata accepted by the shared profiles.username constraint.
+  /// Null lets the database trigger generate its safe default username.
+  static String? signupUsername(String? username) {
+    final String candidate = username?.trim() ?? '';
+    final int length = candidate.runes.length;
+    return length >= 3 && length <= 20 ? candidate : null;
+  }
+
+  static String normalizeEmailOtpDigits(String value) {
+    const String fa = '۰۱۲۳۴۵۶۷۸۹', ar = '٠١٢٣٤٥٦٧٨٩';
+    final StringBuffer b = StringBuffer();
+    for (final int r in value.runes) {
+      final String ch = String.fromCharCode(r);
+      final int i = fa.indexOf(ch), j = ar.indexOf(ch);
+      if (i >= 0) {
+        b.write(i);
+      } else if (j >= 0) {
+        b.write(j);
+      } else if (ch.trim().isNotEmpty) {
+        b.write(ch);
+      }
+    }
+    return b.toString();
+  }
+
+  static bool isSixDigitEmailOtp(String value) => RegExp(r'^\d{6}$').hasMatch(value);
+
+  /// Seconds until another code may be requested for [email] (0 = now).
+  int otpCooldownLeft(String email) {
+    final DateTime? at = _otpSentAt[email.trim().toLowerCase()];
+    if (at == null) return 0;
+    final int left = otpCooldown.inSeconds - DateTime.now().difference(at).inSeconds;
+    return left > 0 ? left : 0;
+  }
+
+  /// Seconds the server asked us to wait (parsed from its rate-limit message), if any.
+  int? lastRetryAfter;
+
   Future<bool> sendEmailOtp(String email) async {
+    final String e = email.trim();
+    lastRetryAfter = null;
     final bool? ok = await _run<bool>((SupabaseClient c) async {
-      await c.auth.signInWithOtp(email: email.trim(), shouldCreateUser: true);
+      await c.auth.signInWithOtp(email: e, shouldCreateUser: true, emailRedirectTo: emailRedirect);
       return true;
     });
+    if (ok == true) _otpSentAt[e.toLowerCase()] = DateTime.now();
     return ok ?? false;
   }
 
@@ -114,16 +166,34 @@ class OnlineService extends ChangeNotifier {
     return ok ?? false;
   }
 
+  /// Normalised error keys for the UI (see AuthPage): network, rate_limit, otp_invalid, smtp, signup_disabled,
+  /// invalid_login, email_taken, weak_password, or the server message.
   String _friendly(Object e) {
     if (e is AuthException) {
       final String m = e.message.toLowerCase();
-      if (m.contains('invalid login')) return 'invalid_login';
+      final String code = (e.code ?? '').toLowerCase();
+      if (e.statusCode == '429' || code.contains('rate_limit') || m.contains('rate limit') ||
+          m.contains('security purposes') || m.contains('too many')) {
+        final RegExpMatch? s = RegExp(r'after (\d+) second').firstMatch(m);
+        lastRetryAfter = s != null ? int.tryParse(s.group(1)!) : null;
+        return 'rate_limit';
+      }
+      if (code == 'otp_expired' || m.contains('token has expired') || (m.contains('otp') && m.contains('invalid'))) {
+        return 'otp_invalid';
+      }
+      if (code == 'email_address_not_authorized' || m.contains('not authorized') || m.contains('error sending') ||
+          m.contains('smtp')) {
+        return 'smtp';
+      }
+      if (code == 'signup_disabled' || m.contains('signups not allowed')) return 'signup_disabled';
+      if (code == 'invalid_credentials' || m.contains('invalid login')) return 'invalid_login';
       if (m.contains('already') || m.contains('registered')) return 'email_taken';
       if (m.contains('password')) return 'weak_password';
       return e.message;
     }
     final String s = '$e';
-    if (s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('ClientException')) {
+    if (s.contains('SocketException') || s.contains('Failed host lookup') || s.contains('ClientException') ||
+        s.contains('TimeoutException')) {
       return 'network';
     }
     return s;
@@ -152,6 +222,7 @@ class OnlineService extends ChangeNotifier {
 
   /// Guest → permanent account (same uid, all progress kept). Without a guest: new account.
   Future<bool> registerEmail(String email, String password, {String? username}) async {
+    final String? safeUsername = signupUsername(username);
     final bool? ok = await _run<bool>((SupabaseClient c) async {
       final User? u = c.auth.currentUser;
       if (u != null && u.isAnonymous) {
@@ -160,7 +231,7 @@ class OnlineService extends ChangeNotifier {
         await c.auth.signUp(
           email: email.trim(),
           password: password,
-          data: username == null ? null : <String, dynamic>{'username': username},
+          data: safeUsername == null ? null : <String, dynamic>{'username': safeUsername},
         );
       }
       return true;

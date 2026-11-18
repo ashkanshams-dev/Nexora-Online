@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/assets/app_assets.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/settings/app_settings.dart';
 import '../../core/theme/nx_theme.dart';
 import '../../core/widgets/nx_widgets.dart';
 import '../../games/game_registry.dart';
+import '../../games/arcade_kit/arcade_icon.dart';
+import '../../games/arcade_kit/arcade_meta.dart';
 import 'game_host_page.dart';
 import 'online/online_lobby_page.dart';
 
@@ -53,8 +54,7 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
             height: 190,
             child: Hero(
               tag: 'pedestal_${game.id}',
-              child: Image.asset(AppAssets.pedestal(game.id),
-                  cacheWidth: 600, fit: BoxFit.contain),
+              child: GamePedestal(game.id, cacheWidth: 600),
             ),
           ),
           GlassPanel(
@@ -84,8 +84,12 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
                     style: TextStyle(color: visual.muted, fontSize: 12)),
               ),
             ),
-          const SizedBox(height: NxSpace.md),
-          GlassPanel(
+          if (kArcadeDefs.containsKey(game.id)) ...[
+            const SizedBox(height: NxSpace.md),
+            _arcadeCard(context, game),
+          ],
+          if (!game.solo) const SizedBox(height: NxSpace.md),
+          if (!game.solo) GlassPanel(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(context.tx('حالت بازی', 'Mode'),
@@ -98,7 +102,7 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
                       value: GameMode.vsBot,
                       icon: const Icon(Icons.smart_toy_rounded),
                       label: Text(context.tx('با بات', 'vs Bot'))),
-                  ButtonSegment(
+                  if (game.supportsLocal) ButtonSegment(
                       value: GameMode.local,
                       icon: const Icon(Icons.groups_rounded),
                       label: Text(game.id == 'mafia'
@@ -209,12 +213,14 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
             label: Text(
                 _mode == GameMode.online
                     ? context.tx('ورود به لابی آنلاین', 'Enter online lobby')
-                    : context.tx('شروع بازی', 'Start match'),
+                    : game.solo
+                        ? context.tx('شروع سریع', 'Quick start')
+                        : context.tx('شروع بازی', 'Start match'),
                 style: const TextStyle(fontSize: 17)),
           ),
           if (game.supportsOnline &&
-              game.maxPlayers == 2 &&
-              game.id != 'mafia') ...[
+              (game.maxPlayers == 2 || (kArcadeDefs.containsKey(game.id) && game.minPlayers == 2)) &&
+              game.id != 'mafia' && game.id != 'spy_mafia') ...[
             const SizedBox(height: NxSpace.sm),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
@@ -228,6 +234,82 @@ class _GameSetupPageState extends ConsumerState<GameSetupPage> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _arcadeCard(BuildContext context, GameInfo game) {
+    final ProfileService p = ref.watch(profileProvider);
+    final ArcadeDef def = kArcadeDefs[game.id]!;
+    final int best = ArcadeRecords.best(game.id, p);
+    final bool done = ArcadeRecords.dailyDone(game.id, p);
+    final int target = ArcadeDaily.target(game.id);
+    final ArcadeMedal medal = def.medalFor(best);
+    final NxThemeColors visual = NxThemeColors.of(context);
+    void daily() => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => GameHostPage(
+              game: game,
+              mode: GameMode.vsBot,
+              difficulty: BotDifficulty.hard,
+              players: game.solo ? 1 : game.defaultPlayers,
+              daily: true),
+        ));
+    return GlassPanel(
+      borderColor: game.accent.withValues(alpha: 0.5),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Icon(Icons.today_rounded, color: game.accent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(context.tx('چالش روزانه', 'Daily challenge'), style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(
+                  game.solo
+                      ? context.tx('امروز به $target ${def.unitFa} برس · +۸۰ XP', 'Reach $target ${def.unitEn} today · +80 XP')
+                      : context.tx('نقشه‌ی امروز: بات‌های سخت را ببر · +۸۰ XP', "Today's map: beat Hard bots · +80 XP"),
+                  style: TextStyle(color: visual.muted, fontSize: 12)),
+            ]),
+          ),
+          if (done)
+            const NxPill(label: '✓', color: NxColors.turquoise)
+          else
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: game.accent),
+              onPressed: daily,
+              child: Text(context.tx('شروع', 'Play')),
+            ),
+        ]),
+        if (game.solo) ...[
+          const Divider(height: 22),
+          Row(children: [
+            const Icon(Icons.emoji_events_rounded, color: NxColors.gold),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(context.tx('رکورد شخصی: $best ${def.unitFa}', 'Personal best: $best ${def.unitEn}'),
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+            if (medal != ArcadeMedal.none)
+              NxPill(
+                  label: switch (medal) {
+                    ArcadeMedal.gold => context.tx('طلا', 'Gold'),
+                    ArcadeMedal.silver => context.tx('نقره', 'Silver'),
+                    _ => context.tx('برنز', 'Bronze'),
+                  },
+                  icon: Icons.military_tech_rounded,
+                  color: medal == ArcadeMedal.gold ? NxColors.gold : const Color(0xFFD7DEEA)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+              context.tx('مدال‌ها: برنز ${def.bronze} · نقره ${def.silver} · طلا ${def.gold}',
+                  'Medals: bronze ${def.bronze} · silver ${def.silver} · gold ${def.gold}'),
+              style: TextStyle(color: visual.muted, fontSize: 12)),
+        ],
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => context.push('/leaderboard?game=${game.id}'),
+          icon: const Icon(Icons.leaderboard_rounded),
+          label: Text(context.tx('جدول رتبه‌بندی جهانی', 'Global leaderboard')),
+        ),
+      ]),
     );
   }
 }

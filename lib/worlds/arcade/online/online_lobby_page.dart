@@ -56,14 +56,18 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   bool _inMatch = false;
   String? _lastMatchSeen;
 
-  SupabaseClient? get _c => ref.read(onlineProvider).games; // games project
-  bool get _signedIn => ref.read(onlineProvider).client?.auth.currentSession != null;
-  String? get _me => ref.read(onlineProvider).uid;
+  // Cached: dispose() must not touch `ref` (Riverpod throws "Cannot use ref after the widget was disposed", which
+  // left the realtime channel subscribed and broke leaving the lobby with Back).
+  late final OnlineService _online;
+  SupabaseClient? get _c => _online.games; // games project
+  bool get _signedIn => _online.client?.auth.currentSession != null;
+  String? get _me => _online.uid;
   GameInfo? get _game => gameById(widget.gameId);
 
   @override
   void initState() {
     super.initState();
+    _online = ref.read(onlineProvider); // resolved while `ref` is usable
     _wantSeats = _game?.defaultPlayers ?? 2;
     if (widget.gameId == 'mafia') _wantSeats = 6;
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_boot()));

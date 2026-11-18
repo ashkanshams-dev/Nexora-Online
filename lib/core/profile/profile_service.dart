@@ -172,7 +172,9 @@ class ProfileService extends ChangeNotifier {
   void Function(String name)? onNameChanged;
 
   String _idemKey(String event) {
-    if (event.startsWith('world.first_visit.') || event.startsWith('achievement.')) return 'once:$event';
+    if (event.startsWith('world.first_visit.') || event.startsWith('achievement.') || event.startsWith('challenge.')) {
+      return 'once:$event';
+    }
     if (event == 'daily') return 'daily:${_today()}';
     return '$event:${DateTime.now().microsecondsSinceEpoch}:${Random().nextInt(1 << 30)}';
   }

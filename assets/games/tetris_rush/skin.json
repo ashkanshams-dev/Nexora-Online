@@ -1,0 +1,9 @@
+{
+  "game": "tetris_rush",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "block": "one mino cell (square, tinted per piece)"
+  }
+}

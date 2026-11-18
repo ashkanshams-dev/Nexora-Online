@@ -9,6 +9,7 @@ import '../../../core/profile/profile_service.dart';
 import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import 'po_common.dart';
+import '../../../games/arcade_kit/arcade_icon.dart';
 
 // ---------------------------------------------------------------- Achievements
 
@@ -338,8 +339,7 @@ class _GameStatCard extends StatelessWidget {
             AppAssets.pedestal(game.id),
             cacheWidth: 140,
             fit: BoxFit.contain,
-            errorBuilder: (BuildContext _, Object __, StackTrace? ___) =>
-                Icon(Icons.sports_esports_rounded, color: game.accent),
+            errorBuilder: (BuildContext _, Object __, StackTrace? ___) => ArcadeMedallion(game.id),
           ),
         ),
         const SizedBox(width: 12),

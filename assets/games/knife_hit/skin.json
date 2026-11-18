@@ -1,0 +1,11 @@
+{
+  "game": "knife_hit",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "knife": "knife (pointing UP)",
+    "log": "target log (round, top view)",
+    "apple": "apple"
+  }
+}

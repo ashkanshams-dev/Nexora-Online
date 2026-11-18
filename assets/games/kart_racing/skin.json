@@ -1,0 +1,14 @@
+{
+  "game": "kart_racing",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "kart_0": "kart seat 1, top-down, nose pointing RIGHT, ~2:1.4",
+    "kart_1": "kart seat 2",
+    "kart_2": "kart seat 3",
+    "kart_3": "kart seat 4",
+    "item_box": "item box (square)",
+    "oil": "oil slick (top-down)"
+  }
+}

@@ -73,12 +73,18 @@ class CallWatcher {
     ));
   }
 
-  void _detach() {
+  void _detach({bool disposing = false}) {
     final RealtimeChannel? ch = _ch;
-    final SupabaseClient? c = _ref.read(onlineProvider).client;
-    if (ch != null && c != null) unawaited(c.removeChannel(ch));
     _ch = null;
+    if (ch == null) return;
+    // On dispose the app's `ref` is already unusable (Riverpod throws), so only unsubscribe the channel itself.
+    if (disposing) {
+      unawaited(ch.unsubscribe());
+      return;
+    }
+    final SupabaseClient? c = _ref.read(onlineProvider).client;
+    if (c != null) unawaited(c.removeChannel(ch));
   }
 
-  void dispose() => _detach();
+  void dispose() => _detach(disposing: true);
 }

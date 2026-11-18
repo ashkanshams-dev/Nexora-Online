@@ -1,0 +1,12 @@
+{
+  "game": "geo_dash",
+  "palette": {},
+  "fx": {},
+  "sprites": {},
+  "expected_sprites": {
+    "player": "cube player (square)",
+    "spike": "spike",
+    "block": "block tile",
+    "bg": "background (seamless)"
+  }
+}

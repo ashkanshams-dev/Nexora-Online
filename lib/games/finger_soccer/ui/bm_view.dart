@@ -69,7 +69,7 @@ class _BermudaViewState extends State<BermudaView>
   Duration _last = Duration.zero;
   double _nowMs = 0;
   late final AnimationController _goalAnim =
-      AnimationController(vsync: this, duration: const Duration(seconds: 2));
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
 
   // setup
   String stage = 'setup'; // setup | waiting | match
