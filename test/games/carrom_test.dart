@@ -151,7 +151,7 @@ void main() {
     final m = CrMatch.newBoard();
     for (final seat in <int>[0, 1]) {
       m.turn = seat;
-      expect(m.baselineY(seat), seat == 0 ? CrConfig.baseline0 : CrConfig.baseline1);
+      expect(CrMatch.baselineY(seat), seat == 0 ? CrConfig.baseline0 : CrConfig.baseline1);
       expect(m.placementOk(CrConfig.baseMinX), isTrue);
       expect(m.placementOk(CrConfig.baseMaxX), isTrue);
       final nearest = m.nearestPlacement(CrConfig.centerX);
