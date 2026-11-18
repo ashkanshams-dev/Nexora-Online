@@ -95,6 +95,6 @@ class _AuthPageState extends ConsumerState<AuthPage> {
       Text(context.tx('ورود به NEXORA', 'Sign in to NEXORA'), textAlign: TextAlign.center, style: TextStyle(color: visual.text, fontSize: 28, fontWeight: FontWeight.w900)),
       const SizedBox(height: 8), Text(context.tx('ورود واقعی با Supabase؛ حساب و داده‌ها دائمی هستند.', 'Real Supabase authentication with durable account data.'), textAlign: TextAlign.center, style: TextStyle(color: visual.muted, height: 1.4)),
       const SizedBox(height: 22), ...authFields,
-    ]))))));
+    ])))))));
   }
 }
