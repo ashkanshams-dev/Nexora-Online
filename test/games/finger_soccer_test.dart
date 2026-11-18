@@ -55,7 +55,9 @@ void main() {
     expect(e.bodies.length, 11);
     expect(e.ball!.r, BR);
     expect(e.bodies.first.r, closeTo(BM_PLAYER_RADIUS, 1e-9));
-    expect(e.ball!.m, closeTo(1.805, 1e-9));
+    expect(e.ball!.m, closeTo(1.9, 1e-9));
+    expect(BKICK, closeTo(1.01, 1e-9));
+    expect(HV, closeTo(5, 1e-9));
     expect(e.bodies.first.m, 5);
     expect(e.GOALS[0].x2 - e.GOALS[0].x1,
         closeTo(338 * BM_GOAL_WIDTH_FACTOR, 1e-9));

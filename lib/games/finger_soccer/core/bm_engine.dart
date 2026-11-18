@@ -17,12 +17,13 @@ const double BM_SCENE_SPEED = 1.03;
 const double BM_ONLINE_TURN_SECONDS = 10;
 const double BM_PLAYER_RADIUS = PR * BM_PLAYER_RADIUS_FACTOR;
 const int NB = 36;
-/// Mini-soccer tuning (redesign-v1.1, owner request): ball mass 1.9 -> 1.805 (x0.95) and a kick factor on the
-/// ball's share of a disc->ball impulse so a disc striking the ball launches it exactly 5% faster than before
-/// (the lighter mass alone gives +1.40%, BKICK supplies the rest). Nothing else changed.
-const double BALL_M = 1.805;
-const double BKICK = 1.05 * ((1 / 1.9) / (1 / 5 + 1 / 1.9)) / ((1 / BALL_M) / (1 / 5 + 1 / BALL_M));
-const double HV = 4, PF1 = 390, PF2 = .8, PV0 = 600, EPP = .48, PCAP = 190;
+/// Ball tuning: keep the normal 1.9 mass, add only 1% to launch velocity,
+/// and bias the ball/disc impulse toward the ball. A clean strike can then
+/// keep its line through a tight two-disc gap without throwing both defenders
+/// sideways. Radius, shot cap and the normal field speed remain unchanged.
+const double BALL_M = 1.9;
+const double BKICK = 1.01;
+const double HV = 5, PF1 = 390, PF2 = .8, PV0 = 600, EPP = .48, PCAP = 190;
 
 /// Field size factor (game.js line 12).
 const double FS = 1.12 * 1.215;
