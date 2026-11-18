@@ -55,7 +55,7 @@ class BmView {
     final BmFieldS f = e.field;
     final double W = sz.width, H = sz.height;
     if (W < 50 || H < 50) return;
-    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02;
+    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02 * .9;
     ox = W / 2 - e.CX * s;
     // Keep the scoreboard clear of the top goal while preserving the same
     // world-to-screen mapping for rendering and pointer input.
@@ -77,8 +77,9 @@ class BmPainter extends CustomPainter {
   final double Function() now; // ms
   final double dpr;
   final bool fancy;
-  // Presentation-only scale; physics and replay keep PR=58.5 unchanged.
-  static const double _playerRenderScale = .9;
+  // Geometry is scaled uniformly by BmView; physics and replay keep PR/BR.
+  static const double _playerRenderScale = 1;
+  static const double _ballRenderScale = 1;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -212,7 +213,7 @@ class BmPainter extends CustomPainter {
   // ------------------------------------------------------------ sprite()
   void _sprite(Canvas canvas, BmBody b, double t) {
     final bool isBall = b == e.ball;
-    final double renderR = isBall ? b.r : b.r * _playerRenderScale;
+    final double renderR = isBall ? b.r * _ballRenderScale : b.r * _playerRenderScale;
     final ui.Image? sp = isBall ? im.ball : im.team[b.team == 0 ? 0 : 1];
     if (sp == null) {
       canvas.drawCircle(Offset(b.x, b.y), renderR, Paint()..color = isBall ? Colors.white : (b.team != 0 ? const Color(0xFFFF5B5B) : const Color(0xFF3B9BFF)));

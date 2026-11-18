@@ -18,7 +18,7 @@ const double BM_ONLINE_TURN_SECONDS = 10;
 const double BM_PLAYER_RADIUS = PR * BM_PLAYER_RADIUS_FACTOR;
 const int NB = 36;
 /// Raw owner physics contract. These names are part of the replay/server contract.
-const double BALL_M = 2.6, PLAYER_M = 4;
+const double BALL_M = 2.6, PLAYER_M = 5;
 const double HV = 10, PCAP = 520;
 const double BALL_FRICTION = 510, BALL_TRACTION = .175;
 const double PF1 = 430, PF2 = 4, PV0 = 820;
@@ -26,6 +26,8 @@ const double BALL_PLAYER_RESTITUTION = .78, PLAYER_PLAYER_RESTITUTION = .72;
 const double BALL_WALL_RESTITUTION = .93, PLAYER_WALL_RESTITUTION = .93;
 const double POST_RESTITUTION = 1.9, FAST_BALL_DROP = .22;
 const double SHOT_POWER_COEFFICIENT = 2.5, GOAL_HALF_WIDTH = 170;
+/// Keep the pool-like rolling model, but make soccer ball spin transfer softer.
+const double BALL_SPIN_TRANSFER = .20;
 const double BALL_KICK_COEFFICIENT = 1;
 const double FIELD_WIDTH_SCALE = 1.1, FIELD_LENGTH_SCALE = 1.16;
 const double FS = 1;
@@ -585,7 +587,7 @@ class BmEngine {
       }
     }
     if (isB) {
-      bl.spin += (bl == b ? 1 : -1) * (-ny * (b.vx - a.vx) + nx * (b.vy - a.vy)) / bl.r * .3;
+      bl.spin += (bl == b ? 1 : -1) * (-ny * (b.vx - a.vx) + nx * (b.vy - a.vy)) / bl.r * BALL_SPIN_TRANSFER;
       bl.spin = _mx(-34, _mn(34, bl.spin));
       final double pw = _mn(1, -vn / (1700 * K));
       if (pw > .2) {
@@ -665,7 +667,7 @@ class BmEngine {
         b.spin *= 1 - (sp2 > 0 ? 1.05 : 3.2) * dt;
         if (b.spin.abs() < .02) b.spin = 0;
         b.sq *= 1 - 9 * dt;
-        final double roll = .95 / b.r, wx = -b.vy * roll, wy = b.vx * roll, wz = b.spin * .55;
+      final double roll = .95 / b.r, wx = -b.vy * roll, wy = b.vx * roll, wz = b.spin * .35;
         if (sp2 > 0 || wz != 0) {
           rot(b.R, wx, wy, wz, dt);
           b.rv++;

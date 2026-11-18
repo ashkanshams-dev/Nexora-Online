@@ -45,7 +45,7 @@ void main() {
     expect(BR, 35);
     expect(LMAX, 175);
     expect(BALL_M, 2.6);
-    expect(PLAYER_M, 4);
+    expect(PLAYER_M, 5);
     expect(STEP, 1 / 240);
     expect(kBmFields.length, 30);
     final BmFieldS f = kBmFields.firstWhere((BmFieldS x) => x.id == 'forest');
