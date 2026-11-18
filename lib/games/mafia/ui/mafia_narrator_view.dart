@@ -10,6 +10,7 @@ import '../core/mafia_engine.dart';
 import '../core/mafia_models.dart';
 import 'mafia_visuals.dart';
 import 'mafia_widgets.dart';
+import 'mafia_audio.dart';
 
 enum _NStage { setup, pass, nightIntro, nightStep, detectiveAnswer, dawn, day, nominate, defense, vote, verdict, over }
 
@@ -65,6 +66,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   Map<int, int> _counts = <int, int>{};
   FinalVoteResult? _verdict;
   bool _finished = false;
+  late MafiaAudio _audio;
 
   GameLaunch get _l => widget.launch;
   bool get _fa => _l.isFa;
@@ -75,6 +77,8 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   @override
   void initState() {
     super.initState();
+    _audio = MafiaAudio(enabled: _l.soundOn);
+    _audio.init();
     final int pc = _l.playerCount;
     _count = pc < MafiaEngine.minPlayers ? 8 : pc.clamp(MafiaEngine.minPlayers, MafiaEngine.maxPlayers).toInt();
     for (int i = 0; i < MafiaEngine.maxPlayers; i++) {
@@ -91,6 +95,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
     for (final TextEditingController c in _names) {
       c.dispose();
     }
+    _audio.dispose();
     super.dispose();
   }
 
@@ -102,6 +107,11 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
 
   void _haptic() {
     if (_l.hapticsOn) HapticFeedback.mediumImpact();
+  }
+
+  void _sfx(String event, {double volume = 0.8}) {
+    if (_l.soundOn != _audio.enabled) _audio.setEnabled(_l.soundOn);
+    _audio.play(event, volume: volume);
   }
 
   // ===================================================================== flow
@@ -142,6 +152,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   }
 
   void _beginNight() {
+    _sfx('night', volume: 0.72);
     final List<_NightStep> steps = <_NightStep>[_NightStep.mafia];
     if (_e.holderOf(MafiaRole.doctor) != null) steps.add(_NightStep.doctor);
     if (_e.holderOf(MafiaRole.detective) != null) steps.add(_NightStep.detective);
@@ -200,6 +211,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   void _confirmStep(int? choice) {
     final _NightStep s = _steps[_stepIdx];
     _haptic();
+    _sfx('action', volume: 0.55);
     switch (s) {
       case _NightStep.mafia:
         _mafiaPick = choice;
@@ -229,6 +241,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
       sniperTarget: _sniperPick,
     ));
     _haptic();
+    if (r.deaths.isNotEmpty) _sfx('death', volume: 0.85);
     setState(() {
       _night = r;
       _stage = _NStage.dawn;
@@ -322,6 +335,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   void _resolveVote() {
     final FinalVoteResult r = _e.resolveFinalCounts(_counts, _defendants);
     _haptic();
+    _sfx('vote', volume: 0.7);
     setState(() {
       _verdict = r;
       _stage = _NStage.verdict;
@@ -355,6 +369,7 @@ class _MafiaNarratorViewState extends State<MafiaNarratorView> {
   void _finish() {
     if (_finished) return;
     _finished = true;
+    _sfx('win', volume: 0.95);
     final MafiaTeam w = _e.winner ?? MafiaTeam.town;
     final List<String> winners =
         _e.players.where((MafiaPlayer p) => p.role.team == w).map((MafiaPlayer p) => p.name).toList();

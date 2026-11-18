@@ -9,6 +9,7 @@ import 'package:nexora/games/core/game_contract.dart';
 
 import '../core/mafia_engine.dart';
 import '../core/mafia_models.dart';
+import 'mafia_audio.dart';
 
 enum _Stage { intro, night, nominate, finalVote, over }
 
@@ -42,6 +43,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
   DateTime _stageSince = DateTime.now();
   bool _finished = false;
   int? _pick;
+  late MafiaAudio _audio;
 
   GameLaunch get _l => widget.launch;
   int get _me => _net.mySeat;
@@ -50,6 +52,8 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
   @override
   void initState() {
     super.initState();
+    _audio = MafiaAudio(enabled: _l.soundOn);
+    _audio.init();
     _net = _l.net!;
     _e = MafiaEngine.create(
       names: List<String>.generate(_net.seatCount, (int i) => _l.netName(i) ?? 'Pilot ${i + 1}'),
@@ -68,6 +72,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
     _inbox?.close();
     _liveSub?.cancel();
     _msg.dispose();
+    _audio.dispose();
     super.dispose();
   }
 
@@ -103,6 +108,12 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
     _pick = null;
     _votes.clear();
     _night.clear();
+    if (s == _Stage.night) _sfx('night', volume: 0.72);
+  }
+
+  void _sfx(String event, {double volume = 0.8}) {
+    if (_l.soundOn != _audio.enabled) _audio.setEnabled(_l.soundOn);
+    _audio.play(event, volume: volume);
   }
 
   void _maybeAdvance() {
@@ -127,6 +138,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
             detectiveCheck: det == null ? null : _night[det.id],
             sniperTarget: sn == null ? null : _night[sn.id],
           ));
+          _sfx('action', volume: 0.55);
           _setStage(_e.isOver ? _Stage.over : _Stage.nominate);
         }
       case _Stage.nominate:
@@ -144,6 +156,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
       case _Stage.finalVote:
         if (_voters.every(_votes.containsKey)) {
           _e.resolveFinalVote(Map<int, int?>.from(_votes), _defendants);
+          _sfx('vote', volume: 0.7);
           _defendants = <int>[];
           if (_e.isOver) {
             _setStage(_Stage.over);
@@ -212,6 +225,7 @@ class _MafiaOnlineViewState extends State<MafiaOnlineView> {
   void _checkOver() {
     if (!_e.isOver || _finished) return;
     _finished = true;
+    _sfx('win', volume: 0.95);
     final MafiaTeam w = _e.winner!;
     final List<int> winners = <int>[for (final MafiaPlayer p in _e.players) if (p.role.team == w) p.id];
     final bool won = _mine.role.team == w;

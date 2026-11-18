@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nexora/games/mafia/core/mafia_engine.dart';
 import 'package:nexora/games/mafia/core/mafia_match.dart';
 import 'package:nexora/games/mafia/core/mafia_models.dart';
+import 'package:nexora/games/mafia/ui/mafia_audio.dart';
 
 /// 0 godfather, 1 mafia, 2 doctor, 3 detective, 4 sniper, 5..6 citizens.
 MafiaEngine _seven({MafiaConfig config = const MafiaConfig()}) {
@@ -23,6 +24,14 @@ MafiaEngine _seven({MafiaConfig config = const MafiaConfig()}) {
 }
 
 void main() {
+  test('audio contract covers narrator, bot and online Mafia events', () {
+    expect(
+      MafiaAudio.eventFiles.keys,
+      containsAll(<String>['ui', 'night', 'action', 'death', 'vote', 'win']),
+    );
+    expect(MafiaAudio.assetDir, 'games/bermuda/sfx/');
+  });
+
   group('role distribution', () {
     for (int n = 6; n <= 12; n++) {
       for (final bool sniper in <bool>[true, false]) {

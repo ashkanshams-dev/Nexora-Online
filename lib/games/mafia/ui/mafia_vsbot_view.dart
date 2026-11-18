@@ -12,6 +12,7 @@ import '../core/mafia_match.dart';
 import '../core/mafia_models.dart';
 import 'mafia_visuals.dart';
 import 'mafia_widgets.dart';
+import 'mafia_audio.dart';
 
 enum _Stage {
   reveal,
@@ -61,6 +62,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
   bool _spectating = false;
   bool _finished = false;
   VoidCallback? _afterSelfOut;
+  late MafiaAudio _audio;
 
   GameLaunch get _l => widget.launch;
   bool get _fa => _l.isFa;
@@ -71,6 +73,8 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
   @override
   void initState() {
     super.initState();
+    _audio = MafiaAudio(enabled: _l.soundOn);
+    _audio.init();
     MafiaSkill skill = MafiaSkill.normal;
     if (_l.difficulty == BotDifficulty.easy) skill = MafiaSkill.easy;
     if (_l.difficulty == BotDifficulty.hard) skill = MafiaSkill.hard;
@@ -88,6 +92,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
     for (final Timer t in _timers) {
       t.cancel();
     }
+    _audio.dispose();
     super.dispose();
   }
 
@@ -103,12 +108,18 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
     if (_l.hapticsOn) HapticFeedback.mediumImpact();
   }
 
+  void _sfx(String event, {double volume = 0.8}) {
+    if (_l.soundOn != _audio.enabled) _audio.setEnabled(_l.soundOn);
+    _audio.play(event, volume: volume);
+  }
+
   double _hue(int id) => id == MafiaMatch.humanId ? 265 : (_m.personas[id]?.hue ?? 200);
   String? _emblem(int id) => _m.personas[id]?.emblem;
   String _name(int id) => _m.nameOf(id);
 
   // ------------------------------------------------------------------ flow
   void _beginNight() {
+    _sfx('night', volume: 0.72);
     setState(() {
       _stage = _Stage.nightIntro;
       _selected = null;
@@ -132,7 +143,10 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
 
   void _resolveNight(int? choice) {
     final NightResult r = _m.playNight(humanChoice: choice);
-    if (r.deaths.isNotEmpty) _haptic();
+    if (r.deaths.isNotEmpty) {
+      _haptic();
+      _sfx('death', volume: 0.85);
+    }
     setState(() {
       _night = r;
       _stage = _Stage.dawn;
@@ -257,6 +271,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
         if (en.value != null) _liveVotes[en.value!] = (_liveVotes[en.value!] ?? 0) + 1;
       });
       if (en.value != null && _l.hapticsOn) HapticFeedback.selectionClick();
+      if (en.value != null) _sfx('vote', volume: 0.42);
       _after(420, () => step(i + 1));
     }
 
@@ -274,7 +289,10 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
       if (r.defendants.isEmpty && !_m.humanAlive) _after(1600, _endDay);
     } else {
       final FinalVoteResult r = _m.finalVote(votes, _defendants);
-      if (r.eliminated != null) _haptic();
+      if (r.eliminated != null) {
+        _haptic();
+        _sfx('death', volume: 0.85);
+      }
       setState(() {
         _final = r;
         _tallyDone = true;
@@ -350,6 +368,7 @@ class _MafiaVsBotViewState extends State<MafiaVsBotView> {
   void _finish() {
     if (_finished) return;
     _finished = true;
+    _sfx('win', volume: 0.95);
     final MafiaTeam w = _e.winner ?? MafiaTeam.town;
     final MafiaTeam mine = _m.humanRole.team;
     final int mineAlive = _e.players.where((MafiaPlayer p) => p.alive && p.role.team == mine).length;
