@@ -39,25 +39,29 @@ BmConfig _cfg({bool mirror = false, String mode = 'bot'}) => BmConfig(
     );
 
 void main() {
-  test('BERMUDA constants and field geometry are copied 1:1', () {
+  test('BERMUDA owner physics contract and field geometry are deterministic', () {
     expect(K, 1.27);
-    expect(PR, 63.8);
-    expect(BR, 28.8);
+    expect(PR, 58.5);
+    expect(BR, 35);
+    expect(LMAX, 175);
+    expect(BALL_M, 2.6);
+    expect(PLAYER_M, 4);
     expect(STEP, 1 / 240);
     expect(kBmFields.length, 30);
     final BmFieldS f = kBmFields.firstWhere((BmFieldS x) => x.id == 'forest');
-    expect(f.W, (1086 * FS).roundToDouble());
-    expect(f.L, (195 * FS).roundToDouble());
-    expect(f.g, 169);
+    expect(f.W, (1086 * FIELD_WIDTH_SCALE).roundToDouble());
+    expect(f.L, (195 * FIELD_WIDTH_SCALE).roundToDouble());
+    expect(f.T, (30 * FIELD_LENGTH_SCALE).roundToDouble());
+    expect(f.g, 170);
     final BmEngine e = BmEngine(_Hooks(), rng: math.Random(1));
     e.startMatch(_cfg());
     expect(e.bodies.length, 11);
     expect(e.ball!.r, BR);
     expect(e.bodies.first.r, closeTo(BM_PLAYER_RADIUS, 1e-9));
-    expect(e.ball!.m, closeTo(1.805, 1e-9));
-    expect(e.bodies.first.m, 5);
+    expect(e.ball!.m, closeTo(BALL_M, 1e-9));
+    expect(e.bodies.first.m, PLAYER_M);
     expect(e.GOALS[0].x2 - e.GOALS[0].x1,
-        closeTo(338 * BM_GOAL_WIDTH_FACTOR, 1e-9));
+        closeTo(340, 1e-9));
     expect(e.GGw, greaterThan(0));
   });
 

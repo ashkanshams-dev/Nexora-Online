@@ -73,7 +73,7 @@ class PoolWorld {
     final double len = math.sqrt(dirX * dirX + dirY * dirY);
     final double dx = len > 0 ? dirX / len : 0;
     final double dy = len > 0 ? dirY / len : -1;
-    double p = power;
+    double p = power * PoolConfig.cuePowerCoefficient;
     if (p > 1) p = 1;
     if (p < 0) p = 0;
     final double speed = p * PoolConfig.maxShotSpeed;
@@ -201,12 +201,15 @@ class PoolWorld {
       cvy = cueBall.vy;
       csp = math.sqrt(cvx * cvx + cvy * cvy);
     }
-    // equal masses
-    final double j = -(1 + PoolConfig.eBall) * rv * 0.5;
-    a.vx -= j * nx;
-    a.vy -= j * ny;
-    b.vx += j * nx;
-    b.vy += j * ny;
+    final double ma = a.isCue ? PoolConfig.ballMass : PoolConfig.objectMass;
+    final double mb = b.isCue ? PoolConfig.ballMass : PoolConfig.objectMass;
+    final double invA = 1 / ma, invB = 1 / mb;
+    final double e = (a.isCue || b.isCue) ? PoolConfig.collisionCueObject : PoolConfig.collisionObjectObject;
+    final double j = -(1 + e) * rv / (invA + invB);
+    a.vx -= j * nx * invA;
+    a.vy -= j * ny * invA;
+    b.vx += j * nx * invB;
+    b.vy += j * ny * invB;
     if (cueBall != null && csp > 0) {
       _spinUsed = true;
       final double add = spin * PoolConfig.followFactor * csp;

@@ -3,7 +3,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +16,7 @@ import '../core/bm_engine.dart';
 import 'bm_audio.dart';
 import 'bm_ball.dart';
 import 'bm_painter.dart';
+import '../../core/nexora_flame_runtime.dart';
 
 const String _a = 'assets/games/bermuda/';
 
@@ -64,6 +65,7 @@ class _BermudaViewState extends State<BermudaView>
   final BmImages im = BmImages();
   final BmView view = BmView();
   late final BmAudio audio = BmAudio(enabled: widget.launch.soundOn);
+  late final BermudaFlameGame _flame = BermudaFlameGame();
   final ValueNotifier<int> _frame = ValueNotifier<int>(0);
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -658,6 +660,7 @@ class _BermudaViewState extends State<BermudaView>
     }
     audio.dispose();
     im.dispose();
+    _flame.pauseEngine();
     _frame.dispose();
     e.stop();
     super.dispose();
@@ -677,6 +680,9 @@ class _BermudaViewState extends State<BermudaView>
       child: ColoredBox(
         color: const Color(0xFF03060D),
         child: Stack(children: <Widget>[
+          Positioned.fill(
+            child: IgnorePointer(child: GameWidget(game: _flame)),
+          ),
           Positioned.fill(
             child: Listener(
               behavior: HitTestBehavior.opaque,

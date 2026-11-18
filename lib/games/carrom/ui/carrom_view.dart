@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -12,6 +12,7 @@ import '../core/carrom_match.dart';
 import 'cr_controller.dart';
 import 'cr_fx.dart';
 import 'cr_painter.dart';
+import '../../core/nexora_flame_runtime.dart';
 
 const String _kRulesFa =
     'هدف: هر ۹ مهره‌ی رنگ خودت را (سفید برای پایین، مشکی برای بالا) به چاله‌ها بینداز و ملکه‌ی قرمز را پوشش بده.\n\n'
@@ -45,6 +46,7 @@ class CarromView extends StatefulWidget {
 class _CarromViewState extends State<CarromView>
     with SingleTickerProviderStateMixin {
   late final CrController _c;
+  late final CarromFlameGame _flame = CarromFlameGame();
   late final Ticker _ticker;
   final CrImages _images = CrImages();
   Duration _last = Duration.zero;
@@ -98,6 +100,7 @@ class _CarromViewState extends State<CarromView>
   void dispose() {
     _ticker.dispose();
     _c.dispose();
+    _flame.pauseEngine();
     super.dispose();
   }
 
@@ -163,6 +166,9 @@ class _CarromViewState extends State<CarromView>
           ),
           child: Stack(
             children: <Widget>[
+              Positioned.fill(
+                child: IgnorePointer(child: GameWidget(game: _flame)),
+              ),
               Positioned.fill(
                   child: IgnorePointer(
                       child: CustomPaint(

@@ -134,7 +134,8 @@ void _collidePair(CrBody a, CrBody b, List<CrImpact>? sink) {
   b.y += ny * overlap * (ib / isum);
   final rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
   if (rv < 0) {
-    final j = -(1 + CrConfig.ePiece) * rv / isum;
+    final e = (a.isStriker || b.isStriker) ? CrConfig.eStrikerPiece : CrConfig.ePiece;
+    final j = -(1 + e) * rv / isum;
     a.vx -= j * ia * nx;
     a.vy -= j * ia * ny;
     b.vx += j * ib * nx;

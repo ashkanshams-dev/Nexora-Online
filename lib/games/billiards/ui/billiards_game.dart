@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +16,7 @@ import 'pool_painter.dart';
 import 'pool_scene.dart';
 import 'pool_skins.dart';
 import '../../../core/ui2/nx2_board_art.dart';
+import '../../core/nexora_flame_runtime.dart';
 
 enum _Stage { aiming, striking, rolling, over }
 
@@ -45,6 +46,7 @@ class _BilliardsGameState extends State<BilliardsGame>
 
   late final PoolMatch _match;
   late final PoolScene _scene;
+  late final BilliardsFlameGame _flame = BilliardsFlameGame();
   late final Ticker _ticker;
   late final math.Random _rng;
   Duration _last = Duration.zero;
@@ -263,6 +265,7 @@ class _BilliardsGameState extends State<BilliardsGame>
     _match.world.onImpact = null;
     _match.world.onPocket = null;
     _scene.dispose();
+    _flame.pauseEngine();
     super.dispose();
   }
 
@@ -801,6 +804,9 @@ class _BilliardsGameState extends State<BilliardsGame>
             final double top = topH + math.max(0.0, (availH - th) / 2);
             return Stack(
               children: <Widget>[
+                Positioned.fill(
+                  child: IgnorePointer(child: GameWidget(game: _flame)),
+                ),
                 Positioned(
                     left: 0,
                     right: 0,
