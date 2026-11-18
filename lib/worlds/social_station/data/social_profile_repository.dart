@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -68,7 +69,7 @@ class SocialProfileRepository {
     final String name = file.name.toLowerCase();
     final String ext = name.endsWith('.png') ? 'png' : name.endsWith('.webp') ? 'webp' : 'jpg';
     final String mime = ext == 'png' ? 'image/png' : ext == 'webp' ? 'image/webp' : 'image/jpeg';
-    final List<int> bytes = await file.readAsBytes();
+    final Uint8List bytes = await file.readAsBytes();
     if (bytes.isEmpty || bytes.length > 5 * 1024 * 1024) throw const FormatException('avatar_too_large');
     final String path = '$me/avatar.$ext';
     await client.storage.from(avatarBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime, upsert: true));
