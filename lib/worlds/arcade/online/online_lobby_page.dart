@@ -63,6 +63,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   List<_Seat> _seats = <_Seat>[];
   List<_RoomMember> _members = <_RoomMember>[];
   List<_RoomMessage> _roomMessages = <_RoomMessage>[];
+  final Set<String> _selectedRoomPlayers = <String>{};
   List<Map<String, dynamic>> _open = <Map<String, dynamic>>[];
   final Set<int> _present = <int>{};
   RealtimeChannel? _ch;
@@ -468,6 +469,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
       _seats = <_Seat>[];
       _members = <_RoomMember>[];
       _roomMessages = <_RoomMessage>[];
+      _selectedRoomPlayers.clear();
       _realtimeConnected = false;
       if (!preserveMatchmaking) _matchmaking = _matchmaking.cancel();
       _quickIdemKey = null;
@@ -522,6 +524,14 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
         await _c!.rpc('nx_room_join', params: <String, dynamic>{
           'p_room': _roomId,
           'p_role': 'spectator',
+        });
+        await _refresh();
+      });
+
+  Future<void> _saveSelectedRoomPlayers() => _guard(() async {
+        await _c!.rpc('nx_room_select_players', params: <String, dynamic>{
+          'p_room': _roomId,
+          'p_users': _selectedRoomPlayers.toList(),
         });
         await _refresh();
       });
@@ -957,6 +967,29 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
                 DropdownMenuItem(value: 'quiz', child: Text('Quiz')),
                 DropdownMenuItem(value: 'mafia', child: Text('Mafia')),
               ], onChanged: _busy ? null : (String? v) { if (v != null && v != r['game']) unawaited(_changeRoomGame(v)); }),
+            ])),
+          ],
+          if (host && !quick && r['status'] == 'lobby') ...<Widget>[
+            const SizedBox(height: NxSpace.sm),
+            GlassPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+              Row(children: <Widget>[Expanded(child: Text(context.tx('بازیکنان انتخابی مسابقه', 'Selected match players'), style: const TextStyle(fontWeight: FontWeight.w900))), Text('${_selectedRoomPlayers.length}/6', style: TextStyle(color: visual.muted))]),
+              const SizedBox(height: 4),
+              Text(context.tx('مدیر می‌تواند از افراد حاضر تا ۶ نفر را وارد بازی کند؛ برای Carrom و Finger Soccer حالت ۳v۳ مجاز است.', 'The manager can send up to six present members into the match; Carrom and Finger Soccer support 3v3.'), style: TextStyle(color: visual.muted, fontSize: 11)),
+              for (final _RoomMember m in _members.where((_RoomMember x) => x.role != 'spectator'))
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: _selectedRoomPlayers.contains(m.userId),
+                  title: Text(m.name),
+                  subtitle: Text(m.role),
+                  onChanged: (bool? checked) {
+                    setState(() {
+                      if (checked == true && _selectedRoomPlayers.length < 6) _selectedRoomPlayers.add(m.userId);
+                      if (checked != true) _selectedRoomPlayers.remove(m.userId);
+                    });
+                  },
+                ),
+              Align(alignment: Alignment.centerLeft, child: FilledButton.icon(onPressed: _busy || _selectedRoomPlayers.length < 2 ? null : _saveSelectedRoomPlayers, icon: const Icon(Icons.save_rounded), label: Text(context.tx('ثبت بازیکنان', 'Save players')))),
             ])),
           ],
           const SizedBox(height: NxSpace.sm),
