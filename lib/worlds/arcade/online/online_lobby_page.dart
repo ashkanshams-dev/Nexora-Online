@@ -26,6 +26,20 @@ class _Seat {
   final String name;
 }
 
+class _RoomMember {
+  const _RoomMember({required this.userId, required this.role, required this.name});
+  final String userId;
+  final String role;
+  final String name;
+}
+
+class _RoomMessage {
+  const _RoomMessage({required this.author, required this.text, required this.createdAt});
+  final String author;
+  final String text;
+  final DateTime createdAt;
+}
+
 /// Online lobby for one game: quick match, private room by code, open rooms, invite friends.
 class OnlineLobbyPage extends ConsumerStatefulWidget {
   const OnlineLobbyPage(
@@ -43,9 +57,12 @@ class OnlineLobbyPage extends ConsumerStatefulWidget {
 
 class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   final TextEditingController _code = TextEditingController();
+  final TextEditingController _chatText = TextEditingController();
   String? _roomId;
   Map<String, dynamic>? _room;
   List<_Seat> _seats = <_Seat>[];
+  List<_RoomMember> _members = <_RoomMember>[];
+  List<_RoomMessage> _roomMessages = <_RoomMessage>[];
   List<Map<String, dynamic>> _open = <Map<String, dynamic>>[];
   final Set<int> _present = <int>{};
   RealtimeChannel? _ch;
@@ -108,6 +125,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
     _poll?.cancel();
     _quickTimeout?.cancel();
     _code.dispose();
+    _chatText.dispose();
     final RealtimeChannel? ch = _ch;
     final SupabaseClient? c = _c;
     if (ch != null && c != null) unawaited(c.removeChannel(ch));
@@ -276,6 +294,26 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
               value: roomId),
           callback: (_) => unawaited(_refresh()),
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'nx_room_members',
+          filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'room_id',
+              value: roomId),
+          callback: (_) => unawaited(_refresh()),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'nx_room_messages',
+          filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'room_id',
+              value: roomId),
+          callback: (_) => unawaited(_refresh()),
+        )
         .onPresenceSync((_) => _syncPresence())
         .onPresenceJoin((_) => _syncPresence())
         .onPresenceLeave((_) => _syncPresence())
@@ -333,6 +371,19 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
           .select('user_id, seat, ready, profiles(username)')
           .eq('room_id', id)
           .order('seat');
+      final List<dynamic> ms = await c
+          .from('nx_room_members')
+          .select('user_id, role, profiles(username)')
+          .eq('room_id', id)
+          .order('joined_at')
+          .limit(50);
+      final List<dynamic> msgs = await c
+          .from('nx_room_messages')
+          .select('author, text, created_at, profiles(username)')
+          .eq('room_id', id)
+          .eq('deleted', false)
+          .order('created_at', ascending: false)
+          .limit(100);
       if (!mounted) return;
       final List<_Seat> seats = ps.map((dynamic r) {
         final Map<String, dynamic> m = Map<String, dynamic>.from(r as Map);
@@ -344,9 +395,29 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
           name: prof is Map ? '${prof['username'] ?? 'Pilot'}' : 'Pilot',
         );
       }).toList();
+      final List<_RoomMember> members = ms.map((dynamic r) {
+        final Map<String, dynamic> m = Map<String, dynamic>.from(r as Map);
+        final dynamic p = m['profiles'];
+        return _RoomMember(
+          userId: '${m['user_id']}',
+          role: '${m['role']}',
+          name: p is Map ? '${p['username'] ?? 'Pilot'}' : 'Pilot',
+        );
+      }).toList();
+      final List<_RoomMessage> messages = msgs.map((dynamic r) {
+        final Map<String, dynamic> m = Map<String, dynamic>.from(r as Map);
+        final dynamic p = m['profiles'];
+        return _RoomMessage(
+          author: p is Map ? '${p['username'] ?? 'Pilot'}' : 'Pilot',
+          text: '${m['text'] ?? ''}',
+          createdAt: DateTime.tryParse('${m['created_at']}') ?? DateTime.now(),
+        );
+      }).toList().reversed.toList();
       setState(() {
         _room = room;
         _seats = seats;
+        _members = members;
+        _roomMessages = messages;
         if (room?['status'] == 'playing' && _matchmaking.active) {
           _matchmaking = _matchmaking.matched(id);
         }
@@ -383,6 +454,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
         await _c!.rpc('nx_cancel_matchmaking',
             params: <String, dynamic>{'p_idem_key': key});
       }
+      await _c!.rpc('nx_room_leave', params: <String, dynamic>{'p_room': id});
       await _c!.rpc('nx_leave_room', params: <String, dynamic>{'p_room': id});
     });
     _quickTimeout?.cancel();
@@ -394,6 +466,8 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
       _roomId = null;
       _room = null;
       _seats = <_Seat>[];
+      _members = <_RoomMember>[];
+      _roomMessages = <_RoomMessage>[];
       _realtimeConnected = false;
       if (!preserveMatchmaking) _matchmaking = _matchmaking.cancel();
       _quickIdemKey = null;
@@ -402,7 +476,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   }
 
   Future<void> _start() => _guard(() async {
-        final dynamic r = await _c!.rpc('nx_start_match',
+        final dynamic r = await _c!.rpc('nx_start_room_match',
             params: <String, dynamic>{'p_room': _roomId});
         final String? mid = (r as Map)['match_id'] as String?;
         if (mid != null && !_inMatch) unawaited(_openMatch(mid));
@@ -420,6 +494,35 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   Future<void> _toggleReady(bool v) => _guard(() async {
         await _c!.rpc('nx_set_ready',
             params: <String, dynamic>{'p_room': _roomId, 'p_ready': v});
+        await _refresh();
+      });
+
+  Future<void> _sendRoomMessage() async {
+    final String text = _chatText.text.trim();
+    if (text.isEmpty || _roomId == null || _busy) return;
+    _chatText.clear();
+    await _guard(() async {
+      await _c!.rpc('nx_room_send_message', params: <String, dynamic>{
+        'p_room': _roomId,
+        'p_text': text,
+      });
+      await _refresh();
+    });
+  }
+
+  Future<void> _changeRoomGame(String game) => _guard(() async {
+        await _c!.rpc('nx_room_change_game', params: <String, dynamic>{
+          'p_room': _roomId,
+          'p_game': game,
+        });
+        await _refresh();
+      });
+
+  Future<void> _joinAsSpectator() => _guard(() async {
+        await _c!.rpc('nx_room_join', params: <String, dynamic>{
+          'p_room': _roomId,
+          'p_role': 'spectator',
+        });
         await _refresh();
       });
 
@@ -505,9 +608,11 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
           final SupabaseClient? c = _c;
           final String id = _roomId!;
           if (c != null)
-            unawaited(c.rpc('nx_leave_room', params: <String, dynamic>{
+            unawaited(c.rpc('nx_room_leave', params: <String, dynamic>{
               'p_room': id
-            }).catchError((Object _) => null));
+            }).then((_) => c.rpc('nx_leave_room', params: <String, dynamic>{
+              'p_room': id
+            })).catchError((Object _) => null));
         }
       },
       child: NxWorldScaffold(
@@ -822,6 +927,46 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
             _seatPicker(context, game, seats, (int n) => _setSeats(n)),
           const SizedBox(height: NxSpace.sm),
           for (int s = 0; s < seats; s++) _seatTile(context, s, r),
+          const SizedBox(height: NxSpace.sm),
+          GlassPanel(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+              Text(context.tx('اتاق گفت‌وگومحور', 'Conversation room'), style: const TextStyle(fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Text(context.tx('${_members.where((_RoomMember m) => m.role != 'spectator').length}/۳۰ گوینده · ${_members.where((_RoomMember m) => m.role == 'spectator').length}/۲۰ تماشاچی · ${_members.length}/۵۰ نفر', '${_members.where((_RoomMember m) => m.role != 'spectator').length}/30 speakers · ${_members.where((_RoomMember m) => m.role == 'spectator').length}/20 spectators · ${_members.length}/50 total'), style: TextStyle(color: visual.muted, fontSize: 12)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 6, children: <Widget>[
+                for (final _RoomMember m in _members.take(50))
+                  Chip(label: Text('${m.name} · ${m.role == 'manager' ? 'manager' : m.role == 'speaker' ? 'speaker' : 'spectator'}')),
+              ]),
+              if (mine == null)
+                Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: _busy ? null : _joinAsSpectator, icon: const Icon(Icons.visibility_rounded), label: Text(context.tx('ورود به‌عنوان تماشاچی', 'Join as spectator')))),
+            ]),
+          ),
+          if (host && !quick && r['status'] == 'lobby') ...<Widget>[
+            const SizedBox(height: NxSpace.sm),
+            GlassPanel(child: Row(children: <Widget>[
+              Expanded(child: Text(context.tx('انتخاب بازی اتاق', 'Room game'), style: const TextStyle(fontWeight: FontWeight.w800))),
+              DropdownButton<String>(value: '${r['game']}', items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem(value: 'finger_soccer', child: Text('Finger Soccer')),
+                DropdownMenuItem(value: 'carrom', child: Text('Carrom')),
+                DropdownMenuItem(value: 'billiards', child: Text('Billiards')),
+                DropdownMenuItem(value: 'backgammon', child: Text('Backgammon')),
+                DropdownMenuItem(value: 'ludo', child: Text('Ludo')),
+                DropdownMenuItem(value: 'snakes_ladders', child: Text('Snakes & Ladders')),
+                DropdownMenuItem(value: 'uno', child: Text('UNO')),
+                DropdownMenuItem(value: 'quiz', child: Text('Quiz')),
+                DropdownMenuItem(value: 'mafia', child: Text('Mafia')),
+              ], onChanged: _busy ? null : (String? v) { if (v != null && v != r['game']) unawaited(_changeRoomGame(v)); }),
+            ])),
+          ],
+          const SizedBox(height: NxSpace.sm),
+          GlassPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+            Row(children: <Widget>[Expanded(child: Text(context.tx('گفت‌وگوی اتاق', 'Room chat'), style: const TextStyle(fontWeight: FontWeight.w900))), Text('${_roomMessages.length}/100', style: TextStyle(color: visual.muted, fontSize: 11))]),
+            const SizedBox(height: 6),
+            if (_roomMessages.isEmpty) Text(context.tx('اولین پیام را بفرست.', 'Start the conversation.'), style: TextStyle(color: visual.muted)),
+            for (final _RoomMessage m in _roomMessages.take(20)) Padding(padding: const EdgeInsets.only(bottom: 5), child: Text('${m.author}: ${m.text}')),
+            Row(children: <Widget>[Expanded(child: TextField(controller: _chatText, maxLines: 2, decoration: InputDecoration(hintText: context.tx('پیام برای همه اعضا…', 'Message everyone…')), onSubmitted: (_) => unawaited(_sendRoomMessage()))), IconButton(onPressed: _busy ? null : () => unawaited(_sendRoomMessage()), icon: const Icon(Icons.send_rounded))]),
+          ])),
           const SizedBox(height: NxSpace.md),
           if (r['status'] == 'playing' && r['match_id'] != null)
             FilledButton.icon(
