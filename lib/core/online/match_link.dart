@@ -31,6 +31,8 @@ class SupabaseMatchLink extends ChangeNotifier implements NetLink {
     game = '${m['game']}';
     roomId = m['room_id'] as String?;
     settings = Map<String, dynamic>.from((m['settings'] as Map?) ?? const <String, dynamic>{});
+    physicsVersion = '${m['physics_version'] ?? 'legacy'}';
+    physicsContract = Map<String, dynamic>.from((m['physics_contract'] as Map?) ?? const <String, dynamic>{});
     mySeat = _players.indexOf(_uid);
     _status = '${m['status']}';
     if (_status != 'playing') _end = _endFrom(m);
@@ -57,6 +59,9 @@ class SupabaseMatchLink extends ChangeNotifier implements NetLink {
   String? roomId;
   @override
   late final Map<String, dynamic> settings;
+  /// Server-selected deterministic physics contract for this match.
+  late final String physicsVersion;
+  late final Map<String, dynamic> physicsContract;
   @override
   late final int mySeat;
 
