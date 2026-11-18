@@ -196,8 +196,13 @@ void crStep(List<CrBody> bs, List<int> pocketed, [List<CrImpact>? sink]) {
     if (!b.onBoard) continue;
     b.x += b.vx * dt;
     b.y += b.vy * dt;
-    b.vx *= k;
-    b.vy *= k;
+    final sp2 = b.vx * b.vx + b.vy * b.vy;
+    if (sp2 > 0) {
+      var f = k - CrConfig.friction * dt / math.sqrt(sp2);
+      if (f < 0) f = 0;
+      b.vx *= f;
+      b.vy *= f;
+    }
     if (b.vx * b.vx + b.vy * b.vy < s2) {
       b.vx = 0;
       b.vy = 0;

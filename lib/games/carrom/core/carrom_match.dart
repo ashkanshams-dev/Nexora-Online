@@ -34,6 +34,9 @@ class CrTurnOutcome {
     required this.oppPocketed,
     required this.queenPocketed,
     required this.foul,
+    this.queenEarly = false,
+    this.strikerFoul = false,
+    this.duePaid = 0,
     required this.queenCovered,
     required this.queenPending,
     required this.queenReturned,
@@ -48,8 +51,17 @@ class CrTurnOutcome {
   final int oppPocketed;
   final bool queenPocketed;
 
-  /// Striker pocketed.
+  /// Striker pocketed, or a colour finished before the queen was covered.
   final bool foul;
+
+  /// Queen pocketed before the shooter's first coin: it went back to the centre.
+  final bool queenEarly;
+
+  /// The striker fell into a pocket.
+  final bool strikerFoul;
+
+  /// Dues paid back with coins pocketed in this stroke.
+  final int duePaid;
 
   /// The shooter covered the queen with this shot.
   final bool queenCovered;
@@ -74,9 +86,12 @@ class CrTurnOutcome {
 ///  * Queen: after pocketing it you must "cover" it by pocketing one of your coins in the same
 ///    shot or your next shot; otherwise the queen returns to the centre.
 ///  * Foul = striker pocketed: coins of yours pocketed in that shot return, plus one of your
-///    already pocketed coins as a penalty (if you have one); a pending queen returns; turn ends.
+///    already pocketed coins as a penalty; with none pocketed you owe a "due" that is paid with
+///    your next pocketed coin. A pending queen returns; turn ends.
+///  * The queen may only be pocketed after your first coin (or together with an own coin).
 ///  * Opponent coins you pocket stay pocketed (they count for the opponent).
-///  * The last coin of a colour can't be pocketed before the queen is covered: it is returned.
+///  * The last coin of a colour can't be pocketed before the queen is covered: it is returned
+///    and the shooter pays a penalty (foul, turn ends).
 ///  * Win: all your 9 coins pocketed with the queen covered. Board points = opponent coins left
 ///    + 3 if you covered the queen. After [CrConfig.maxTurns] shots the higher tally wins
 ///    (pocketed coins + 3 for the queen), equal = draw.
@@ -90,7 +105,8 @@ class CrMatch {
     required this.queenPendingFor,
     required this.queenCoveredBy,
     required this.points,
-  });
+    List<int>? dues,
+  }) : dues = dues ?? <int>[0, 0];
 
   factory CrMatch.newBoard({int firstTurn = 0}) => CrMatch._(
         bodies: crInitialBodies(),
@@ -116,6 +132,10 @@ class CrMatch {
   /// Board points (set when the board is won).
   List<int> points;
 
+  /// ICF "due": penalty coins owed by a seat that had nothing pocketed when it fouled.
+  /// A due is paid with the next own coin that seat pockets (the coin goes back to the centre).
+  List<int> dues;
+
   /// Online sync: adopt a resting-state snapshot produced by [toJson].
   void applyJson(Map<String, dynamic> j) {
     final CrMatch o = CrMatch.fromJson(j);
@@ -127,6 +147,7 @@ class CrMatch {
     queenPendingFor = o.queenPendingFor;
     queenCoveredBy = o.queenCoveredBy;
     points = o.points;
+    dues = o.dues;
   }
 
   CrBody get striker => bodies[CrConfig.strikerId];
@@ -158,6 +179,7 @@ class CrMatch {
         queenPendingFor: queenPendingFor,
         queenCoveredBy: queenCoveredBy,
         points: List<int>.from(points),
+        dues: List<int>.from(dues),
       );
 
   /// Is the striker allowed at [x] on the current shooter's baseline?
@@ -233,6 +255,9 @@ class CrMatch {
     var coveredNow = false;
     var queenBack = false;
     var cont = false;
+    var queenEarly = false;
+    var lastCoinFoul = false;
+    var duePaid = 0;
 
     if (foul) {
       for (final id in ownIds) {
@@ -244,15 +269,17 @@ class CrMatch {
         queenBack = true;
         queenPendingFor = -1;
       }
-      // Penalty: one already-pocketed coin of the shooter returns (lowest id first).
-      for (final b in bodies) {
-        if (b.kind == ownK && !b.onBoard) {
-          crRespot(bodies, b.id);
-          returned.add(b.id);
-          break;
-        }
-      }
+      _penalty(p, returned);
     } else {
+      final int before = pocketedCount(p) - ownIds.length;
+      // Queen can only be pocketed after the shooter's first coin (ICF): otherwise it returns,
+      // unless an own coin falls in the same stroke (then it is covered).
+      if (queenIn && ownIds.isEmpty && before == 0 && queenPendingFor != p) {
+        crRespot(bodies, CrConfig.queenId);
+        queenBack = true;
+        queenIn = false;
+        queenEarly = true;
+      }
       if (queenPendingFor == p) {
         if (ownIds.isNotEmpty) {
           queenCoveredBy = p;
@@ -272,6 +299,13 @@ class CrMatch {
         }
       }
       cont = ownIds.isNotEmpty || queenIn;
+      // Pay outstanding dues with coins pocketed in this stroke (turn still continues).
+      for (var i = ownIds.length - 1; i >= 0 && dues[p] > 0; i--) {
+        crRespot(bodies, ownIds[i]);
+        returned.add(ownIds[i]);
+        dues[p] -= 1;
+        duePaid += 1;
+      }
     }
 
     // Last-coin rule: a colour can't be finished while the queen is still uncovered.
@@ -299,7 +333,12 @@ class CrMatch {
           crRespot(bodies, pick);
           returned.add(pick);
         }
-        if (seat == p) cont = false;
+        // Finishing a colour (own or opponent's) before the queen is covered is a foul.
+        cont = false;
+        if (!foul && !lastCoinFoul) {
+          lastCoinFoul = true;
+          _penalty(p, returned);
+        }
       }
     }
     if (!cont && queenPendingFor == p) {
@@ -335,7 +374,10 @@ class CrMatch {
       ownPocketed: ownIds.length,
       oppPocketed: oppIds.length,
       queenPocketed: queenIn,
-      foul: foul,
+      foul: foul || lastCoinFoul,
+      queenEarly: queenEarly,
+      strikerFoul: foul,
+      duePaid: duePaid,
       queenCovered: coveredNow,
       queenPending: queenPendingFor == p,
       queenReturned: queenBack,
@@ -343,6 +385,19 @@ class CrMatch {
       continueTurn: !over && cont,
       matchOver: over,
     );
+  }
+
+  /// One already-pocketed coin of [seat] returns to the centre; with none pocketed a due is owed.
+  void _penalty(int seat, List<int> returned) {
+    final k = kindFor(seat);
+    for (final b in bodies) {
+      if (b.kind == k && !b.onBoard) {
+        crRespot(bodies, b.id);
+        returned.add(b.id);
+        return;
+      }
+    }
+    dues[seat] += 1;
   }
 
   void _decideByTally() {
@@ -388,6 +443,7 @@ class CrMatch {
         'queenPendingFor': queenPendingFor,
         'queenCoveredBy': queenCoveredBy,
         'points': points,
+        'dues': dues,
       };
 
   factory CrMatch.fromJson(Map<String, dynamic> j) {
@@ -409,6 +465,9 @@ class CrMatch {
       queenPendingFor: (j['queenPendingFor'] as num).toInt(),
       queenCoveredBy: (j['queenCoveredBy'] as num).toInt(),
       points: (j['points'] as List<dynamic>).map((dynamic e) => (e as num).toInt()).toList(),
+      dues: j['dues'] is List
+          ? (j['dues'] as List<dynamic>).map((dynamic e) => (e as num).toInt()).toList()
+          : <int>[0, 0],
     );
   }
 }

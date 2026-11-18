@@ -681,11 +681,20 @@ class CrController extends ChangeNotifier {
     if (o.queenReturned) spawnedAt[CrConfig.queenId] = clock;
     final mine =
         online ? o.shooter == mySeat : (launch.vsBot ? o.shooter == 0 : true);
-    if (o.foul) {
-      _say('خطا! استرایکر افتاد — یک مهره برگشت',
-          'Foul! Striker pocketed — a coin returns', kCrDanger);
+    if (o.strikerFoul) {
+      _say('خطا! استرایکر افتاد — جریمه: یک مهره برمی‌گردد',
+          'Foul! Striker pocketed — penalty coin returns', kCrDanger);
       fx.doFlash(kCrDanger, 0.35);
       if (launch.hapticsOn) HapticFeedback.heavyImpact();
+    } else if (o.foul) {
+      _say('خطا! آخرین مهره قبل از پوشش ملکه — برگشت + جریمه',
+          'Foul! Last coin before the queen — returned + penalty', kCrDanger);
+      fx.doFlash(kCrDanger, 0.35);
+    } else if (o.queenEarly) {
+      _say('ملکه فقط بعد از اولین مهره‌ی خودی — به مرکز برگشت',
+          'Queen only after your first coin — back to the centre', kCrDanger);
+    } else if (o.duePaid > 0) {
+      _say('بدهی (Due) پرداخت شد — دوباره بزن', 'Due paid — shoot again', kCrGold);
     } else if (o.queenCovered) {
       _banner('ملکه پوشش داده شد!', 'Queen covered!', kCrGold);
       fx.doFlash(kCrGold, 0.45);

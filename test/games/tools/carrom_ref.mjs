@@ -5,8 +5,8 @@
 export const C = {
   left: 75, top: 67, right: 949, bottom: 916, centerX: 512, centerY: 491.5,
   pockets: [[91.5, 88], [932.5, 88], [91.5, 895], [932.5, 895]],
-  captureR: 44, coinR: 21, strikerR: 27, coinMass: 1.0, strikerMass: 2.0,
-  dt: 1 / 120, drag: 1.3, stopSpeed: 8.0, ePiece: 0.90, eWall: 0.72, maxShotSpeed: 2600, maxSteps: 1200,
+  captureR: 42, coinR: 18.8, strikerR: 24.4, coinMass: 1.0, strikerMass: 2.7, friction: 1200,
+  dt: 1 / 120, drag: 0.4, stopSpeed: 8.0, ePiece: 0.90, eWall: 0.72, maxShotSpeed: 4200, maxSteps: 1200,
   baseline0: 797, baseline1: 186, baseMinX: 248, baseMaxX: 776, coinsPerSide: 9, queenBonus: 3, maxTurns: 160,
 };
 const STRIKER = 0, WHITE = 1, BLACK = 2, QUEEN = 3;
@@ -75,7 +75,9 @@ export function step(bs, pocketed) {
   const n = bs.length;
   for (let i = 0; i < n; i++) {
     const b = bs[i]; if (!b.on) continue;
-    b.x += b.vx * dt; b.y += b.vy * dt; b.vx *= k; b.vy *= k;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const sp2 = b.vx * b.vx + b.vy * b.vy;
+    if (sp2 > 0) { let f = k - C.friction * dt / Math.sqrt(sp2); if (f < 0) f = 0; b.vx *= f; b.vy *= f; }
     if (b.vx * b.vx + b.vy * b.vy < s2) { b.vx = 0; b.vy = 0; }
   }
   for (let i = 0; i < n; i++) {

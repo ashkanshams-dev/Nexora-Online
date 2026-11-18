@@ -23,19 +23,28 @@ class CrConfig {
   static const double pocketR = 54;
 
   /// A piece falls when its centre comes within this distance of a pocket centre.
-  static const double captureR = 44;
+  static const double captureR = 42;
 
-  static const double coinR = 21;
-  static const double strikerR = 27;
+  /// Real proportions (ICF): playing surface 74 cm = 874 units (11.81 units/cm).
+  /// Coin Ø 3.18 cm -> r 18.8; striker Ø 4.13 cm -> r 24.4. Mass: coin 5.5 g, striker 15 g.
+  static const double unitsPerCm = 874 / 74;
+  static const double coinR = 18.8;
+  static const double strikerR = 24.4;
   static const double coinMass = 1.0;
-  static const double strikerMass = 2.0;
+  static const double strikerMass = 2.7;
 
   static const double dt = 1 / 120;
-  static const double drag = 1.3;
+
+  /// Powdered-board sliding friction (constant deceleration, units/s^2 ~ 1.0 m/s^2)
+  /// plus a small linear drag (1/s).
+  static const double friction = 1200;
+  static const double drag = 0.4;
   static const double stopSpeed = 8.0;
   static const double ePiece = 0.90;
   static const double eWall = 0.72;
-  static const double maxShotSpeed = 2600;
+
+  /// ~3.6 m/s: a hard break. Per-step travel (35 u) stays below a coin diameter.
+  static const double maxShotSpeed = 4200;
   static const int maxSteps = 1200; // 10 s
 
   // Baselines (striker centre line) for seat 0 (bottom) and seat 1 (top).

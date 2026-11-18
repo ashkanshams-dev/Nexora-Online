@@ -13,14 +13,20 @@ class PoolConfig {
 
   // ---------------------------------------------------------------- art mapping
   static const double artW = 1024;
-  static const double artH = 1536;
+  /// Art space height: the 1536-px classic art is drawn through a knot map that stretches only the
+  /// straight rails so the playing surface becomes a true 2:1 (9-ft) table.
+  static const double artH = artClothTop + tableH + 106;
   static const double artClothLeft = 110;
   static const double artClothTop = 88;
 
   // ---------------------------------------------------------------- table
+  /// 2:1 playing surface (9 ft = 254 x 127 cm): 803 units = 1270 mm (0.632 units/mm).
   static const double tableW = 803;
-  static const double tableH = 1342;
-  static const double ballR = 22;
+  static const double tableH = tableW * 2;
+  static const double unitsPerMm = tableW / 1270;
+
+  /// Ball Ø 57.15 mm -> r 18.07 units.
+  static const double ballR = 18;
 
   /// Kitchen (behind the head string) = y >= headStringY.
   static const double headStringY = tableH * 0.75;
@@ -39,8 +45,9 @@ class PoolConfig {
   static const double minShotPower = 0.03;
 
   /// Rolling resistance: constant deceleration (units/s^2) + linear drag (1/s).
-  static const double rollDecel = 240;
-  static const double linearDrag = 0.35;
+  /// ~0.27 m/s^2 rolling resistance (cloth) + a little linear loss.
+  static const double rollDecel = 170;
+  static const double linearDrag = 0.15;
   static const double stopSpeed = 5;
 
   static const double eBall = 0.97;
@@ -62,8 +69,8 @@ class PoolConfig {
   static const List<List<double>> pockets = <List<double>>[
     <double>[-7, 3],
     <double>[tableW + 7, 3],
-    <double>[-33, 680],
-    <double>[tableW + 33, 680],
+    <double>[-33, sideY],
+    <double>[tableW + 33, sideY],
     <double>[-7, tableH + 5],
     <double>[tableW + 7, tableH + 5],
   ];
@@ -74,8 +81,8 @@ class PoolConfig {
   static const List<List<double>> pocketAim = <List<double>>[
     <double>[14, 14],
     <double>[tableW - 14, 14],
-    <double>[-4, 680],
-    <double>[tableW + 4, 680],
+    <double>[-4, sideY],
+    <double>[tableW + 4, sideY],
     <double>[14, tableH - 14],
     <double>[tableW - 14, tableH - 14],
   ];
@@ -85,10 +92,16 @@ class PoolConfig {
   static const double cornerJawNose = 76;
   static const double jawBack = -31;
   static const double cornerJawBackAlong = 45;
-  static const double sideMouthTop = 607;
-  static const double sideMouthBottom = 754;
-  static const double sideJawBackTop = 627;
-  static const double sideJawBackBottom = 734;
+  /// Side pockets sit exactly on the centre line.
+  static const double sideY = tableH / 2;
+  static const double sideMouthTop = sideY - 73;
+  static const double sideMouthBottom = sideY + 74;
+  static const double sideJawBackTop = sideY - 53;
+  static const double sideJawBackBottom = sideY + 54;
+
+  /// Where the side pocket and the bottom edge sit on the original classic art (source pixels).
+  static const double artSrcSideY = 768;
+  static const double artSrcH = 1536;
 
   /// Cushion segments [x1, y1, x2, y2]: straight rails between the jaws plus
   /// the angled jaw faces. Endpoints act as rounded knuckles.

@@ -52,17 +52,35 @@ void main() {
   test('golden vector matches JS reference (carrom_ref.mjs)', () {
     final m = CrMatch.newBoard();
     final o1 = m.playShot(const CrShot(placeX: 512, dirX: 0.03, dirY: -1, power: 1));
-    expect(o1.steps, 433);
+    expect(o1.steps, 148);
     expect(o1.foul, isFalse);
-    expect(m.stateHash(), 3664971594);
-    expect(m.turn, 1);
-    expect(m.queen.x, closeTo(469.47, 1e-9));
-    expect(m.queen.y, closeTo(322.211, 1e-9));
+    expect(m.stateHash(), 3863366055);
+    expect(m.turn, 0); // own white 7 fell -> shoot again
+    expect(m.queen.x, closeTo(686.05, 1e-9));
+    expect(m.queen.y, closeTo(418.364, 1e-9));
+    expect(o1.ownPocketed, 1);
     expect(o1.oppPocketed, 1); // body 16 (black)
+    expect(m.bodies[7].onBoard, isFalse);
     expect(m.bodies[16].onBoard, isFalse);
-    // Note: the JS reference's shot 2 (placeX 700) is not a legal placement in the Dart
-    // rules engine (striker overlaps a coin), so parity is asserted on shot 1 only.
-    expect(m.placementOk(700), isFalse);
+  });
+
+  test('real proportions: coin and striker match a 74 cm ICF board', () {
+    const upc = CrConfig.unitsPerCm;
+    expect(CrConfig.coinR * 2 / upc, closeTo(3.18, 0.02));
+    expect(CrConfig.strikerR * 2 / upc, closeTo(4.13, 0.02));
+    expect(CrConfig.maxShotSpeed * CrConfig.dt, lessThan(CrConfig.coinR * 2));
+  });
+
+  test('break shot settles within a few seconds and scatters the pile', () {
+    final m = CrMatch.newBoard();
+    final o = m.playShot(const CrShot(placeX: 512, dirX: 0.03, dirY: -1, power: 1));
+    expect(o.steps / 120, lessThan(4));
+    double far = 0;
+    for (final b in m.bodies) {
+      if (b.isStriker || !b.onBoard) continue;
+      far = math.max(far, math.sqrt(math.pow(b.x - CrConfig.centerX, 2) + math.pow(b.y - CrConfig.centerY, 2)));
+    }
+    expect(far, greaterThan(250));
   });
 
   test('pocketing an own coin continues the turn, opponent coin does not', () {
@@ -99,6 +117,7 @@ void main() {
 
   test('queen: covered on the next shot, or returned when not covered', () {
     final m = CrMatch.newBoard();
+    fakeShot(m, <int>[1]); // first own coin
     final o = fakeShot(m, <int>[CrConfig.queenId]);
     expect(o.queenPending, isTrue);
     expect(m.queenPendingFor, 0);
@@ -108,6 +127,7 @@ void main() {
     expect(m.queenCoveredBy, 0);
 
     final n = CrMatch.newBoard();
+    fakeShot(n, <int>[1]);
     fakeShot(n, <int>[CrConfig.queenId]);
     final miss = fakeShot(n, <int>[]);
     expect(miss.queenReturned, isTrue);
@@ -116,11 +136,39 @@ void main() {
     expect(n.turn, 1);
   });
 
+  test('queen before the first own coin goes back to the centre', () {
+    final m = CrMatch.newBoard();
+    final o = fakeShot(m, <int>[CrConfig.queenId]);
+    expect(o.queenEarly, isTrue);
+    expect(m.queen.onBoard, isTrue);
+    expect(m.queenPendingFor, -1);
+    expect(m.turn, 1);
+  });
+
+  test('due: striker foul with nothing pocketed is owed and paid with the next coin', () {
+    final m = CrMatch.newBoard();
+    final f = fakeShot(m, <int>[CrConfig.strikerId]);
+    expect(f.foul, isTrue);
+    expect(m.dues[0], 1);
+    expect(m.turn, 1);
+    fakeShot(m, <int>[]); // seat 1 misses
+    final o = fakeShot(m, <int>[2]);
+    expect(o.duePaid, 1);
+    expect(m.dues[0], 0);
+    expect(m.pocketedCount(0), 0);
+    expect(m.turn, 0); // still shoots again
+    // survives the online snapshot
+    final copy = CrMatch.fromJson(m.toJson());
+    expect(copy.dues, <int>[0, 0]);
+  });
+
   test('last coin before the queen is returned; win after queen covered', () {
     final m = CrMatch.newBoard();
     // seat 0 pockets all 9 whites while the queen is uncovered: last one comes back
-    fakeShot(m, <int>[1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(m.remaining(0), 1);
+    final lc = fakeShot(m, <int>[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(lc.foul, isTrue);
+    expect(m.remaining(0), 2); // last coin back + penalty coin
+    expect(m.turn, 1);
     expect(m.winner, isNull);
 
     final w = CrMatch.newBoard();

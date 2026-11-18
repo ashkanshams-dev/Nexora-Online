@@ -254,6 +254,39 @@ void main() {
       _expectSaneTable(m);
     });
 
+    test('soft break that reaches fewer than 4 rails is illegal: re-rack, opponent breaks', () {
+      final PoolMatch m = PoolMatch.newRack();
+      final PoolBall apex = m.balls[1];
+      final PoolShotReport r = m.playShot(_at(m, apex.x, apex.y, 0.08))!;
+      expect(r.foul, PoolFoul.illegalBreak);
+      expect(r.reRacked, isTrue);
+      expect(m.current, 1);
+      expect(m.isBreak, isTrue);
+      expect(m.kitchenOnly, isTrue);
+      expect(m.balls[8].x, closeTo(PoolConfig.footSpotX, 1e-9));
+      _expectSaneTable(m);
+    });
+
+    test('scratch on the break: ball in hand behind the head string only', () {
+      final PoolMatch m = _table(<int, List<double>>{
+        0: <double>[300, 300],
+        3: <double>[600, 1100],
+        12: <double>[600, 1000],
+        8: <double>[400, 700],
+      }, isBreak: true);
+      final PoolShotReport r = m.playShot(_at(m, 14, 14, 0.4))!;
+      expect(r.foul, PoolFoul.scratch);
+      expect(m.ballInHand, isTrue);
+      expect(m.kitchenOnly, isTrue);
+      expect(m.canPlaceCue(200, 500), isFalse);
+    });
+
+    test('real proportions: 2:1 table and a 57 mm ball', () {
+      expect(PoolConfig.tableH / PoolConfig.tableW, 2);
+      expect(PoolConfig.ballR * 2 / PoolConfig.unitsPerMm, closeTo(57.15, 1.0));
+      expect(PoolConfig.pockets[2][1], PoolConfig.tableH / 2);
+    });
+
     test('clone is independent and keeps the last report', () {
       final PoolMatch m = PoolMatch.newRack();
       final PoolBall apex = m.balls[1];

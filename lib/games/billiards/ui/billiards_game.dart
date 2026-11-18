@@ -615,6 +615,10 @@ class _BilliardsGameState extends State<BilliardsGame>
           fa = 'خطا: بعد از برخورد هیچ توپی به دیواره نخورد';
           en = 'Foul: no rail after contact';
           break;
+        case PoolFoul.illegalBreak:
+          fa = 'بریک غیرمجاز (کمتر از ۴ توپ به دیواره) — چیدن دوباره';
+          en = 'Illegal break (fewer than 4 balls to a rail) — re-rack';
+          break;
         case PoolFoul.none:
           fa = '';
           en = '';

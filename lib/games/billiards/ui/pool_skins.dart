@@ -26,7 +26,7 @@ class PoolTableSkin {
 const double _cl = PoolConfig.artClothLeft, _ct = PoolConfig.artClothTop;
 const double _pxL = -7 + _cl, _pxR = PoolConfig.tableW + 7 + _cl; // corner columns
 const double _sxL = -33 + _cl, _sxR = PoolConfig.tableW + 33 + _cl; // side pockets
-const double _pyT = 3 + _ct, _pyB = PoolConfig.tableH + 5 + _ct, _syM = 680 + _ct;
+const double _pyT = 3 + _ct, _pyB = PoolConfig.tableH + 5 + _ct, _syM = PoolConfig.sideY + _ct;
 
 const List<PoolTableSkin> kPoolSkins = <PoolTableSkin>[
   PoolTableSkin('nx_green', 'assets/ui/nx2/boards/billiards_green.webp', 'نئون سبز', 'Neon green',
@@ -45,7 +45,18 @@ const List<PoolTableSkin> kPoolSkins = <PoolTableSkin>[
         <double>[0, 0], <double>[110.5, _pyT], <double>[651, _syM], <double>[1194.6, _pyB], <double>[1280, PoolConfig.artH],
       ]),
       Color(0xFFFF8A1E)),
-  PoolTableSkin('classic', AppAssets.gamesBilliardsTableGreen, 'کلاسیک سبز', 'Classic green', null,
+  // Classic art: pockets keep their size, only the straight rails between them are stretched to 2:1.
+  PoolTableSkin('classic', AppAssets.gamesBilliardsTableGreen, 'کلاسیک سبز', 'Classic green',
+      Nx2ArtMap(xs: <List<double>>[
+        <double>[0, 0], <double>[PoolConfig.artW, PoolConfig.artW],
+      ], ys: <List<double>>[
+        <double>[0, 0],
+        <double>[_ct + 3 + 110, _pyT + 110],
+        <double>[PoolConfig.artSrcSideY - 110, _syM - 110],
+        <double>[PoolConfig.artSrcSideY + 110, _syM + 110],
+        <double>[_ct + 1342 + 5 - 110, _pyB - 110],
+        <double>[PoolConfig.artSrcH, PoolConfig.artH],
+      ]),
       Color(0xFFF3C56B)),
 ];
 

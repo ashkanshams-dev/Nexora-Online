@@ -42,7 +42,7 @@ class PoolShot {
 
 enum PoolPhase { aiming, simulating, over }
 
-enum PoolFoul { none, scratch, noContact, wrongBallFirst, noRail }
+enum PoolFoul { none, scratch, noContact, wrongBallFirst, noRail, illegalBreak }
 
 /// Why the match ended.
 enum PoolEndReason { none, eightPotted, eightEarly, eightWithFoul }
@@ -57,6 +57,7 @@ class PoolShotReport {
     required this.assigned,
     required this.wasBreak,
     required this.eightRespotted,
+    this.reRacked = false,
   });
 
   final int shooter;
@@ -68,6 +69,10 @@ class PoolShotReport {
   final PoolGroup assigned;
   final bool wasBreak;
   final bool eightRespotted;
+
+  /// Illegal break (no ball potted and fewer than 4 object balls reached a cushion): the balls are
+  /// re-racked and the opponent breaks (WPA option).
+  final bool reRacked;
 
   bool get isFoul => foul != PoolFoul.none;
 }
@@ -295,6 +300,9 @@ class PoolMatch {
       foul = PoolFoul.noContact;
     } else if (!wasBreak && !_firstContactLegal(first)) {
       foul = PoolFoul.wrongBallFirst;
+    } else if (wasBreak && !potted.any((int id) => id != 0) &&
+        world.railBalls.where((int id) => id != 0).length < 4) {
+      foul = PoolFoul.illegalBreak;
     } else if (!wasBreak && requireRail) {
       final bool objectPotted = potted.any((int id) => id != 0);
       if (!objectPotted && !world.railAfterContact) foul = PoolFoul.noRail;
@@ -316,6 +324,28 @@ class PoolMatch {
       } else {
         _end(shooter, PoolEndReason.eightPotted);
       }
+    }
+
+    if (foul == PoolFoul.illegalBreak) {
+      _reRack();
+      current = 1 - shooter;
+      breaker = current;
+      isBreak = true;
+      ballInHand = true;
+      kitchenOnly = true;
+      phase = PoolPhase.aiming;
+      final PoolShotReport rr = PoolShotReport(
+        shooter: shooter,
+        foul: foul,
+        pocketed: potted,
+        continues: false,
+        assigned: PoolGroup.none,
+        wasBreak: true,
+        eightRespotted: false,
+        reRacked: true,
+      );
+      lastReport = rr;
+      return rr;
     }
 
     if (phase != PoolPhase.over) {
@@ -342,7 +372,8 @@ class PoolMatch {
       }
 
       isBreak = false;
-      kitchenOnly = false;
+      // WPA: a scratch on the break gives ball in hand behind the head string only.
+      kitchenOnly = wasBreak && cuePotted;
       if (foul != PoolFoul.none) {
         current = 1 - shooter;
         ballInHand = true;
@@ -380,6 +411,19 @@ class PoolMatch {
     endReason = why;
     phase = PoolPhase.over;
     ballInHand = false;
+  }
+
+  void _reRack() {
+    final List<PoolBall> fresh = poolRackBalls();
+    for (int i = 0; i < balls.length; i++) {
+      balls[i]
+        ..x = fresh[i].x
+        ..y = fresh[i].y
+        ..vx = 0
+        ..vy = 0
+        ..pocketed = false
+        ..pocket = -1;
+    }
   }
 
   void _respotEight() {
