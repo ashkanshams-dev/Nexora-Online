@@ -20,14 +20,7 @@ class PoolConfig {
   // ---------------------------------------------------------------- table
   static const double tableW = 803;
   static const double tableH = 1342;
-  /// Owner contract mapped to pool world units.
-  static const double ballR = 35; // BR
-  static const double ballMass = 2.6;
-  static const double objectMass = 4;
-  static const double cuePowerCoefficient = 2.5;
-  static const double maxPullLength = 175; // LMAX
-  static const double collisionCueObject = .78;
-  static const double collisionObjectObject = .72;
+  static const double ballR = 22;
 
   /// Kitchen (behind the head string) = y >= headStringY.
   static const double headStringY = tableH * 0.75;
@@ -42,19 +35,16 @@ class PoolConfig {
 
   /// Max cue-ball launch speed (units/s). Per sub-step travel stays < ballR so
   /// nothing can tunnel through a cushion line or another ball.
-  static const double powerCap = 520; // PCAP raw contract value
-  /// Artwork/gameplay uses a 10x world velocity scale while the raw contract
-  /// value remains PCAP=520 for replay and backend parity.
-  static const double maxShotSpeed = powerCap * 10;
+  static const double maxShotSpeed = 4800;
   static const double minShotPower = 0.03;
 
   /// Rolling resistance: constant deceleration (units/s^2) + linear drag (1/s).
-  static const double rollDecel = 510;
-  static const double linearDrag = .175;
+  static const double rollDecel = 240;
+  static const double linearDrag = 0.35;
   static const double stopSpeed = 5;
 
-  static const double eBall = collisionObjectObject;
-  static const double eCushion = .93;
+  static const double eBall = 0.97;
+  static const double eCushion = 0.82;
 
   /// Simple spin model: follow/draw added to the cue ball after its first
   /// object-ball contact, side spin changes cushion rebounds.

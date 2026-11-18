@@ -49,16 +49,17 @@ void main() {
     expect(run(), run());
   });
 
-  test('updated coefficient vector remains deterministic', () {
+  test('golden vector matches JS reference (carrom_ref.mjs)', () {
     final m = CrMatch.newBoard();
     final o1 = m.playShot(const CrShot(placeX: 512, dirX: 0.03, dirY: -1, power: 1));
+    expect(o1.steps, 433);
     expect(o1.foul, isFalse);
-    expect(o1.steps, greaterThan(0));
-    expect(m.stateHash(), greaterThan(0));
-    expect(CrConfig.coinR, 35);
-    expect(CrConfig.strikerR, 58.5);
-    expect(CrConfig.eStrikerPiece, .78);
-    expect(CrConfig.eWall, .93);
+    expect(m.stateHash(), 3664971594);
+    expect(m.turn, 1);
+    expect(m.queen.x, closeTo(469.47, 1e-9));
+    expect(m.queen.y, closeTo(322.211, 1e-9));
+    expect(o1.oppPocketed, 1); // body 16 (black)
+    expect(m.bodies[16].onBoard, isFalse);
     // Note: the JS reference's shot 2 (placeX 700) is not a legal placement in the Dart
     // rules engine (striker overlaps a coin), so parity is asserted on shot 1 only.
     expect(m.placementOk(700), isFalse);

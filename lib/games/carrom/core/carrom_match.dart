@@ -196,9 +196,8 @@ class CrMatch {
     st.x = s.placeX;
     st.y = baselineY(turn);
     st.onBoard = true;
-    final double launch = (s.power * CrConfig.shotPowerCoefficient).clamp(0.0, 1.0).toDouble() * CrConfig.maxShotSpeed;
-    st.vx = s.dirX / len * launch;
-    st.vy = s.dirY / len * launch;
+    st.vx = s.dirX / len * s.power * CrConfig.maxShotSpeed;
+    st.vy = s.dirY / len * s.power * CrConfig.maxShotSpeed;
     phase = CrPhase.simulating;
   }
 

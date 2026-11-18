@@ -25,21 +25,17 @@ class CrConfig {
   /// A piece falls when its centre comes within this distance of a pocket centre.
   static const double captureR = 44;
 
-  /// Owner physics contract mapped to board units.
-  static const double coinR = 35; // BR
-  static const double strikerR = 58.5; // PR
-  static const double coinMass = 4;
-  static const double strikerMass = 2.6;
+  static const double coinR = 21;
+  static const double strikerR = 27;
+  static const double coinMass = 1.0;
+  static const double strikerMass = 2.0;
 
   static const double dt = 1 / 120;
-  static const double drag = .175; // ball traction
+  static const double drag = 1.3;
   static const double stopSpeed = 8.0;
-  static const double ePiece = .72;
-  static const double eStrikerPiece = .78;
-  static const double eWall = .93;
-  static const double shotPowerCoefficient = 2.5;
-  static const double maxShotSpeed = 520;
-  static const double maxPullLength = 175;
+  static const double ePiece = 0.90;
+  static const double eWall = 0.72;
+  static const double maxShotSpeed = 2600;
   static const int maxSteps = 1200; // 10 s
 
   // Baselines (striker centre line) for seat 0 (bottom) and seat 1 (top).
@@ -55,7 +51,7 @@ class CrConfig {
   static const double turnSeconds = 10;
 
   /// UI only (not part of the deterministic contract).
-  static const double maxPull = maxPullLength;
+  static const double maxPull = 210;
 
   /// Body ids: 0 striker, 1..9 white (seat 0), 10..18 black (seat 1), 19 queen.
   static const int strikerId = 0;

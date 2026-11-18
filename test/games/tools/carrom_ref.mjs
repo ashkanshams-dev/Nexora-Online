@@ -5,8 +5,8 @@
 export const C = {
   left: 75, top: 67, right: 949, bottom: 916, centerX: 512, centerY: 491.5,
   pockets: [[91.5, 88], [932.5, 88], [91.5, 895], [932.5, 895]],
-  captureR: 44, coinR: 35, strikerR: 58.5, coinMass: 4, strikerMass: 2.6,
-  dt: 1 / 120, drag: 0.175, stopSpeed: 8.0, ePiece: 0.72, eStrikerPiece: 0.78, eWall: 0.93, shotPowerCoefficient: 2.5, maxShotSpeed: 520, maxSteps: 1200,
+  captureR: 44, coinR: 21, strikerR: 27, coinMass: 1.0, strikerMass: 2.0,
+  dt: 1 / 120, drag: 1.3, stopSpeed: 8.0, ePiece: 0.90, eWall: 0.72, maxShotSpeed: 2600, maxSteps: 1200,
   baseline0: 797, baseline1: 186, baseMinX: 248, baseMaxX: 776, coinsPerSide: 9, queenBonus: 3, maxTurns: 160,
 };
 const STRIKER = 0, WHITE = 1, BLACK = 2, QUEEN = 3;
@@ -45,8 +45,7 @@ function collidePair(a, b) {
   b.x += nx * overlap * (ib / isum); b.y += ny * overlap * (ib / isum);
   const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
   if (rv < 0) {
-    const e = (a.kind === STRIKER || b.kind === STRIKER) ? C.eStrikerPiece : C.ePiece;
-    const j = -(1 + e) * rv / isum;
+    const j = -(1 + C.ePiece) * rv / isum;
     a.vx -= j * ia * nx; a.vy -= j * ia * ny;
     b.vx += j * ib * nx; b.vy += j * ib * ny;
   }
@@ -147,8 +146,7 @@ export function playShot(m, s) {
   const len = Math.sqrt(s.dirX * s.dirX + s.dirY * s.dirY);
   const st = m.bodies[0];
   st.x = s.placeX; st.y = baselineY(m.turn); st.on = true;
-  const launch = Math.min(1, s.power * C.shotPowerCoefficient) * C.maxShotSpeed;
-  st.vx = s.dirX / len * launch; st.vy = s.dirY / len * launch;
+  st.vx = s.dirX / len * s.power * C.maxShotSpeed; st.vy = s.dirY / len * s.power * C.maxShotSpeed;
   const sim = simulate(m.bodies);
   return finishShot(m, sim.pocketed, sim.steps);
 }

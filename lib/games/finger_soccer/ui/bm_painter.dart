@@ -55,9 +55,7 @@ class BmView {
     final BmFieldS f = e.field;
     final double W = sz.width, H = sz.height;
     if (W < 50 || H < 50) return;
-    // Reference calibration from the supplied 720x1600 portrait shot.
-    // Presentation-only: world geometry and physics remain unchanged.
-    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * .985;
+    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02;
     ox = W / 2 - e.CX * s;
     // Keep the scoreboard clear of the top goal while preserving the same
     // world-to-screen mapping for rendering and pointer input.
@@ -79,12 +77,6 @@ class BmPainter extends CustomPainter {
   final double Function() now; // ms
   final double dpr;
   final bool fancy;
-  // Geometry is scaled uniformly by BmView; physics and replay keep PR/BR.
-  // Calibrated from the supplied 720x1600 reference proportions.
-  // These are visual scales only; collision radii remain PR/BR.
-  static const double _playerRenderScale = .78;
-  static const double _ballRenderScale = .62;
-  static const double _goalRenderScale = .74;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -105,12 +97,12 @@ class BmPainter extends CustomPainter {
       final List<int> c = e.turn != 0 ? <int>[255, 110, 110] : <int>[80, 170, 255];
       for (final BmBody b in e.bodies) {
         if (b.team == e.turn) {
-          canvas.drawCircle(Offset(b.x, b.y), b.r * _playerRenderScale + 11,
+          canvas.drawCircle(Offset(b.x, b.y), b.r + 11,
               Paint()
                 ..style = PaintingStyle.stroke
                 ..strokeWidth = 13
                 ..color = _rgba(c[0], c[1], c[2], .12 + .14 * k));
-          canvas.drawCircle(Offset(b.x, b.y), b.r * _playerRenderScale + 11,
+          canvas.drawCircle(Offset(b.x, b.y), b.r + 11,
               Paint()
                 ..style = PaintingStyle.stroke
                 ..strokeWidth = 4
@@ -121,8 +113,7 @@ class BmPainter extends CustomPainter {
     // Player-piece trails are intentionally disabled; only the ball leaves a trace.
     // soft shadows (SPR.shadow)
     for (final BmBody b in e.bodies) {
-      final double renderR = b == e.ball ? b.r * _ballRenderScale : b.r * _playerRenderScale;
-      final double w = renderR * 2.6;
+      final double w = b.r * 2.6;
       final Offset c = Offset(b.x + 5, b.y + 11);
       canvas.drawCircle(
           c,
@@ -139,16 +130,14 @@ class BmPainter extends CustomPainter {
     final ui.Image? gi = im.goal;
     if (gi != null) {
       for (final BmGoal g in e.GOALS) {
-        final double goalW = e.GGw * _goalRenderScale;
-        final double goalH = e.GGh * _goalRenderScale;
-        final double gx = e.GGx + (e.GGw - goalW) / 2 + math.sin(t / 25) * 8 * e.shake[g.team];
-        final double gy = g.d < 0 ? g.y - goalH - 2 : g.y + 2;
-        final Rect dst = Rect.fromLTWH(gx, gy, goalW, goalH);
+        final double gx = e.GGx + math.sin(t / 25) * 8 * e.shake[g.team];
+        final double gy = g.d < 0 ? g.y - e.GGh - 2 : g.y + 2;
+        final Rect dst = Rect.fromLTWH(gx, gy, e.GGw, e.GGh);
         final Rect src = Rect.fromLTWH(0, 0, gi.width.toDouble(), gi.height.toDouble());
         final Paint p = Paint()..filterQuality = FilterQuality.medium;
         if (g.d > 0) {
           canvas.save();
-          canvas.translate(0, gy * 2 + goalH);
+          canvas.translate(0, gy * 2 + e.GGh);
           canvas.scale(1, -1);
           canvas.drawImageRect(gi, src, dst, p);
           canvas.restore();
@@ -221,14 +210,13 @@ class BmPainter extends CustomPainter {
   // ------------------------------------------------------------ sprite()
   void _sprite(Canvas canvas, BmBody b, double t) {
     final bool isBall = b == e.ball;
-    final double renderR = isBall ? b.r * _ballRenderScale : b.r * _playerRenderScale;
     final ui.Image? sp = isBall ? im.ball : im.team[b.team == 0 ? 0 : 1];
     if (sp == null) {
-      canvas.drawCircle(Offset(b.x, b.y), renderR, Paint()..color = isBall ? Colors.white : (b.team != 0 ? const Color(0xFFFF5B5B) : const Color(0xFF3B9BFF)));
+      canvas.drawCircle(Offset(b.x, b.y), b.r, Paint()..color = isBall ? Colors.white : (b.team != 0 ? const Color(0xFFFF5B5B) : const Color(0xFF3B9BFF)));
       return;
     }
     final Rect src = Rect.fromLTWH(0, 0, sp.width.toDouble(), sp.height.toDouble());
-    final Rect dst = Rect.fromLTWH(-renderR, -renderR, renderR * 2, renderR * 2);
+    final Rect dst = Rect.fromLTWH(-b.r, -b.r, b.r * 2, b.r * 2);
     canvas.save();
     double drawY = b.y;
     if (isBall) {
@@ -286,7 +274,7 @@ class BmPainter extends CustomPainter {
       ..filterQuality = FilterQuality.medium
       ..colorFilter = const ColorFilter.mode(Color.fromRGBO(6, 8, 24, .66), BlendMode.srcATop);
     for (int k = 4; k >= 1; k--) {
-      canvas.drawImageRect(sp, src, dst.shift(Offset(0, renderR * .052 * k)), dark);
+      canvas.drawImageRect(sp, src, dst.shift(Offset(0, b.r * .052 * k)), dark);
     }
     canvas.drawImageRect(sp, src, dst, Paint()..filterQuality = FilterQuality.medium);
     canvas.restore();

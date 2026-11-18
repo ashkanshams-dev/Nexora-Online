@@ -7,30 +7,25 @@ import 'dart:math' as math;
 import 'bm_data.dart';
 
 // ---------------------------------------------------------------- constants (game.js line 4-6)
-const double K = 1.27, PR = 58.5, BR = 35, STEP = 1 / 240, RC = 70, LMAX = 175;
+const double K = 1.27, PR = 63.8, BR = 28.8, STEP = 1 / 240, RC = 70, LMAX = 320;
 /// Product tuning values are kept separate from the ported physics constants.
 /// This lets the presentation/gameplay requests be tested without retuning
 /// collision formulas or the ball's rotation model.
-const double BM_PLAYER_RADIUS_FACTOR = 1;
-const double BM_GOAL_WIDTH_FACTOR = 1;
+const double BM_PLAYER_RADIUS_FACTOR = .90;
+const double BM_GOAL_WIDTH_FACTOR = .97;
 const double BM_SCENE_SPEED = 1.03;
 const double BM_ONLINE_TURN_SECONDS = 10;
 const double BM_PLAYER_RADIUS = PR * BM_PLAYER_RADIUS_FACTOR;
 const int NB = 36;
-/// Raw owner physics contract. These names are part of the replay/server contract.
-const double BALL_M = 2.6, PLAYER_M = 4.5;
-const double HV = 10, PCAP = 520;
-const double BALL_FRICTION = 510, BALL_TRACTION = .175;
-const double PF1 = 430, PF2 = 4, PV0 = 820;
-const double BALL_PLAYER_RESTITUTION = .78, PLAYER_PLAYER_RESTITUTION = .72;
-const double BALL_WALL_RESTITUTION = .93, PLAYER_WALL_RESTITUTION = .93;
-const double POST_RESTITUTION = 1.9, FAST_BALL_DROP = .22;
-const double SHOT_POWER_COEFFICIENT = 2.5, GOAL_HALF_WIDTH = 170;
-/// Keep the pool-like rolling model, but make soccer ball spin transfer softer.
-const double BALL_SPIN_TRANSFER = .24;
-const double BALL_KICK_COEFFICIENT = 1;
-const double FIELD_WIDTH_SCALE = 1.1, FIELD_LENGTH_SCALE = 1.16;
-const double FS = 1;
+/// Mini-soccer tuning (redesign-v1.1, owner request): ball mass 1.9 -> 1.805 (x0.95) and a kick factor on the
+/// ball's share of a disc->ball impulse so a disc striking the ball launches it exactly 5% faster than before
+/// (the lighter mass alone gives +1.40%, BKICK supplies the rest). Nothing else changed.
+const double BALL_M = 1.805;
+const double BKICK = 1.05 * ((1 / 1.9) / (1 / 5 + 1 / 1.9)) / ((1 / BALL_M) / (1 / 5 + 1 / BALL_M));
+const double HV = 4, PF1 = 390, PF2 = .8, PV0 = 600, EPP = .48, PCAP = 190;
+
+/// Field size factor (game.js line 12).
+const double FS = 1.12 * 1.215;
 
 /// A field after the FS scale (game.js line 12: W,H,L,R,T,B,cs rounded, g = 169).
 class BmFieldS {
@@ -38,16 +33,15 @@ class BmFieldS {
       : id = f.id,
         name = f.name,
         gs = f.gs,
-        W = _rx(f.w0),
-        H = _ry(f.h0),
-        L = _rx(f.l0),
-        R = _rx(f.r0),
-        T = _ry(f.t0),
-        B = _ry(f.b0),
-        cs = _ry(f.cs0),
-        g = GOAL_HALF_WIDTH;
-  static double _rx(int v) => (v * FIELD_WIDTH_SCALE).round().toDouble();
-  static double _ry(int v) => (v * FIELD_LENGTH_SCALE).round().toDouble();
+        W = _r(f.w0),
+        H = _r(f.h0),
+        L = _r(f.l0),
+        R = _r(f.r0),
+        T = _r(f.t0),
+        B = _r(f.b0),
+        cs = _r(f.cs0),
+        g = 169;
+  static double _r(int v) => (v * FS).round().toDouble(); // Math.round on positive values
   final String id, name, gs;
   final double W, H, L, R, T, B, cs, g;
 }
@@ -290,7 +284,7 @@ class BmEngine {
           x = 2 * CX - x;
           y = 2 * CY - y;
         }
-        final BmBody b = mk(x, y, ct(cm), BM_PLAYER_RADIUS, PLAYER_M);
+        final BmBody b = mk(x, y, ct(cm), BM_PLAYER_RADIUS, 5);
         b.cid = cm * 20 + i;
         b.boost = 0;
         bodies.add(b);
@@ -385,10 +379,7 @@ class BmEngine {
   double _clock = 0;
   void _later(double sec, void Function() f) => _timers.add(MapEntry<double, void Function()>(_clock + sec, f));
 
-  double _eN(bool bl, double vn) {
-    if (bl) return BALL_WALL_RESTITUTION - FAST_BALL_DROP * _mn(1, _mx(0, (vn - 270 * K) / (1350 * K)));
-    return PLAYER_WALL_RESTITUTION;
-  }
+  double _eN(bool bl, double vn) => bl ? .84 - .22 * _mn(1, _mx(0, (vn - 270 * K) / (1350 * K))) : .82;
 
   void walls(BmBody b) {
     final bool bl = b == ball;
@@ -492,7 +483,7 @@ class BmEngine {
     b.x = px + nx * m;
     b.y = py + ny * m;
     if (vn < 0) {
-      final double kp = b == ball ? POST_RESTITUTION - .16 * _mn(1, -vn / (2000 * K)) : POST_RESTITUTION;
+      final double kp = b == ball ? 1.7 - .16 * _mn(1, -vn / (2000 * K)) : 1.7;
       b.vx -= kp * vn * nx;
       b.vy -= kp * vn * ny;
       if (b == ball) {
@@ -544,20 +535,18 @@ class BmEngine {
     b.y += ny * pen * wb;
     final double vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
     if (vn >= 0) return;
-    final double e = vn < -40 * K
-        ? (isB ? BALL_PLAYER_RESTITUTION : PLAYER_PLAYER_RESTITUTION)
-        : 0,
+    final double e = vn < -40 * K ? (isB ? .61 - .12 * _mn(1, _mx(0, (-vn - 500 * K) / (1200 * K))) : EPP) : 0,
         j = -(1 + e) * vn / sm;
     final BmBody? pa = isB ? (a == bl ? b : a) : null;
     final double pre = pa != null ? math.sqrt(pa.vx * pa.vx + pa.vy * pa.vy) : 0;
     if (pa != null) {
-      // Disc strikes the ball; the requested masses/restitution determine the impulse.
+      // disc strikes the ball (disc faster than ball): ball launch x1.05 overall (see BKICK).
       final double bs = math.sqrt(bl.vx * bl.vx + bl.vy * bl.vy);
       if (pre > bs) {
         if (a == bl) {
-          ka *= BALL_KICK_COEFFICIENT;
+          ka *= BKICK;
         } else {
-          kb *= BALL_KICK_COEFFICIENT;
+          kb *= BKICK;
         }
       }
     }
@@ -587,7 +576,7 @@ class BmEngine {
       }
     }
     if (isB) {
-      bl.spin += (bl == b ? 1 : -1) * (-ny * (b.vx - a.vx) + nx * (b.vy - a.vy)) / bl.r * BALL_SPIN_TRANSFER;
+      bl.spin += (bl == b ? 1 : -1) * (-ny * (b.vx - a.vx) + nx * (b.vy - a.vy)) / bl.r * .3;
       bl.spin = _mx(-34, _mn(34, bl.spin));
       final double pw = _mn(1, -vn / (1700 * K));
       if (pw > .2) {
@@ -638,7 +627,7 @@ class BmEngine {
       final bool bl = b == bal;
       if (sp > 0) {
         if (bl) {
-          final double f = BALL_FRICTION * K * _mn(1, sp / (480 * K)) + sp * BALL_TRACTION, ns = sp - f * dt;
+          final double f = 570 * K * _mn(1, sp / (480 * K)) + sp * .1, ns = sp - f * dt;
           if (ns < 12 * K) {
             b.vx = 0;
             b.vy = 0;
@@ -667,7 +656,7 @@ class BmEngine {
         b.spin *= 1 - (sp2 > 0 ? 1.05 : 3.2) * dt;
         if (b.spin.abs() < .02) b.spin = 0;
         b.sq *= 1 - 9 * dt;
-      final double roll = .95 / b.r, wx = -b.vy * roll, wy = b.vx * roll, wz = b.spin * .42;
+        final double roll = .95 / b.r, wx = -b.vy * roll, wy = b.vx * roll, wz = b.spin * .55;
         if (sp2 > 0 || wz != 0) {
           rot(b.R, wx, wy, wz, dt);
           b.rv++;
@@ -746,7 +735,7 @@ class BmEngine {
     // Rating is physical: 1 => 0.65x impulse, 5 => 1.05x, 10 => 1.55x.
     // It is applied before launch, not merely displayed in the UI.
     final double strike = .55 + b.power * .1;
-    final double v = (260 + 1085 * math.pow(p, .8).toDouble()) * K * SHOT_POWER_COEFFICIENT * strike;
+    final double v = (260 + 1085 * math.pow(p, .8).toDouble()) * K * 1.32 * strike;
     final double vx = dx / l * v, vy = dy / l * v;
     launch(b, vx, vy, false);
     final int sg = mirror ? -1 : 1;
