@@ -55,7 +55,9 @@ class BmView {
     final BmFieldS f = e.field;
     final double W = sz.width, H = sz.height;
     if (W < 50 || H < 50) return;
-    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * 1.14 * 1.02 * 1.14;
+    // Reference calibration from the supplied 720x1600 portrait shot.
+    // Presentation-only: world geometry and physics remain unchanged.
+    s = math.min(W / (f.R - f.L + 56 * FS), (H - 250) / ((f.B - f.T) + 2 * e.GGh + 48)) * .985;
     ox = W / 2 - e.CX * s;
     // Keep the scoreboard clear of the top goal while preserving the same
     // world-to-screen mapping for rendering and pointer input.
@@ -79,9 +81,10 @@ class BmPainter extends CustomPainter {
   final bool fancy;
   // Geometry is scaled uniformly by BmView; physics and replay keep PR/BR.
   // Calibrated from the supplied 720x1600 reference proportions.
-  static const double _playerRenderScale = .58;
-  static const double _ballRenderScale = .58;
-  static const double _goalRenderScale = .80;
+  // These are visual scales only; collision radii remain PR/BR.
+  static const double _playerRenderScale = .78;
+  static const double _ballRenderScale = .62;
+  static const double _goalRenderScale = .74;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -136,14 +139,16 @@ class BmPainter extends CustomPainter {
     final ui.Image? gi = im.goal;
     if (gi != null) {
       for (final BmGoal g in e.GOALS) {
-        final double gx = e.GGx + math.sin(t / 25) * 8 * e.shake[g.team];
-        final double gy = g.d < 0 ? g.y - e.GGh - 2 : g.y + 2;
-        final Rect dst = Rect.fromLTWH(gx, gy, e.GGw, e.GGh);
+        final double goalW = e.GGw * _goalRenderScale;
+        final double goalH = e.GGh * _goalRenderScale;
+        final double gx = e.GGx + (e.GGw - goalW) / 2 + math.sin(t / 25) * 8 * e.shake[g.team];
+        final double gy = g.d < 0 ? g.y - goalH - 2 : g.y + 2;
+        final Rect dst = Rect.fromLTWH(gx, gy, goalW, goalH);
         final Rect src = Rect.fromLTWH(0, 0, gi.width.toDouble(), gi.height.toDouble());
         final Paint p = Paint()..filterQuality = FilterQuality.medium;
         if (g.d > 0) {
           canvas.save();
-          canvas.translate(0, gy * 2 + e.GGh);
+          canvas.translate(0, gy * 2 + goalH);
           canvas.scale(1, -1);
           canvas.drawImageRect(gi, src, dst, p);
           canvas.restore();
