@@ -11,6 +11,7 @@ import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../core/widgets/nx_widgets.dart';
 import '../../../games/game_registry.dart';
+import 'matchmaking_state.dart';
 import 'online_match_page.dart';
 
 class _Seat {
@@ -49,12 +50,15 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   final Set<int> _present = <int>{};
   RealtimeChannel? _ch;
   Timer? _poll;
+  Timer? _quickTimeout;
   bool _busy = false;
   bool _realtimeConnected = false;
   String? _error;
   int _wantSeats = 2;
   bool _inMatch = false;
   String? _lastMatchSeen;
+  String? _quickIdemKey;
+  MatchmakingState _matchmaking = const MatchmakingState();
 
   SupabaseClient? get _c => ref.read(onlineProvider).games; // games project
   bool get _signedIn => ref.read(onlineProvider).client?.auth.currentSession != null;
@@ -102,6 +106,7 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   @override
   void dispose() {
     _poll?.cancel();
+    _quickTimeout?.cancel();
     _code.dispose();
     final RealtimeChannel? ch = _ch;
     final SupabaseClient? c = _c;
@@ -171,12 +176,54 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
   }
 
   Future<void> _quick() => _guard(() async {
-        final dynamic r = await _c!.rpc('nx_quick', params: <String, dynamic>{
-          'p_game': widget.gameId,
-          'p_seats': _wantSeats
+        _quickTimeout?.cancel();
+        if (_matchmaking.retryable) _quickIdemKey = null;
+        if (mounted) setState(() => _matchmaking = _matchmaking.start());
+        _quickIdemKey ??= '${_me ?? 'guest'}-${DateTime.now().microsecondsSinceEpoch}';
+        _quickTimeout = Timer(const Duration(seconds: 30), () {
+          if (mounted && _matchmaking.active) unawaited(_timeoutQuick());
         });
-        await _enter('${(r as Map)['room_id']}');
+        try {
+          final dynamic r =
+              await _c!.rpc('nx_quick_match', params: <String, dynamic>{
+            'p_game': widget.gameId,
+            'p_seats': _wantSeats,
+            'p_rating_min': 0,
+            'p_rating_max': 3000,
+            'p_max_ping_ms': 250,
+            'p_region': 'auto',
+            'p_idem_key': _quickIdemKey,
+          });
+          final String id = '${(r as Map)['room_id']}';
+          await _enter(id);
+        } catch (e) {
+          if (mounted) {
+            setState(() => _matchmaking = _matchmaking.fail(e.toString()));
+          }
+          rethrow;
+        }
       });
+
+  Future<void> _timeoutQuick() async {
+    if (!_matchmaking.active) return;
+    if (mounted) setState(() => _matchmaking = _matchmaking.timeout());
+    final String? key = _quickIdemKey;
+    if (key != null) {
+      try {
+        final dynamic result = await _c!.rpc('nx_cancel_matchmaking',
+            params: <String, dynamic>{'p_idem_key': key});
+        if (result is Map && result['status'] == 'matched') {
+          if (mounted) {
+            setState(() => _matchmaking =
+                _matchmaking.matched('${result['room_id']}'));
+          }
+          await _enter('${result['room_id']}');
+          return;
+        }
+      } catch (_) {}
+    }
+    await _leave(preserveMatchmaking: true);
+  }
 
   Future<void> _create(bool private) => _guard(() async {
         final dynamic r =
@@ -233,9 +280,17 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
         .onPresenceJoin((_) => _syncPresence())
         .onPresenceLeave((_) => _syncPresence())
         .subscribe((RealtimeSubscribeStatus s, Object? e) {
-      if (mounted)
-        setState(
-            () => _realtimeConnected = s == RealtimeSubscribeStatus.subscribed);
+      if (mounted) {
+        final bool connected = s == RealtimeSubscribeStatus.subscribed;
+        setState(() {
+          _realtimeConnected = connected;
+          if (_matchmaking.active) {
+            _matchmaking = connected
+                ? _matchmaking.resumeSearching()
+                : _matchmaking.reconnecting();
+          }
+        });
+      }
       if (s == RealtimeSubscribeStatus.subscribed) {
         final int mySeat = _seats
                 .where((_Seat x) => x.userId == _me)
@@ -292,6 +347,9 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
       setState(() {
         _room = room;
         _seats = seats;
+        if (room?['status'] == 'playing' && _matchmaking.active) {
+          _matchmaking = _matchmaking.matched(id);
+        }
       });
       _syncPresence();
       final String? matchId = room?['match_id'] as String?;
@@ -316,12 +374,18 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
     if (mounted) await _refresh();
   }
 
-  Future<void> _leave() async {
+  Future<void> _leave({bool preserveMatchmaking = false}) async {
     final String? id = _roomId;
     if (id == null) return;
     await _guard(() async {
+      final String? key = _quickIdemKey;
+      if (key != null && _matchmaking.active) {
+        await _c!.rpc('nx_cancel_matchmaking',
+            params: <String, dynamic>{'p_idem_key': key});
+      }
       await _c!.rpc('nx_leave_room', params: <String, dynamic>{'p_room': id});
     });
+    _quickTimeout?.cancel();
     final RealtimeChannel? ch = _ch;
     if (ch != null) unawaited(_c!.removeChannel(ch));
     _ch = null;
@@ -331,6 +395,8 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
       _room = null;
       _seats = <_Seat>[];
       _realtimeConnected = false;
+      if (!preserveMatchmaking) _matchmaking = _matchmaking.cancel();
+      _quickIdemKey = null;
     });
     unawaited(_loadOpen());
   }
@@ -507,6 +573,27 @@ class _OnlineLobbyPageState extends ConsumerState<OnlineLobbyPage> {
         padding: const EdgeInsets.all(NxSpace.md),
         children: <Widget>[
           if (_error != null) _errorBox(),
+          if (_matchmaking.phase == MatchmakingPhase.timedOut ||
+              _matchmaking.phase == MatchmakingPhase.failed)
+            GlassPanel(
+              borderColor: NxColors.gold.withValues(alpha: 0.65),
+              child: Row(children: <Widget>[
+                Expanded(
+                  child: Text(_matchmaking.phase == MatchmakingPhase.timedOut
+                      ? context.tx('جست‌وجوی حریف زمان‌بر شد.',
+                          'Finding an opponent took too long.')
+                      : context.tx('اتصال matchmaking ناموفق بود.',
+                          'Matchmaking failed.')),
+                ),
+                TextButton(
+                  onPressed: _busy ? null : _quick,
+                  child: Text(context.tx('تلاش دوباره', 'Retry')),
+                ),
+              ]),
+            ),
+          if (_matchmaking.phase == MatchmakingPhase.timedOut ||
+              _matchmaking.phase == MatchmakingPhase.failed)
+            const SizedBox(height: NxSpace.sm),
           GlassPanel(
             blur: false,
             borderColor: visual.accent.withValues(alpha: 0.48),
