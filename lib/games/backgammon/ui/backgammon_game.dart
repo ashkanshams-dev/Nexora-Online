@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math';
 
@@ -12,6 +13,7 @@ import 'bg_geometry.dart';
 import 'bg_skins.dart';
 import '../../../core/ui2/nx2_board_art.dart';
 import 'bg_widgets.dart';
+import 'backgammon_audio.dart';
 
 enum _Phase { opening, awaitRoll, rolling, playing, bot, gameOver }
 
@@ -38,6 +40,7 @@ class _BackgammonGameState extends State<BackgammonGame>
   late AnimationController _flyCtl;
   late AnimationController _pulseCtl;
   late AnimationController _flashCtl;
+  late final BackgammonAudio _audio;
 
   _Phase _phase = _Phase.opening;
   int _turn = 0;
@@ -76,6 +79,8 @@ class _BackgammonGameState extends State<BackgammonGame>
   @override
   void initState() {
     super.initState();
+    _audio = BackgammonAudio(enabled: _l.soundOn);
+    unawaited(_audio.init());
     final int seed = _l.seed ?? DateTime.now().microsecondsSinceEpoch;
     _s = BgState.initial();
     _dice = BgDice(seed);
@@ -241,6 +246,7 @@ class _BackgammonGameState extends State<BackgammonGame>
   @override
   void dispose() {
     _inbox?.close();
+    unawaited(_audio.dispose());
     _rollCtl.dispose();
     _flyCtl.dispose();
     _pulseCtl.dispose();
@@ -325,6 +331,7 @@ class _BackgammonGameState extends State<BackgammonGame>
       _l.net!.send(<String, dynamic>{'a': 'roll', 'h': _stateHash()});
     }
     setState(() => _phase = _Phase.rolling);
+    unawaited(_audio.play('roll', volume: 0.72));
     _haptic();
     if (!await _run(_rollCtl)) return;
     _haptic(heavy: true);
@@ -571,6 +578,8 @@ class _BackgammonGameState extends State<BackgammonGame>
       _flyPlayer = p;
     });
     if (!await _run(_flyCtl)) return;
+    unawaited(_audio.play(m.hit ? 'hit' : 'move',
+        volume: m.hit ? 0.86 : 0.58));
     _haptic(heavy: m.hit);
     setState(() {
       _s = after;
@@ -612,6 +621,7 @@ class _BackgammonGameState extends State<BackgammonGame>
     final String kindEn =
         mult == 3 ? 'Backgammon' : (mult == 2 ? 'Gammon' : 'Single game');
     _haptic(heavy: true);
+    unawaited(_audio.play('finish', volume: 0.9));
     setState(() {
       _phase = _Phase.gameOver;
       _bannerFa = '$kindFa! ${_name(w)} برد';
