@@ -63,9 +63,10 @@ GoRouter buildRouter(WidgetRef ref) {
       final bool emailReady = settings.authMode == 'email' && online.user != null && !online.isGuest;
       final bool localGuest = settings.authMode == 'guest';
       if (!emailReady && !localGuest && u.path != '/auth') return '/auth';
-      final bool guestOnlineRoute = u.path == '/rooms' ||
-          u.path == '/social' ||
-          u.path == '/leaderboard' ||
+      // Guest users can still open the social hub and rooms screen. Those
+      // pages provide useful offline states and the arcade contains offline
+      // games; only server-only destinations must be gated here.
+      final bool guestOnlineRoute = u.path == '/leaderboard' ||
           u.path.startsWith('/online/') ||
           u.path.startsWith('/call/') ||
           u.path.startsWith('/tournaments') ||
