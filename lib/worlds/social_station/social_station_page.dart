@@ -11,6 +11,7 @@ import 'ui/community_create_sheet.dart';
 import 'ui/community_detail_page.dart';
 import 'ui/social_widgets.dart';
 import 'ui/social_profile_page.dart';
+import 'ui/social_notifications_page.dart';
 
 /// SOCIAL STATION — communities, events and community tournaments (offline-first).
 class SocialStationPage extends ConsumerStatefulWidget {
@@ -155,6 +156,14 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
             MaterialPageRoute<void>(builder: (_) => const SocialProfilePage()),
           ),
         ),
+        if (ctrl.isOnline)
+          IconButton(
+            tooltip: context.tx('اعلان‌ها', 'Notifications'),
+            icon: const Icon(Icons.notifications_none_rounded),
+            onPressed: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(builder: (_) => const SocialNotificationsPage()),
+            ),
+          ),
         if (ctrl.isOnline)
           IconButton(
             tooltip: context.tx('کشف جوامع', 'Discover communities'),

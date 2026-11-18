@@ -22,4 +22,14 @@ void main() {
     expect(m.text, 'hello');
     expect(m.createdAt.toUtc().year, 2026);
   });
+
+  test('SocialPost and SocialNotification preserve backend identity and read state', () {
+    final SocialPost post = SocialPost.fromJson(<String, dynamic>{'id': 'p1', 'author': 'user-b', 'text': 'hello', 'created_at': '2026-11-18T12:00:00Z'});
+    final SocialNotification notification = SocialNotification.fromJson(<String, dynamic>{'id': 'n1', 'kind': 'message', 'actor': 'user-a', 'created_at': '2026-11-18T12:01:00Z', 'read_at': null});
+    expect(post.id, 'p1');
+    expect(post.author, 'user-b');
+    expect(notification.kind, 'message');
+    expect(notification.actor, 'user-a');
+    expect(notification.read, isFalse);
+  });
 }

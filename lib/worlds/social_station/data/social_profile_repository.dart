@@ -66,6 +66,11 @@ class SocialProfileRepository {
     return SocialProfile.fromJson(Map<String, dynamic>.from(row as Map));
   }
 
+  Future<SocialProfile> respondFollowRequest(String requesterId, {required bool accept}) async {
+    final dynamic row = await client.rpc('nx_social_respond_follow_request', params: <String, dynamic>{'p_requester': requesterId, 'p_accept': accept});
+    return SocialProfile.fromJson(Map<String, dynamic>.from(row as Map));
+  }
+
   Future<List<SocialUser>> _usersFor(String relationColumn, String userId) async {
     final String filterColumn = relationColumn == 'follower' ? 'followee' : 'follower';
     final List<dynamic> relations = await client.from('follows').select(relationColumn).eq(filterColumn, userId).order('created_at', ascending: false).limit(100);

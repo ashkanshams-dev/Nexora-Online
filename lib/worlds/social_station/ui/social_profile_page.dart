@@ -76,6 +76,7 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
     final bio = TextEditingController(text: p.bio);
     final web = TextEditingController(text: p.website);
     final loc = TextEditingController(text: p.location);
+    bool privateProfile = p.isPrivate;
     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
       title: const Text('ویرایش پروفایل'),
       content: SingleChildScrollView(child: Column(children: <Widget>[
@@ -84,6 +85,7 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
         TextField(controller: bio, maxLines: 3, decoration: const InputDecoration(labelText: 'Bio')),
         TextField(controller: web, decoration: const InputDecoration(labelText: 'Website')),
         TextField(controller: loc, decoration: const InputDecoration(labelText: 'Location')),
+        StatefulBuilder(builder: (BuildContext _, StateSetter setDialogState) => SwitchListTile(value: privateProfile, onChanged: (bool value) => setDialogState(() => privateProfile = value), title: const Text('Private profile'), subtitle: const Text('برای دنبال‌کردن نیاز به تأیید دارد'))),
       ])),
       actions: <Widget>[
         TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('انصراف')),
@@ -94,7 +96,8 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
     setState(() { _busy = true; });
     try {
       final next = await r.updateProfile(username: user.text, displayName: name.text, bio: bio.text, website: web.text, location: loc.text, avatarUrl: p.avatarUrl);
-      if (mounted) setState(() { _profile = next; _busy = false; });
+      final updated = privateProfile == next.isPrivate ? next : await r.setPrivate(privateProfile);
+      if (mounted) setState(() { _profile = updated; _busy = false; });
     } catch (_) {
       if (mounted) { setState(() { _busy = false; }); _snack('ذخیره پروفایل ناموفق بود'); }
     }
