@@ -33,3 +33,12 @@ supabase secrets set LIVEKIT_API_KEY=... LIVEKIT_API_SECRET=... LLM_API_KEY=...
 
 ## ۴. چیزهایی که فقط بعد از آنلاین فعال می‌شوند (در اپ با برچسب صادقانه مشخص‌اند)
 ورود ایمیل/گوگل و همگام‌سازی، کاربران واقعی و دوستان، چت با دیگران، تماس صوتی/تصویری، بازی آنلاین و Matchmaking، رتبه‌بندی جهانی، پاسخ‌های مدل زبانی ORACLE و ورودی صوتی.
+
+## ۵. لینک‌های ایمیل (تأیید ثبت‌نام، لینک ورود، بازیابی رمز)
+- اپ همه‌ی درخواست‌ها را با `emailRedirectTo` / `redirectTo` = `nexora://auth-callback?flow=<signup|magiclink|recovery|email_change>` می‌فرستد (`lib/core/online/auth_link.dart`).
+- اندروید: intent-filter برای `nexora://auth-callback` (VIEW/DEFAULT/BROWSABLE) کنار `nexora://t` در `.github/workflows/android.yml` اضافه می‌شود.
+- اپ لینک را با deep linking خود Flutter → GoRouter به `/auth/callback` می‌برد و کد PKCE را با `exchangeCodeForSession` به نشست تبدیل می‌کند (شروع سرد و گرم هر دو). `detectSessionInUri` خاموش است تا کد یک‌بارمصرف دوبار مصرف نشود.
+- پروژه‌ی eisstodgncimypdawisy: `uri_allow_list` شامل `nexora://auth-callback` و `nexora://auth-callback**` است (ورودی‌های قبلی `nexora://**,nexora://login-callback,exp://**,exps://**` دست‌نخورده). `site_url` = `nexora://login-callback` عمداً تغییر نکرد (پیش‌فرض اپ‌های Expo/Godot).
+- قالب ایمیل‌ها `{{ .ConfirmationURL }}` دارند. تغییر قالب در پلن رایگان بدون SMTP اختصاصی ممکن نیست؛ بنابراین ایمیل لینک ورود کد ۶ رقمی (`{{ .Token }}`) ندارد تا SMTP تنظیم شود.
+- `mailer_autoconfirm` فعلاً `true` است: ثبت‌نام بدون ایمیل تأیید وارد می‌شود. برای اجباری کردن تأیید ایمیل آن را `false` کنید (روی اپ‌های Expo/Godot هم اثر دارد).
+- لینک تأیید باید روی همان گوشی‌ای باز شود که ثبت‌نام از آن انجام شده (PKCE)؛ در غیر این صورت ایمیل تأیید می‌شود و اپ می‌گوید با رمز وارد شو.
