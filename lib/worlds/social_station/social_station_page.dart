@@ -10,6 +10,7 @@ import 'state/social_controller.dart';
 import 'ui/community_create_sheet.dart';
 import 'ui/community_detail_page.dart';
 import 'ui/social_widgets.dart';
+import 'ui/social_profile_page.dart';
 
 /// SOCIAL STATION — communities, events and community tournaments (offline-first).
 class SocialStationPage extends ConsumerStatefulWidget {
@@ -147,6 +148,13 @@ class _SocialStationPageState extends ConsumerState<SocialStationPage> {
       title: 'SOCIAL STATION',
       palette: kSocialPalette,
       actions: <Widget>[
+        IconButton(
+          tooltip: context.tx('پروفایل من', 'My profile'),
+          icon: const Icon(Icons.account_circle_rounded),
+          onPressed: () => Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(builder: (_) => const SocialProfilePage()),
+          ),
+        ),
         if (ctrl.isOnline)
           IconButton(
             tooltip: context.tx('کشف جوامع', 'Discover communities'),
