@@ -141,6 +141,25 @@ void main() {
     expect(m.validate(const CrShot(placeX: 512, dirX: 0, dirY: -1, power: 0.5)), isNull);
   });
 
+  test('board geometry keeps pocket capture and both baselines consistent', () {
+    for (var i = 0; i < CrConfig.pockets.length; i++) {
+      final p = CrConfig.pockets[i];
+      expect(crPocketAt(p[0], p[1]), i);
+      expect(crPocketAt(p[0] + CrConfig.captureR + .01, p[1]), -1);
+    }
+
+    final m = CrMatch.newBoard();
+    for (final seat in <int>[0, 1]) {
+      m.turn = seat;
+      expect(m.baselineY(seat), seat == 0 ? CrConfig.baseline0 : CrConfig.baseline1);
+      expect(m.placementOk(CrConfig.baseMinX), isTrue);
+      expect(m.placementOk(CrConfig.baseMaxX), isTrue);
+      final nearest = m.nearestPlacement(CrConfig.centerX);
+      expect(nearest, isNotNull);
+      expect(nearest, inInclusiveRange(CrConfig.baseMinX, CrConfig.baseMaxX));
+    }
+  });
+
   test('bot returns a legal shot at every level', () {
     for (final lvl in CrBotLevel.values) {
       final m = CrMatch.newBoard(firstTurn: 1);
