@@ -13,6 +13,7 @@ import '../core/uno_models.dart';
 import 'uno_card_widget.dart';
 import 'uno_overlays.dart';
 import 'uno_table_widgets.dart';
+import 'uno_audio.dart';
 
 class _Flight {
   _Flight({
@@ -82,6 +83,7 @@ class _UnoGameViewState extends State<UnoGameView>
   Timer? _finishTimer;
   Timer? _toastTimer;
   Timer? _dealTimer;
+  late UnoAudio _audio;
 
   GameLaunch get _l => widget.launch;
   bool get _motion => !_l.reducedMotion;
@@ -223,6 +225,8 @@ class _UnoGameViewState extends State<UnoGameView>
   @override
   void initState() {
     super.initState();
+    _audio = UnoAudio(enabled: _l.soundOn);
+    _audio.init();
     final int seed = _l.seed ?? DateTime.now().millisecondsSinceEpoch;
     final int players = math.max(2, math.min(4, _l.playerCount));
     _game = UnoGame(playerCount: players, seed: seed);
@@ -279,6 +283,7 @@ class _UnoGameViewState extends State<UnoGameView>
     _liveCtrls.clear();
     _spin.dispose();
     _pulse.dispose();
+    _audio.dispose();
     super.dispose();
   }
 
@@ -351,6 +356,11 @@ class _UnoGameViewState extends State<UnoGameView>
 
   void _haptic() {
     if (_l.hapticsOn) HapticFeedback.selectionClick();
+  }
+
+  void _sfx(String event, {double volume = 0.8}) {
+    if (_l.soundOn != _audio.enabled) _audio.setEnabled(_l.soundOn);
+    _audio.play(event, volume: volume);
   }
 
   // ------------------------------------------------------------- flights
@@ -469,6 +479,7 @@ class _UnoGameViewState extends State<UnoGameView>
               card: card,
               toDiscard: true);
           drawDelay = 260;
+          _sfx('play', volume: 0.62);
           _haptic();
           break;
         case UnoEventType.draw:
@@ -488,13 +499,16 @@ class _UnoGameViewState extends State<UnoGameView>
             notes.add(_tx('${_name(e.player)} +${_num(e.count)} کارت',
                 '${_name(e.player)} draws ${e.count}'));
           }
+          _sfx('draw', volume: 0.58);
           break;
         case UnoEventType.skip:
+          _sfx('action', volume: 0.52);
           notes.add(_tx(
               'نوبت ${_name(e.player)} پرید', '${_name(e.player)} is skipped'));
           noteColor = NxColors.pink;
           break;
         case UnoEventType.reverse:
+          _sfx('action', volume: 0.52);
           notes.add(_tx('جهت بازی برعکس شد', 'Direction reversed'));
           noteColor = NxColors.turquoise;
           break;
@@ -508,19 +522,23 @@ class _UnoGameViewState extends State<UnoGameView>
           notes.add(_tx('${_name(e.player)}: NX!', '${_name(e.player)}: NX!'));
           noteColor = NxColors.gold;
           if (_l.hapticsOn) HapticFeedback.mediumImpact();
+          _sfx('nx', volume: 0.9);
           break;
         case UnoEventType.nxCaught:
           notes.add(_tx('${_name(e.player)} NX نگفت! +۲ جریمه',
               '${_name(e.player)} forgot NX! +2 penalty'));
           noteColor = NxColors.danger;
           if (_l.hapticsOn) HapticFeedback.heavyImpact();
+          _sfx('caught', volume: 0.9);
           break;
         case UnoEventType.reshuffle:
+          _sfx('reshuffle', volume: 0.65);
           notes.add(_tx('دسته بُر خورد', 'Discard pile reshuffled'));
           break;
         case UnoEventType.win:
           notes.add(_tx('${_name(e.player)} برد!', '${_name(e.player)} wins!'));
           noteColor = NxColors.gold;
+          _sfx('win', volume: 0.95);
           break;
         case UnoEventType.deal:
         case UnoEventType.pass:

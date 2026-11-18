@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nexora/games/uno/core/uno_bot.dart';
 import 'package:nexora/games/uno/core/uno_engine.dart';
 import 'package:nexora/games/uno/core/uno_models.dart';
+import 'package:nexora/games/uno/ui/uno_audio.dart';
 
 int _nextId = 1000;
 
@@ -16,6 +17,14 @@ List<UnoCard> filler(int count) =>
     List<UnoCard>.generate(count, (int i) => n(UnoColor.values[i % 4], (i % 9) + 1));
 
 void main() {
+  test('audio contract covers all UNO event families', () {
+    expect(
+      UnoAudio.eventFiles.keys,
+      containsAll(<String>['deal', 'play', 'draw', 'action', 'nx', 'caught', 'reshuffle', 'win']),
+    );
+    expect(UnoAudio.assetDir, 'games/bermuda/sfx/');
+  });
+
   group('deck', () {
     test('has 108 cards with the right composition', () {
       final List<UnoCard> deck = buildUnoDeck();
