@@ -43,8 +43,9 @@ class PoolConfig {
   /// Max cue-ball launch speed (units/s). Per sub-step travel stays < ballR so
   /// nothing can tunnel through a cushion line or another ball.
   static const double powerCap = 520; // PCAP raw contract value
-  /// Legacy gameplay cap used by the original pool simulation.
-  static const double maxShotSpeed = powerCap;
+  /// Artwork/gameplay uses a 10x world velocity scale while the raw contract
+  /// value remains PCAP=520 for replay and backend parity.
+  static const double maxShotSpeed = powerCap * 10;
   static const double minShotPower = 0.03;
 
   /// Rolling resistance: constant deceleration (units/s^2) + linear drag (1/s).
