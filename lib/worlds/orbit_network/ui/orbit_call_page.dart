@@ -7,10 +7,10 @@ import 'package:livekit_client/livekit_client.dart';
 import '../../../core/backend/backend_gateway.dart';
 import '../../../core/backend/supabase_backend.dart';
 import '../../../core/online/online_config.dart';
-import '../../../core/settings/app_settings.dart';
 import '../../../core/theme/nx_theme.dart';
 import '../../../core/widgets/nx_widgets.dart';
 import '../data/supabase_orbit_repository.dart';
+import '../models/orbit_call_state.dart';
 import '../state/orbit_controller.dart';
 
 /// Real voice / video call for an Orbit Network chat through LiveKit.
@@ -40,6 +40,7 @@ class OrbitCallPage extends ConsumerStatefulWidget {
 
 class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
   Room? _room;
+  EventsListener<RoomEvent>? _events;
   String? _callId;
   String? _error;
   bool _connecting = true;
@@ -50,6 +51,10 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
   DateTime? _since;
   Timer? _tick;
   bool _hadPeer = false;
+  bool _ending = false;
+  bool _micError = false;
+  int _reconnects = 0;
+  OrbitCallConnection _connection = OrbitCallConnection.connecting;
 
   @override
   void initState() {
@@ -59,32 +64,79 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
   }
 
   Future<void> _start() async {
+    if (!mounted || _ending) return;
+    setState(() {
+      _connecting = true;
+      _connection = OrbitCallConnection.connecting;
+      _error = null;
+      _micError = false;
+    });
     final BackendGateway be = ref.read(backendProvider);
     final SupabaseOrbitRepository? repo =
         ref.read(orbitControllerProvider).online;
     if (be is! SupabaseBackend || repo == null) {
+      if (!mounted) return;
       setState(() {
         _connecting = false;
+        _connection = OrbitCallConnection.failed;
         _error = 'offline';
       });
       return;
     }
     try {
-      if (widget.startNew)
+      // A manual retry must rejoin the existing call instead of creating a
+      // second call row and ringing everyone again.
+      if (widget.startNew && _callId == null) {
         _callId = await repo.startCall(widget.chatId, video: widget.video);
+      }
       final Map<String, dynamic>? grant =
           await be.liveKitGrant(widget.chatId, video: widget.video);
       final String? token = grant?['token'] as String?;
       if (token == null) throw StateError('${grant?['error'] ?? 'no_token'}');
       _canPublish = grant?['canPublish'] != false;
+
       final Room room = Room(
           roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true));
       room.addListener(_onRoom);
+      final EventsListener<RoomEvent> events = room.createListener();
+      _events = events;
+      events.on<RoomReconnectingEvent>((_) {
+        if (!mounted || _ending) return;
+        setState(() {
+          _connection = OrbitCallConnection.reconnecting;
+          _reconnects++;
+        });
+      });
+      events.on<RoomReconnectedEvent>((_) {
+        if (!mounted || _ending) return;
+        setState(() {
+          _connection = OrbitCallConnection.connected;
+          _connecting = false;
+        });
+      });
+      events.on<RoomDisconnectedEvent>((_) {
+        if (!mounted || _ending) return;
+        setState(() {
+          _connection = OrbitCallConnection.disconnected;
+          _connecting = false;
+        });
+      });
       _room = room;
-      await room.connect('${grant?['url'] ?? OnlineConfig.liveKitUrl}', token);
+      await room.connect('${grant['url'] ?? OnlineConfig.liveKitUrl}', token);
       if (_canPublish) {
-        await room.localParticipant?.setMicrophoneEnabled(true);
-        if (widget.video) await room.localParticipant?.setCameraEnabled(true);
+        try {
+          await room.localParticipant?.setMicrophoneEnabled(true);
+        } catch (_) {
+          _mic = false;
+          _micError = true;
+        }
+        if (widget.video) {
+          try {
+            await room.localParticipant?.setCameraEnabled(true);
+          } catch (_) {
+            _cam = false;
+          }
+        }
       } else {
         _mic = false;
         _cam = false;
@@ -92,15 +144,23 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
       try {
         await Hardware.instance.setSpeakerphoneOn(true);
       } catch (_) {}
-      _since = DateTime.now();
-      _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      _since ??= DateTime.now();
+      _connection = OrbitCallConnection.connected;
+      _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() {});
       });
-      if (mounted) setState(() => _connecting = false);
-    } catch (e) {
       if (mounted) {
         setState(() {
           _connecting = false;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      await _disposeRoom();
+      if (mounted) {
+        setState(() {
+          _connecting = false;
+          _connection = OrbitCallConnection.failed;
           _error = '$e';
         });
       }
@@ -114,15 +174,27 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
     setState(() {});
   }
 
-  Future<void> _hangUp() async {
+  Future<void> _disposeRoom() async {
     final Room? r = _room;
-    final bool alone = r == null || r.remoteParticipants.isEmpty;
     _room = null;
     r?.removeListener(_onRoom);
+    final EventsListener<RoomEvent>? events = _events;
+    _events = null;
+    try {
+      await events?.dispose();
+    } catch (_) {}
     try {
       await r?.disconnect();
       await r?.dispose();
     } catch (_) {}
+  }
+
+  Future<void> _hangUp() async {
+    if (_ending) return;
+    _ending = true;
+    final Room? r = _room;
+    final bool alone = r == null || r.remoteParticipants.isEmpty;
+    await _disposeRoom();
     final String? id = _callId;
     final SupabaseOrbitRepository? repo =
         ref.read(orbitControllerProvider).online;
@@ -130,14 +202,17 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
     if (mounted) Navigator.of(context).maybePop();
   }
 
+  Future<void> _retry() async {
+    if (_ending || _connecting) return;
+    await _disposeRoom();
+    if (mounted) await _start();
+  }
+
   @override
   void dispose() {
+    _ending = true;
     _tick?.cancel();
-    final Room? r = _room;
-    if (r != null) {
-      r.removeListener(_onRoom);
-      unawaited(r.disconnect().then((_) => r.dispose()));
-    }
+    unawaited(_disposeRoom());
     super.dispose();
   }
 
@@ -165,15 +240,11 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
         color: visual.surfaceRaised,
         borderRadius: BorderRadius.circular(NxRadius.lg),
         border: Border.all(
-          color:
-              speaking ? visual.accent : visual.border.withValues(alpha: 0.65),
+          color: speaking ? visual.accent : visual.border.withValues(alpha: 0.65),
           width: speaking ? 3 : 1,
         ),
         boxShadow: speaking
-            ? <BoxShadow>[
-                BoxShadow(
-                    color: visual.accent.withValues(alpha: 0.4), blurRadius: 18)
-              ]
+            ? <BoxShadow>[BoxShadow(color: visual.accent.withValues(alpha: 0.4), blurRadius: 18)]
             : null,
       ),
       clipBehavior: Clip.antiAlias,
@@ -186,10 +257,7 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
               radius: 38,
               backgroundColor: visual.accent.withValues(alpha: 0.28),
               child: Text(name.characters.first.toUpperCase(),
-                  style: const TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white)),
+                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: Colors.white)),
             ),
           ),
         PositionedDirectional(
@@ -197,16 +265,11 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
           bottom: 8,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-                color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
             child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
-              if (p.isMuted)
-                const Icon(Icons.mic_off_rounded,
-                    size: 14, color: NxColors.danger),
+              if (p.isMuted) const Icon(Icons.mic_off_rounded, size: 14, color: NxColors.danger),
               const SizedBox(width: 4),
-              Text(name,
-                  style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w700)),
+              Text(name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             ]),
           ),
         ),
@@ -223,16 +286,28 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
           child: RawMaterialButton(
             onPressed: onTap,
             shape: const CircleBorder(),
-            fillColor: color ??
-                (active ? Colors.white.withValues(alpha: 0.16) : Colors.white),
+            fillColor: color ?? (active ? Colors.white.withValues(alpha: 0.16) : Colors.white),
             constraints: const BoxConstraints.tightFor(width: 58, height: 58),
-            child: Icon(icon,
-                color: color != null
-                    ? Colors.white
-                    : (active ? Colors.white : NxColors.navyDeep)),
+            child: Icon(icon, color: color != null ? Colors.white : (active ? Colors.white : NxColors.navyDeep)),
           ),
         ),
       );
+
+  String _statusText() {
+    if (_error == 'offline') return context.tx('برای تماس باید آنلاین باشی.', 'You need to be online to call.');
+    if (_connection == OrbitCallConnection.reconnecting) {
+      return context.tx('اتصال قطع شد؛ تلاش برای اتصال مجدد…', 'Connection lost; reconnecting…');
+    }
+    if (_connection == OrbitCallConnection.disconnected) {
+      return context.tx('اتصال برقرار نشد.', 'Disconnected.');
+    }
+    if (_connecting) return context.tx('در حال اتصال…', 'Connecting…');
+    final int remotes = _room?.remoteParticipants.length ?? 0;
+    if (remotes == 0) {
+      return _hadPeer ? context.tx('بقیه رفتند', 'Everyone else left') : context.tx('در حال زنگ زدن…', 'Ringing…');
+    }
+    return _duration();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,22 +321,7 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
         tiles.add(_tile(rp, local: false));
       }
     }
-    final int remotes = room?.remoteParticipants.length ?? 0;
-    String status;
-    if (_error != null) {
-      status = _error == 'offline'
-          ? context.tx(
-              'برای تماس باید آنلاین باشی.', 'You need to be online to call.')
-          : context.tx('اتصال تماس برقرار نشد.', 'Could not connect the call.');
-    } else if (_connecting) {
-      status = context.tx('در حال اتصال…', 'Connecting…');
-    } else if (remotes == 0) {
-      status = _hadPeer
-          ? context.tx('بقیه رفتند', 'Everyone else left')
-          : context.tx('در حال زنگ زدن…', 'Ringing…');
-    } else {
-      status = _duration();
-    }
+    final bool canRetry = _connection == OrbitCallConnection.disconnected || _connection == OrbitCallConnection.failed;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool did, Object? _) {
@@ -273,83 +333,60 @@ class _OrbitCallPageState extends ConsumerState<OrbitCallPage> {
           child: SafeArea(
             child: Column(children: <Widget>[
               const SizedBox(height: 12),
-              Text(widget.title,
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(widget.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
-              Text(
-                '${widget.video ? context.tx('تماس تصویری', 'Video call') : context.tx('تماس صوتی', 'Voice call')} · $status',
-                style: const TextStyle(color: NxColors.textDim),
-              ),
-              if (_error != null && _error != 'offline')
+              Text('${widget.video ? context.tx('تماس تصویری', 'Video call') : context.tx('تماس صوتی', 'Voice call')} · ${_statusText()}',
+                  style: const TextStyle(color: NxColors.textDim)),
+              if (_reconnects > 0 && _connection == OrbitCallConnection.connected)
+                Text(context.tx('اتصال مجدد شد', 'Reconnected'), style: TextStyle(color: visual.accent, fontSize: 11)),
+              if (_micError)
                 Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(_error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: NxColors.danger, fontSize: 12)),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Text(context.tx('دسترسی میکروفون برقرار نشد؛ تماس فقط شنیداری است.', 'Microphone access failed; you are listening only.'),
+                      textAlign: TextAlign.center, style: const TextStyle(color: NxColors.danger, fontSize: 12)),
                 ),
-              const SizedBox(height: 12),
+              if (_error != null && _error != 'offline')
+                Padding(padding: const EdgeInsets.all(12), child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: NxColors.danger, fontSize: 12))),
+              if (canRetry)
+                TextButton.icon(onPressed: _retry, icon: const Icon(Icons.refresh_rounded), label: Text(context.tx('تلاش دوباره', 'Retry'))),
+              const SizedBox(height: 8),
               Expanded(
                 child: tiles.isEmpty
-                    ? Center(
-                        child: _connecting
-                            ? CircularProgressIndicator(color: visual.accent)
-                            : Icon(
-                                widget.video
-                                    ? Icons.videocam_off_rounded
-                                    : Icons.call_end_rounded,
-                                size: 64,
-                                color: NxColors.textDim),
-                      )
-                    : GridView.count(
-                        padding: const EdgeInsets.all(12),
-                        crossAxisCount: tiles.length <= 2 ? 1 : 2,
-                        childAspectRatio: tiles.length <= 2 ? 1.5 : 0.9,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        children: tiles,
-                      ),
+                    ? Center(child: _connecting ? CircularProgressIndicator(color: visual.accent) : Icon(widget.video ? Icons.videocam_off_rounded : Icons.call_end_rounded, size: 64, color: NxColors.textDim))
+                    : GridView.count(padding: const EdgeInsets.all(12), crossAxisCount: tiles.length <= 2 ? 1 : 2, childAspectRatio: tiles.length <= 2 ? 1.5 : 0.9, mainAxisSpacing: 10, crossAxisSpacing: 10, children: tiles),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      if (_canPublish && _error == null)
-                        _btn(_mic ? Icons.mic_rounded : Icons.mic_off_rounded,
-                            context.tx('میکروفون', 'Microphone'), () async {
-                          _mic = !_mic;
-                          await room?.localParticipant
-                              ?.setMicrophoneEnabled(_mic);
-                          if (mounted) setState(() {});
-                        }, active: _mic),
-                      if (_canPublish && _error == null)
-                        _btn(
-                            _cam
-                                ? Icons.videocam_rounded
-                                : Icons.videocam_off_rounded,
-                            context.tx('دوربین', 'Camera'), () async {
-                          _cam = !_cam;
-                          await room?.localParticipant?.setCameraEnabled(_cam);
-                          if (mounted) setState(() {});
-                        }, active: _cam),
-                      if (_error == null)
-                        _btn(
-                            _speaker
-                                ? Icons.volume_up_rounded
-                                : Icons.hearing_rounded,
-                            context.tx('بلندگو', 'Speaker'), () async {
-                          _speaker = !_speaker;
-                          try {
-                            await Hardware.instance.setSpeakerphoneOn(_speaker);
-                          } catch (_) {}
-                          if (mounted) setState(() {});
-                        }, active: _speaker),
-                      _btn(Icons.call_end_rounded, context.tx('قطع', 'Hang up'),
-                          _hangUp,
-                          color: NxColors.danger),
-                    ]),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: <Widget>[
+                  if (_canPublish && _error == null)
+                    _btn(_mic ? Icons.mic_rounded : Icons.mic_off_rounded, context.tx('میکروفون', 'Microphone'), () async {
+                      final bool next = !_mic;
+                      try {
+                        await room?.localParticipant?.setMicrophoneEnabled(next);
+                        _mic = next;
+                        _micError = false;
+                      } catch (_) {
+                        _micError = true;
+                      }
+                      if (mounted) setState(() {});
+                    }, active: _mic),
+                  if (_canPublish && _error == null)
+                    _btn(_cam ? Icons.videocam_rounded : Icons.videocam_off_rounded, context.tx('دوربین', 'Camera'), () async {
+                      final bool next = !_cam;
+                      try {
+                        await room?.localParticipant?.setCameraEnabled(next);
+                        _cam = next;
+                      } catch (_) {}
+                      if (mounted) setState(() {});
+                    }, active: _cam),
+                  if (_error == null)
+                    _btn(_speaker ? Icons.volume_up_rounded : Icons.hearing_rounded, context.tx('بلندگو', 'Speaker'), () async {
+                      _speaker = !_speaker;
+                      try { await Hardware.instance.setSpeakerphoneOn(_speaker); } catch (_) {}
+                      if (mounted) setState(() {});
+                    }, active: _speaker),
+                  _btn(Icons.call_end_rounded, context.tx('قطع', 'Hang up'), _hangUp, color: NxColors.danger),
+                ]),
               ),
             ]),
           ),
