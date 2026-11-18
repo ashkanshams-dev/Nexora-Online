@@ -149,8 +149,12 @@ class _OracleTourOverlayState extends State<OracleTourOverlay> with SingleTicker
     final Rect? r = _target(sz, pad)?.inflate(6);
     final OracleTourStep s = widget.steps[_i];
     final bool cardTop = r != null && r.center.dy > sz.height * .55;
+    final bool fa = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    TextDirection dirOf(String t) =>
+        RegExp(r'[\u0600-\u06FF]').hasMatch(t) ? TextDirection.rtl : TextDirection.ltr;
+    // Follows the app language (it was forced RTL with Persian-only buttons, also in English mode).
     return Directionality(
-      textDirection: TextDirection.rtl,
+      textDirection: fa ? TextDirection.rtl : TextDirection.ltr,
       child: Material(
         color: Colors.transparent,
         child: Stack(children: <Widget>[
@@ -191,23 +195,24 @@ class _OracleTourOverlayState extends State<OracleTourOverlay> with SingleTicker
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(s.title,
+                          textDirection: dirOf(s.title),
                           style: const TextStyle(color: Color(0xFF8FF3FF), fontSize: 15, fontWeight: FontWeight.w900)),
                     ),
                     Text('${_i + 1}/${widget.steps.length}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   ]),
                   const SizedBox(height: 6),
-                  Text(s.text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w600)),
+                  Text(s.text, textDirection: dirOf(s.text), style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   Row(children: <Widget>[
                     TextButton(
                       onPressed: widget.onDone,
-                      child: const Text('رد کردن', style: TextStyle(color: Colors.white60)),
+                      child: Text(fa ? 'رد کردن' : 'Skip', style: const TextStyle(color: Colors.white60)),
                     ),
                     const Spacer(),
                     FilledButton(
                       style: FilledButton.styleFrom(backgroundColor: const Color(0xFF39E6FF), foregroundColor: Colors.black),
                       onPressed: _next,
-                      child: Text(_i >= widget.steps.length - 1 ? 'فهمیدم!' : 'بعدی',
+                      child: Text(_i >= widget.steps.length - 1 ? (fa ? 'فهمیدم!' : 'Got it!') : (fa ? 'بعدی' : 'Next'),
                           style: const TextStyle(fontWeight: FontWeight.w900)),
                     ),
                   ]),

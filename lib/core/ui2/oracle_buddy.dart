@@ -110,7 +110,11 @@ class _OracleBuddyState extends ConsumerState<OracleBuddy> with TickerProviderSt
 
   String get _path {
     try {
-      return widget.router?.routerDelegate.currentConfiguration.uri.path ?? '';
+      // The top-most page, including pages pushed with context.push (the base `uri` stays on /hub for those, so the
+      // guided tour used to think every screen was the home page and showed the home tour on top of it).
+      final RouteMatchList? cfg = widget.router?.routerDelegate.currentConfiguration;
+      if (cfg == null || cfg.isEmpty) return '';
+      return Uri.parse(cfg.last.matchedLocation).path;
     } catch (_) {
       return '';
     }

@@ -18,6 +18,7 @@ import '../worlds/arcade/game_setup_page.dart';
 import '../worlds/arcade/online/leaderboard_page.dart';
 import '../worlds/arcade/online/online_lobby_page.dart';
 import '../worlds/auth/auth_page.dart';
+import '../worlds/auth/signin_required_page.dart';
 import '../worlds/hub/hub_page.dart';
 import '../worlds/intro/intro_video_page.dart';
 import '../worlds/nexora_exchange/exchange_page.dart';
@@ -36,15 +37,20 @@ import '../worlds/personal_orbit/rewards_page.dart';
 import '../worlds/social_station/social_station_page.dart';
 import '../core/online/online_service.dart';
 import '../core/settings/app_settings.dart';
+import 'auth_gate.dart';
 
 GoRouter buildRouter(WidgetRef ref) {
   final profile = ref.read(profileProvider);
   final settings = ref.read(settingsProvider);
   final online = ref.read(onlineProvider);
   final String next;
-  final bool emailReady = settings.authMode == 'email' && online.user != null && !online.isGuest;
-  final bool localGuest = settings.authMode == 'guest';
-  if (!emailReady && !localGuest) {
+  NxAccess access() => nxAccess(
+        authMode: settings.authMode,
+        hasUser: online.user != null,
+        anonymous: online.isGuest,
+      );
+  final NxAccess start = access();
+  if (start == NxAccess.needsAuth) {
     next = '/auth';
   } else if (!profile.hasIdentity) {
     next = '/onboarding';
@@ -60,21 +66,14 @@ GoRouter buildRouter(WidgetRef ref) {
     refreshListenable: Listenable.merge(<Listenable>[settings, online, ref.read(adminAccessProvider)]),
     redirect: (BuildContext context, GoRouterState state) {
       final Uri u = state.uri;
-      final bool emailReady = settings.authMode == 'email' && online.user != null && !online.isGuest;
-      final bool localGuest = settings.authMode == 'guest';
-      if (!emailReady && !localGuest && u.path != '/auth') return '/auth';
-      final bool guestOnlineRoute = u.path == '/rooms' ||
-          u.path == '/social' ||
-          u.path == '/leaderboard' ||
-          u.path.startsWith('/online/') ||
-          u.path.startsWith('/call/') ||
-          u.path.startsWith('/tournaments') ||
-          u.path == '/world/orbit_network' ||
-          u.path == '/world/social_station' ||
-          u.path == '/world/nova_gallery';
-      if (localGuest && guestOnlineRoute) {
-        return '/hub';
+      // Email magic-link callback (nexora://login-callback?code=…): supabase_flutter exchanges the code itself; the
+      // router only has to leave the callback URL (it has no page) and land where the session decides.
+      if (u.host == 'login-callback' || u.path == '/login-callback') {
+        if (access() != NxAccess.signedIn) return '/auth';
+        return ref.read(profileProvider).hasIdentity ? '/hub' : '/onboarding';
       }
+      final String? gate = authRedirect(u, access(), hasIdentity: ref.read(profileProvider).hasIdentity);
+      if (gate != null) return gate;
       // Accounts that must change their password (the default main admin on first sign-in) go nowhere else first.
       if (ref.read(adminAccessProvider).mustChangePassword &&
           !<String>{'/force-password', '/intro', '/account'}.contains(u.path)) {
@@ -91,6 +90,10 @@ GoRouter buildRouter(WidgetRef ref) {
     },
     routes: [
       GoRoute(path: '/auth', pageBuilder: (context, state) => _fade(state, const AuthPage())),
+      GoRoute(
+        path: kSignInRequiredPath,
+        builder: (context, state) => SignInRequiredPage(from: state.uri.queryParameters['from'] ?? ''),
+      ),
       GoRoute(
         path: '/intro',
         pageBuilder: (context, state) => _fade(
@@ -179,7 +182,7 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) => GameSetupPage(gameId: state.pathParameters['gameId'] ?? ''),
       ),
     ],
-    errorBuilder: (context, state) => const HubPage(),
+    errorBuilder: (context, state) => RouteNotFoundPage(location: state.uri.toString()),
   );
 }
 

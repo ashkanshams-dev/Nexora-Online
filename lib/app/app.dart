@@ -47,6 +47,8 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(onlineProvider).addListener(_syncAuthMode);
+      _syncAuthMode();
       ref.read(cloudSyncProvider).start();
       ref.read(onlineProvider).addListener(_invites.sync);
       _invites.sync();
@@ -61,6 +63,15 @@ class _NexoraAppState extends ConsumerState<NexoraApp> {
     });
   }
 
+
+  /// A real session (email code, magic-link deep link, password/admin login from Account) always counts as the email
+  /// mode, so onboarding/cloud sync treat the user as signed in even when they had picked guest mode before.
+  void _syncAuthMode() {
+    if (!mounted) return;
+    final OnlineService o = ref.read(onlineProvider);
+    final AppSettings s = ref.read(settingsProvider);
+    if (o.user != null && !o.isGuest && s.authMode != 'email') s.setAuthMode('email');
+  }
 
   @override
   void dispose() {

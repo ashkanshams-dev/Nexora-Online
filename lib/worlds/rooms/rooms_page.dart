@@ -155,6 +155,14 @@ class _RoomsPageState extends ConsumerState<RoomsPage> {
             const SizedBox(height: 8),
             if (_loading && _rooms.isEmpty)
               const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator()))
+            else if (_error != null && _rooms.isEmpty && ref.watch(onlineProvider).client?.auth.currentSession == null)
+              // Guests (local-only mode) have no session: say so instead of a misleading "server unreachable".
+              _Empty(
+                icon: Icons.person_off_rounded,
+                text: context.tx('برای اتاق‌های آنلاین با ایمیل وارد شو. بازی آفلاین و با ربات در «همه‌ی بازی‌ها» است.',
+                    'Sign in with email for online rooms. Offline and vs-bot games are under “All games”.'),
+                onRetry: _load,
+              )
             else if (_error != null && _rooms.isEmpty)
               _Empty(
                 icon: Icons.wifi_off_rounded,
