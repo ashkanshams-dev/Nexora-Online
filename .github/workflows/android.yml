@@ -2,8 +2,8 @@ name: NEXORA Android Build
 
 on:
   push:
-    branches: ['redesign', 'redesign-2', 'check-redesign-*']
-  # redesign-2 is signed through a NEVER-MERGED draft PR redesign-2 -> redesign ("DO NOT MERGE"): pull_request runs
+    branches: ['redesign', 'redesign-2', 'redesign-2-fix', 'check-redesign-*']
+  # redesign-2 (and redesign-2-fix) are signed through NEVER-MERGED draft PRs -> redesign ("DO NOT MERGE"): pull_request runs
   # can restore Actions caches of the PR's base branch, which is where the app signing key (nxg-signing-key-v1) lives.
   pull_request:
     branches: ['redesign']
@@ -23,10 +23,10 @@ env:
   # Every push to `redesign` publishes a PRERELEASE tagged redesign-<run number> (never "latest": the React Native
   # app's updater reads the repo's latest release). The Flutter app's own updater reads only redesign-* prereleases
   # and compares `vc=<versionCode>` in the notes with its build number. check-redesign-* branches never publish.
-  IS_R2_PR: ${{ github.event_name == 'pull_request' && github.head_ref == 'redesign-2' && 'true' || 'false' }}
-  RELEASE_TAG: ${{ (github.ref == 'refs/heads/redesign-2' || github.head_ref == 'redesign-2') && format('redesign-2-{0}', github.run_number) || format('redesign-{0}', github.run_number) }}
-  # redesign: push builds publish. redesign-2: only the draft-PR build publishes (push builds = analyze + test only).
-  PUBLISH: ${{ (github.ref == 'refs/heads/redesign' || (github.event_name == 'pull_request' && github.head_ref == 'redesign-2')) && 'true' || 'false' }}
+  IS_R2_PR: ${{ github.event_name == 'pull_request' && (github.head_ref == 'redesign-2' || github.head_ref == 'redesign-2-fix') && 'true' || 'false' }}
+  RELEASE_TAG: ${{ (github.ref == 'refs/heads/redesign-2-fix' || github.head_ref == 'redesign-2-fix') && format('redesign-2-fix-{0}', github.run_number) || ((github.ref == 'refs/heads/redesign-2' || github.head_ref == 'redesign-2') && format('redesign-2-{0}', github.run_number) || format('redesign-{0}', github.run_number)) }}
+  # redesign: push builds publish. redesign-2 / redesign-2-fix: only the draft-PR build publishes (push builds = analyze + test only).
+  PUBLISH: ${{ (github.ref == 'refs/heads/redesign' || (github.event_name == 'pull_request' && (github.head_ref == 'redesign-2' || github.head_ref == 'redesign-2-fix'))) && 'true' || 'false' }}
   # Public values only (the anon/publishable key is designed to ship inside the app; RLS protects the data).
   SUPABASE_URL: https://eisstodgncimypdawisy.supabase.co
   SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpc3N0b2RnbmNpbXlwZGF3aXN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjkwMTAsImV4cCI6MjEwOTgwNTAxMH0.uEPldAQjJdRyZTGXaz_OpFR7WpFXMiPXlW1S34cR3p8
@@ -72,15 +72,15 @@ jobs:
         run: |
           mkdir -p ~/.android
           if [ -n "$NEXORA_KEYSTORE_B64" ]; then echo "$NEXORA_KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore; fi
-          if [ ! -f ~/.android/debug.keystore ] && { [ "${{ github.ref }}" = "refs/heads/redesign-2" ] || [ "$IS_R2_PR" = "true" ]; }; then
+          if [ ! -f ~/.android/debug.keystore ] && { [ "${{ github.ref }}" = "refs/heads/redesign-2" ] || [ "${{ github.ref }}" = "refs/heads/redesign-2-fix" ] || [ "$IS_R2_PR" = "true" ]; }; then
             # redesign-2 cannot read the redesign branch's signing-key cache: analyze + test only, no APK/release
             # (a release signed with another key would not install over the current app).
             echo "::warning::No NEXORA signing key available on redesign-2 (set the NEXORA_KEYSTORE_B64 secret). Skipping APK build/release."
             echo "NO_KEY=true" >> $GITHUB_ENV
             exit 0
           fi
-          if [ "${{ github.ref }}" = "refs/heads/redesign-2" ]; then
-            # push builds of redesign-2 stay analyze + test only; the signed APK comes from the draft-PR run.
+          if [ "${{ github.ref }}" = "refs/heads/redesign-2" ] || [ "${{ github.ref }}" = "refs/heads/redesign-2-fix" ]; then
+            # push builds of redesign-2 / redesign-2-fix stay analyze + test only; the signed APK comes from the draft-PR run.
             echo "NO_KEY=true" >> $GITHUB_ENV
             exit 0
           fi
@@ -147,7 +147,18 @@ jobs:
                   '            </intent-filter>\n'
                   '        </receiver>\n'
                   '    </application>', 1)
-          if 'android:scheme="nexora"' not in s:
+          if 'android:host="login-callback"' not in s:
+              # Email sign-in link (Supabase emailRedirectTo nexora://login-callback) opens the app; supabase_flutter
+              # exchanges the code for a session.
+              s = s.replace('</activity>',
+                  '    <intent-filter>\n'
+                  '                <action android:name="android.intent.action.VIEW" />\n'
+                  '                <category android:name="android.intent.category.DEFAULT" />\n'
+                  '                <category android:name="android.intent.category.BROWSABLE" />\n'
+                  '                <data android:scheme="nexora" android:host="login-callback" />\n'
+                  '            </intent-filter>\n'
+                  '        </activity>', 1)
+          if 'android:host="t"' not in s:
               s = s.replace('</activity>',
                   '    <meta-data android:name="flutter_deeplinking_enabled" android:value="true" />\n'
                   '            <intent-filter>\n'
