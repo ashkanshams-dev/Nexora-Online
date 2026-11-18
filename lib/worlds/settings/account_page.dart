@@ -133,15 +133,21 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     final OnlineService o = ref.read(onlineProvider);
     final String e = _email.text.trim();
     final String p = _pass.text;
+    final bool needsEmailCode = !_signInMode && o.user == null;
     // Sign in accepts an e-mail or a username (e.g. the main admin «admin»); registering needs an e-mail + 6+ chars.
-    if (_signInMode ? (e.isEmpty || p.isEmpty) : (!e.contains('@') || p.length < 6)) {
+    if (_signInMode ? (e.isEmpty || p.isEmpty) : (!e.contains('@') || (!needsEmailCode && p.length < 6))) {
       setState(() => _info = _signInMode
           ? context.tx('ایمیل/نام کاربری و رمز را وارد کن.', 'Enter your email/username and password.')
-          : context.tx('ایمیل معتبر و رمز حداقل ۶ کاراکتری لازم است.',
-              'A valid email and a 6+ character password are required.'));
+          : needsEmailCode
+              ? context.tx('ایمیل معتبر وارد کن تا کد ثبت‌نام ارسال شود.', 'Enter a valid email address to receive a signup code.')
+              : context.tx('ایمیل معتبر و رمز حداقل ۶ کاراکتری لازم است.', 'A valid email and a 6+ character password are required.'));
       return;
     }
     setState(() => _info = null);
+    if (needsEmailCode) {
+      context.push('/auth?email=${Uri.encodeQueryComponent(e)}');
+      return;
+    }
     bool ok;
     if (_signInMode) {
       if (o.isOnline && o.isGuest) {
@@ -184,6 +190,7 @@ class _AccountPageState extends ConsumerState<AccountPage> {
   Widget build(BuildContext context) {
     final OnlineService o = ref.watch(onlineProvider);
     final ProfileService p = ref.watch(profileProvider);
+    final bool needsEmailCode = !_signInMode && o.user == null;
     final visual = NxThemeColors.of(context);
     return NxWorldScaffold(
       title: context.tx('حساب کاربری', 'ACCOUNT'),
@@ -291,9 +298,11 @@ class _AccountPageState extends ConsumerState<AccountPage> {
                           ? context.tx(
                               'با ایمیل و رمز حسابی که قبلاً ساختی وارد شو.',
                               'Sign in with an account you already created.')
-                          : context.tx(
-                              'حساب مهمان فعلی‌ات با همین پیشرفت به حساب دائمی تبدیل می‌شود.',
-                              'Your current guest account becomes permanent, keeping all progress.'),
+                          : needsEmailCode
+                              ? context.tx('برای ساخت حساب آنلاین، کد ۶ رقمی به ایمیلت می‌فرستیم.', 'We will email a 6-digit code to create and verify your online account.')
+                              : context.tx(
+                                  'حساب مهمان فعلی‌ات با همین پیشرفت به حساب دائمی تبدیل می‌شود.',
+                                  'Your current guest account becomes permanent, keeping all progress.'),
                       style: const TextStyle(
                           color: NxColors.textDim, fontSize: 12),
                     ),
@@ -310,21 +319,22 @@ class _AccountPageState extends ConsumerState<AccountPage> {
                               const Icon(Icons.alternate_email_rounded)),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: _pass,
-                      obscureText: _obscure,
-                      textDirection: TextDirection.ltr,
-                      decoration: InputDecoration(
-                        labelText: context.tx('رمز عبور', 'Password'),
-                        prefixIcon: const Icon(Icons.lock_outline_rounded),
-                        suffixIcon: IconButton(
-                          icon: Icon(_obscure
-                              ? Icons.visibility_rounded
-                              : Icons.visibility_off_rounded),
-                          onPressed: () => setState(() => _obscure = !_obscure),
+                    if (!needsEmailCode)
+                      TextField(
+                        controller: _pass,
+                        obscureText: _obscure,
+                        textDirection: TextDirection.ltr,
+                        decoration: InputDecoration(
+                          labelText: context.tx('رمز عبور', 'Password'),
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscure
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded),
+                            onPressed: () => setState(() => _obscure = !_obscure),
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 14),
                     FilledButton.icon(
                       onPressed: o.busy ? null : _submit,
@@ -335,10 +345,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : Icon(_signInMode
                               ? Icons.login_rounded
-                              : Icons.verified_user_rounded),
+                              : needsEmailCode ? Icons.mark_email_read_rounded : Icons.verified_user_rounded),
                       label: Text(_signInMode
                           ? context.tx('ورود', 'Sign in')
-                          : context.tx('ذخیره‌ی حساب', 'Save account')),
+                          : needsEmailCode ? context.tx('دریافت کد ایمیل', 'Get email code') : context.tx('ذخیره‌ی حساب', 'Save account')),
                     ),
                     if (_signInMode)
                       TextButton(

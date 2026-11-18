@@ -109,6 +109,33 @@ class OnlineService extends ChangeNotifier {
   static final Map<String, DateTime> _otpSentAt = <String, DateTime>{};
   static const Duration otpCooldown = Duration(seconds: 60);
 
+  /// Only send metadata accepted by the shared profiles.username constraint.
+  /// Null lets the database trigger generate its safe default username.
+  static String? signupUsername(String? username) {
+    final String candidate = username?.trim() ?? '';
+    final int length = candidate.runes.length;
+    return length >= 3 && length <= 20 ? candidate : null;
+  }
+
+  static String normalizeEmailOtpDigits(String value) {
+    const String fa = '۰۱۲۳۴۵۶۷۸۹', ar = '٠١٢٣٤٥٦٧٨٩';
+    final StringBuffer b = StringBuffer();
+    for (final int r in value.runes) {
+      final String ch = String.fromCharCode(r);
+      final int i = fa.indexOf(ch), j = ar.indexOf(ch);
+      if (i >= 0) {
+        b.write(i);
+      } else if (j >= 0) {
+        b.write(j);
+      } else if (ch.trim().isNotEmpty) {
+        b.write(ch);
+      }
+    }
+    return b.toString();
+  }
+
+  static bool isSixDigitEmailOtp(String value) => RegExp(r'^\d{6}$').hasMatch(value);
+
   /// Seconds until another code may be requested for [email] (0 = now).
   int otpCooldownLeft(String email) {
     final DateTime? at = _otpSentAt[email.trim().toLowerCase()];
@@ -195,6 +222,7 @@ class OnlineService extends ChangeNotifier {
 
   /// Guest → permanent account (same uid, all progress kept). Without a guest: new account.
   Future<bool> registerEmail(String email, String password, {String? username}) async {
+    final String? safeUsername = signupUsername(username);
     final bool? ok = await _run<bool>((SupabaseClient c) async {
       final User? u = c.auth.currentUser;
       if (u != null && u.isAnonymous) {
@@ -203,7 +231,7 @@ class OnlineService extends ChangeNotifier {
         await c.auth.signUp(
           email: email.trim(),
           password: password,
-          data: username == null ? null : <String, dynamic>{'username': username},
+          data: safeUsername == null ? null : <String, dynamic>{'username': safeUsername},
         );
       }
       return true;

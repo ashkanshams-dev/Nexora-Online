@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/online/cloud_profile_sync.dart';
 import '../../core/online/online_service.dart';
 import '../../core/profile/profile_service.dart';
 import '../../core/settings/app_settings.dart';
@@ -26,6 +27,15 @@ class _AuthPageState extends ConsumerState<AuthPage> {
   String? _info;
   int _cooldown = 0;
   Timer? _tick;
+  bool _emailPrefillHandled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_emailPrefillHandled) return;
+    _emailPrefillHandled = true;
+    _email.text = GoRouterState.of(context).uri.queryParameters['email'] ?? '';
+  }
 
   @override
   void dispose() {
@@ -87,27 +97,9 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     }
   }
 
-  static String _latinDigits(String v) {
-    const String fa = '۰۱۲۳۴۵۶۷۸۹', ar = '٠١٢٣٤٥٦٧٨٩';
-    final StringBuffer b = StringBuffer();
-    for (final int r in v.runes) {
-      final String ch = String.fromCharCode(r);
-      final int i = fa.indexOf(ch), j = ar.indexOf(ch);
-      if (i >= 0) {
-        b.write(i);
-      } else if (j >= 0) {
-        b.write(j);
-      } else if (ch.trim().isNotEmpty) {
-        b.write(ch);
-      }
-    }
-    return b.toString();
-  }
-
   Future<void> _verifyCode() async {
-    // Supabase codes are 6 digits by default (the project can set 6–10); Persian/Arabic digits are accepted too.
-    final String code = _latinDigits(_code.text.trim());
-    if (!RegExp(r'^\d{6,10}$').hasMatch(code)) {
+    final String code = OnlineService.normalizeEmailOtpDigits(_code.text.trim());
+    if (!OnlineService.isSixDigitEmailOtp(code)) {
       setState(() => _error = context.tx('کد ۶ رقمی ایمیل را وارد کن.', 'Enter the 6-digit code from the email.'));
       return;
     }
@@ -120,6 +112,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
       return;
     }
     ref.read(settingsProvider).setAuthMode('email');
+    ref.read(cloudSyncProvider).start();
     if (!mounted) return;
     context.go(ref.read(profileProvider).hasIdentity ? '/hub' : '/onboarding');
   }
@@ -194,7 +187,7 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         controller: _code,
                         enabled: !_busy,
                         keyboardType: TextInputType.number,
-                        maxLength: 10,
+                        maxLength: 6,
                         textAlign: TextAlign.center,
                         textDirection: TextDirection.ltr,
                         autofillHints: const <String>[AutofillHints.oneTimeCode],
