@@ -11,6 +11,7 @@ import '../core/question_bank.dart';
 import '../core/question_model.dart';
 import '../core/quiz_engine.dart';
 import 'quiz_widgets.dart';
+import 'quiz_audio.dart';
 
 /// Full-screen NEXORA Quiz match (vs bot or same-device split screen).
 class QuizView extends StatefulWidget {
@@ -27,6 +28,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   late final AnimationController _clock;
   late final AnimationController _reveal;
   late final AnimationController _pulse;
+  late final QuizAudio _audio;
   Timer? _botTimer;
   Timer? _advanceTimer;
   bool _botThinking = false;
@@ -104,6 +106,8 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _audio = QuizAudio(enabled: _l.soundOn);
+    unawaited(_audio.init());
     _engine = QuizEngine(
       bank: kQuestionBank,
       seed: _l.seed ?? DateTime.now().millisecondsSinceEpoch,
@@ -141,6 +145,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   @override
   void dispose() {
     _inbox?.close();
+    unawaited(_audio.dispose());
     _graceTimer?.cancel();
     _botTimer?.cancel();
     _advanceTimer?.cancel();
@@ -242,6 +247,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
 
   void _onTimeUp() {
     if (_engine.phase != QuizPhase.question) return;
+    unawaited(_audio.play('timeout', volume: 0.62));
     if (_online) {
       // Only my own timeout is mine to record; the round closes when the opponent's answer arrives.
       if (_engine.submitTimeout(0)) {
@@ -264,6 +270,10 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
     _graceTimer?.cancel();
     _botTimer?.cancel();
     _botThinking = false;
+    final List<QuizAnswer?> answers = _engine.currentAnswers;
+    unawaited(_audio.play(
+        answers.any((QuizAnswer? a) => a?.correct ?? false) ? 'correct' : 'wrong',
+        volume: 0.76));
     _haptic(true);
     _reveal.forward(from: 0);
     setState(() {});
@@ -282,6 +292,7 @@ class _QuizViewState extends State<QuizView> with TickerProviderStateMixin {
   void _finish() {
     if (_finishSent) return;
     _finishSent = true;
+    unawaited(_audio.play('finish', volume: 0.9));
     final int w = _engine.winner();
     final List<int> seatScores = _online
         ? <int>[
