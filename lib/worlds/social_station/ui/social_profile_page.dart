@@ -17,6 +17,7 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
+  List<SocialPost> _posts = <SocialPost>[];
   bool get _mine => widget.userId == null || widget.userId == _repo?.me;
 
   @override
@@ -32,7 +33,8 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
     _repo = SocialProfileRepository(c);
     try {
       final p = await _repo!.profile(widget.userId ?? _repo!.me);
-      if (mounted) setState(() { _profile = p; _loading = false; });
+      final posts = await _repo!.posts(p.id);
+      if (mounted) setState(() { _profile = p; _posts = posts; _loading = false; });
     } catch (_) {
       if (mounted) setState(() { _loading = false; _error = 'دریافت پروفایل ناموفق بود'; });
     }
@@ -115,7 +117,11 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
             _avatarView(p, 92), const SizedBox(width: 18), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
               Text(p.displayName.isEmpty ? p.username : p.displayName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
               Text('@${p.username}'), const SizedBox(height: 12),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: <Widget>[_stat('Posts', p.posts), _stat('Followers', p.followers), _stat('Following', p.following)]),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: <Widget>[
+                _stat('Posts', p.posts),
+                InkWell(onTap: () => _showUsers('Followers', _repo!.followers(p.id)), child: _stat('Followers', p.followers)),
+                InkWell(onTap: () => _showUsers('Following', _repo!.following(p.id)), child: _stat('Following', p.following)),
+              ]),
             ])),
           ]),
           if (p.bio.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 18), child: Text(p.bio)),
@@ -137,6 +143,12 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
             final next = await _repo!.deleteAvatar();
             if (mounted) setState(() { _profile = next; _busy = false; });
           }, child: const Text('حذف عکس')),
+          if (_posts.isNotEmpty) ...<Widget>[
+            const Divider(height: 32),
+            const Text('Posts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (final SocialPost post in _posts) Card(child: ListTile(title: Text(post.text), subtitle: Text(post.createdAt.toLocal().toString())))
+          ] else const Padding(padding: EdgeInsets.only(top: 24), child: Center(child: Text('هنوز پستی منتشر نشده است'))),
         ]),
       ),
     );
@@ -146,6 +158,23 @@ class _SocialProfilePageState extends ConsumerState<SocialProfilePage> {
       ? Container(width: size, height: size, color: Colors.blueGrey, child: Icon(Icons.person, size: size * .55))
       : Image.network(p.avatarUrl!, width: size, height: size, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(width: size, height: size, color: Colors.blueGrey, child: const Icon(Icons.person))));
   Widget _stat(String label, int value) => Column(children: <Widget>[Text('$value', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)), Text(label, style: const TextStyle(fontSize: 12))]);
+
+  Future<void> _showUsers(String title, Future<List<SocialUser>> future) async {
+    await showModalBottomSheet<void>(context: context, builder: (BuildContext sheet) => FutureBuilder<List<SocialUser>>(
+      future: future,
+      builder: (BuildContext _, AsyncSnapshot<List<SocialUser>> snapshot) {
+        if (!snapshot.hasData) return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
+        final users = snapshot.data!;
+        return SafeArea(child: SizedBox(height: 420, child: Column(children: <Widget>[
+          Padding(padding: const EdgeInsets.all(16), child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+          Expanded(child: users.isEmpty ? const Center(child: Text('موردی وجود ندارد')) : ListView.builder(itemCount: users.length, itemBuilder: (_, int i) {
+            final u = users[i];
+            return ListTile(leading: u.avatarUrl == null ? const CircleAvatar(child: Icon(Icons.person)) : CircleAvatar(backgroundImage: NetworkImage(u.avatarUrl!)), title: Text(u.displayName.isEmpty ? u.username : u.displayName), subtitle: Text('@${u.username}'), onTap: () { Navigator.pop(sheet); Navigator.push<void>(context, MaterialPageRoute<void>(builder: (_) => SocialProfilePage(userId: u.id))); });
+          }))
+        ])));
+      },
+    ));
+  }
 }
 
 class SocialChatPage extends StatefulWidget {
@@ -159,7 +188,7 @@ class SocialChatPage extends StatefulWidget {
 class _SocialChatPageState extends State<SocialChatPage> {
   final TextEditingController _text = TextEditingController();
   late final Stream<List<SocialMessage>> _stream;
-  @override void initState() { super.initState(); _stream = widget.repo.messageStream(widget.chatId); }
+  @override void initState() { super.initState(); _stream = widget.repo.messageStream(widget.chatId); unawaited(widget.repo.markChatRead(widget.chatId)); }
   @override void dispose() { _text.dispose(); super.dispose(); }
 
   Future<void> _send() async {
